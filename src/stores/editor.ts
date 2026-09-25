@@ -51,6 +51,18 @@ export interface PlacedText {
   align: TextAlign;
 }
 
+/** A sticky-note style comment marker placed on the page, in canvas pixel coordinates. */
+export interface PlacedComment {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 1-indexed page this comment belongs to. */
+  page: number;
+  text: string;
+}
+
 /** Per-document editing state — one entry per uploaded PDF. */
 export interface PdfDocumentState {
   id: string;
@@ -60,6 +72,7 @@ export interface PdfDocumentState {
   placedSignatures: PlacedSignature[];
   redactions: RedactionBox[];
   texts: PlacedText[];
+  comments: PlacedComment[];
   /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
   rotation: number;
   /** Whether the current placement/redactions have been saved/printed — cleared whenever either changes. Used to warn before closing an unsaved tab. */
@@ -93,6 +106,7 @@ function createDocumentState(file: File): PdfDocumentState {
     placedSignatures: [],
     redactions: [],
     texts: [],
+    comments: [],
     rotation: 0,
     exported: false,
   };
@@ -145,6 +159,13 @@ function rescale(state: EditorState, nextScale: number): EditorState {
       fontSize: t.fontSize * factor,
       letterSpacing: t.letterSpacing * factor,
     })),
+    comments: doc.comments.map((c) => ({
+      ...c,
+      x: c.x * factor,
+      y: c.y * factor,
+      width: c.width * factor,
+      height: c.height * factor,
+    })),
   }));
   return { ...state, renderScale, documents };
 }
@@ -189,6 +210,7 @@ interface DocSnapshot {
   placedSignatures: PlacedSignature[];
   redactions: RedactionBox[];
   texts: PlacedText[];
+  comments: PlacedComment[];
   rotation: number;
 }
 
@@ -234,6 +256,7 @@ function createEditorStore() {
       placedSignatures: doc.placedSignatures,
       redactions: doc.redactions,
       texts: doc.texts,
+      comments: doc.comments,
       rotation: doc.rotation,
     };
   }
@@ -562,6 +585,57 @@ function createEditorStore() {
     }));
   }
 
+  function addComment(comment: Omit<PlacedComment, 'id'>): string {
+    const id = crypto.randomUUID();
+    recordActiveHistory(`add-comment-${id}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        comments: [...doc.comments, { ...comment, id }],
+        exported: false,
+      })),
+    );
+    return id;
+  }
+
+  function updateComment(id: string, partial: Partial<PlacedComment>) {
+    recordActiveHistory(`update-comment-${id}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        comments: doc.comments.map((c) => (c.id === id ? { ...c, ...partial } : c)),
+        exported: false,
+      })),
+    );
+  }
+
+  function removeComment(id: string) {
+    recordActiveHistory(`remove-comment-${id}-${Date.now()}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        comments: doc.comments.filter((c) => c.id !== id),
+        exported: false,
+      })),
+    );
+  }
+
+  /** Replaces an arbitrary document's entire comment set (not just the active one) — mirrors setTextsForDocument for "Apply to All". */
+  function setCommentsForDocument(id: string, items: Omit<PlacedComment, 'id'>[]) {
+    update((state) => ({
+      ...state,
+      documents: state.documents.map((doc) =>
+        doc.id === id
+          ? {
+              ...doc,
+              comments: items.map((item) => ({ ...item, id: crypto.randomUUID() })),
+              exported: false,
+            }
+          : doc,
+      ),
+    }));
+  }
+
   /** Marks a specific document as saved/printed in its current placement — clears the "signed but not downloaded" warning for that tab. */
   function markDocumentExported(id: string) {
     update((state) => ({
@@ -592,13 +666,18 @@ function createEditorStore() {
     const doc = getActiveDocument(state);
     if (!doc) return;
 
-    const { id, file, rotation: oldRotation, placedSignatures, redactions, texts } = doc;
+    const { id, file, rotation: oldRotation, placedSignatures, redactions, texts, comments } = doc;
     const { renderScale } = state;
     const newRotation = (((oldRotation + delta) % 360) + 360) % 360;
 
     recordHistory(id, `rotate-${crypto.randomUUID()}`, doc);
 
-    const applyRotation = (placements: PlacedSignature[], boxes: RedactionBox[], newTexts: PlacedText[]) => {
+    const applyRotation = (
+      placements: PlacedSignature[],
+      boxes: RedactionBox[],
+      newTexts: PlacedText[],
+      newComments: PlacedComment[],
+    ) => {
       update((state) => ({
         ...state,
         // Target this specific document rather than "whichever is active
@@ -612,6 +691,7 @@ function createEditorStore() {
                 placedSignatures: placements,
                 redactions: boxes,
                 texts: newTexts,
+                comments: newComments,
                 exported: false,
               }
             : d,
@@ -632,11 +712,14 @@ function createEditorStore() {
       const newTexts = await Promise.all(
         texts.map((t) => rotateGeometry(pdfjsDoc, t.page, renderScale, oldRotation, newRotation, t)),
       );
-      applyRotation(newPlacements, newRedactions, newTexts);
+      const newComments = await Promise.all(
+        comments.map((c) => rotateGeometry(pdfjsDoc, c.page, renderScale, oldRotation, newRotation, c)),
+      );
+      applyRotation(newPlacements, newRedactions, newTexts, newComments);
     } catch {
       // Couldn't re-derive the geometry (e.g. the PDF failed to load) — fall
       // back to clearing rather than leaving stale, now-misaligned positions.
-      applyRotation([], [], []);
+      applyRotation([], [], [], []);
     }
   }
 
@@ -718,6 +801,10 @@ function createEditorStore() {
     updateText,
     removeText,
     setTextsForDocument,
+    addComment,
+    updateComment,
+    removeComment,
+    setCommentsForDocument,
     markDocumentExported,
     setRenderScale,
     zoomIn,

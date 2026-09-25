@@ -2,6 +2,7 @@
   import { editorStore, activeDocument, canUndo, canRedo, DEFAULT_RENDER_SCALE } from '../stores/editor';
   import { redactMode } from '../stores/redact';
   import { textToolMode } from '../stores/textTool';
+  import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
   import { zoomToolMode } from '../stores/zoomTool';
   import { textSelectMode } from '../stores/textSelect';
@@ -20,6 +21,7 @@
     redactMode.update((v) => !v);
     if ($redactMode) {
       textToolMode.set(false);
+      commentToolMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
     }
@@ -29,6 +31,18 @@
     textToolMode.update((v) => !v);
     if ($textToolMode) {
       redactMode.set(false);
+      commentToolMode.set(false);
+      clickToPlaceMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+    }
+  }
+
+  function toggleCommentToolMode() {
+    commentToolMode.update((v) => !v);
+    if ($commentToolMode) {
+      redactMode.set(false);
+      textToolMode.set(false);
       clickToPlaceMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
@@ -40,6 +54,7 @@
     if ($zoomToolMode) {
       redactMode.set(false);
       textToolMode.set(false);
+      commentToolMode.set(false);
       clickToPlaceMode.set(false);
       textSelectMode.set(false);
     }
@@ -50,6 +65,7 @@
     if ($textSelectMode) {
       redactMode.set(false);
       textToolMode.set(false);
+      commentToolMode.set(false);
       clickToPlaceMode.set(false);
       zoomToolMode.set(false);
     }
@@ -62,12 +78,18 @@
   // an explicit, one-click way back to it (same effect as Escape, without
   // needing to know that shortcut).
   const moveModeActive = $derived(
-    !$redactMode && !$textToolMode && !$clickToPlaceMode && !$zoomToolMode && !$textSelectMode,
+    !$redactMode &&
+      !$textToolMode &&
+      !$commentToolMode &&
+      !$clickToPlaceMode &&
+      !$zoomToolMode &&
+      !$textSelectMode,
   );
 
   function activateMoveMode() {
     redactMode.set(false);
     textToolMode.set(false);
+    commentToolMode.set(false);
     clickToPlaceMode.set(false);
     zoomToolMode.set(false);
     textSelectMode.set(false);
@@ -476,6 +498,28 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M5 6h14M12 6v12" />
       </svg>
       Add Text
+    </button>
+
+    <button
+      type="button"
+      aria-pressed={$commentToolMode}
+      title="Comment — click on the document to leave a sticky note"
+      class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
+      class:border-neutral-200={!$commentToolMode}
+      class:text-neutral-600={!$commentToolMode}
+      class:hover:bg-neutral-100={!$commentToolMode}
+      class:dark:border-neutral-800={!$commentToolMode}
+      class:dark:text-neutral-300={!$commentToolMode}
+      class:dark:hover:bg-neutral-800={!$commentToolMode}
+      class:border-amber-500={$commentToolMode}
+      class:bg-amber-500={$commentToolMode}
+      class:text-white={$commentToolMode}
+      onclick={toggleCommentToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v11H8l-4 4V5Z" />
+      </svg>
+      Comment
     </button>
 
     <button

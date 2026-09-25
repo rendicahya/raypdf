@@ -1,4 +1,4 @@
-import { PDFDocument, degrees } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFString, degrees } from '@cantoo/pdf-lib';
 import JSZip from 'jszip';
 import { loadPdf, getTotalRotation } from './loader';
 import { placementFromRatioForDocument } from './placement';
@@ -7,7 +7,7 @@ import { applyRedactions } from './redact';
 import { applyVisibleWatermark, type WatermarkOptions } from '../watermark/visible';
 import { drawTextBox, embedTextFont, hexToRgb } from './textRender';
 import { embedVerificationRecord } from './verification';
-import type { PdfDocumentState, PlacedSignature, PlacedText, RedactionBox } from '../../stores/editor';
+import type { PdfDocumentState, PlacedComment, PlacedSignature, PlacedText, RedactionBox } from '../../stores/editor';
 import type { PlacementRatio } from '../../stores/placement';
 
 export interface ExportParams {
@@ -28,6 +28,8 @@ export interface ExportParams {
   redactions?: RedactionBox[];
   /** Typed text boxes to draw onto the exported PDF. */
   texts?: PlacedText[];
+  /** Sticky-note comments to embed as real PDF annotations (not drawn onto the page content). */
+  comments?: PlacedComment[];
   /** If set, the exported PDF contains only this 1-indexed page (with any placements/redactions/text still applied) instead of every page. */
   onlyPage?: number;
   /** Lock the exported PDF's copy/extract permission — see `applyCopyProtection`. */
@@ -65,6 +67,46 @@ function applyCopyProtection(pdfDoc: PDFDocument): void {
 }
 
 /**
+ * Embeds each comment as a real PDF "Text" (sticky note) annotation rather
+ * than drawing anything onto the page content — compliant readers (Acrobat,
+ * etc.) render their own note icon at the given Rect and show `text` in the
+ * annotation's popup, so the note stays out of the page's visible content
+ * and out of the redaction/flatten path above.
+ */
+async function embedCommentAnnotations(
+  pdfDoc: PDFDocument,
+  pdfjsDoc: Awaited<ReturnType<typeof loadPdf>>,
+  comments: PlacedComment[],
+  renderScale: number,
+  rotation: number,
+): Promise<void> {
+  for (const c of comments) {
+    if (!c.text.trim()) continue;
+
+    const pdfjsPage = await pdfjsDoc.getPage(c.page);
+    const totalRotation = getTotalRotation(pdfjsPage, rotation);
+    const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: totalRotation });
+
+    const [x1, y1] = viewport.convertToPdfPoint(c.x, c.y);
+    const [x2, y2] = viewport.convertToPdfPoint(c.x + c.width, c.y + c.height);
+
+    const annotDict = pdfDoc.context.obj({
+      Type: 'Annot',
+      Subtype: 'Text',
+      Rect: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)],
+      Contents: PDFString.of(c.text),
+      Name: 'Comment',
+      C: [1, 0.78, 0.2],
+      Open: false,
+    });
+    const annotRef = pdfDoc.context.register(annotDict);
+
+    const targetPage = pdfDoc.getPage(c.page - 1);
+    targetPage.node.addAnnot(annotRef);
+  }
+}
+
+/**
  * Applies redaction and/or a signature to a document and returns the result.
  * Nothing here touches the network — everything runs with pdf-lib (and
  * pdf.js for coordinate mapping) in the browser. Signing and redacting are
@@ -83,6 +125,7 @@ export async function exportSignedPdf(params: ExportParams): Promise<Uint8Array>
     stripScripts = false,
     redactions = [],
     texts = [],
+    comments = [],
     onlyPage,
     securePdf = false,
   } = params;
@@ -168,6 +211,10 @@ export async function exportSignedPdf(params: ExportParams): Promise<Uint8Array>
         align: t.align,
       });
     }
+  }
+
+  if (comments.length > 0) {
+    await embedCommentAnnotations(pdfDoc, pdfjsDoc, comments, renderScale, rotation);
   }
 
   // The rotation the user chose represents "this scan is sideways" and is
@@ -349,6 +396,7 @@ export async function exportPagesAsZip(
       stripScripts,
       redactions: doc.redactions,
       texts: doc.texts,
+      comments: doc.comments,
       onlyPage: page,
       securePdf,
     });
@@ -385,7 +433,12 @@ export async function exportAllAsZip(
 
   for (const doc of documents) {
     const placements = signatureBlob ? await resolvePlacements(doc, renderScale, lastPlacementRatio) : [];
-    if (placements.length === 0 && doc.redactions.length === 0 && doc.texts.length === 0) {
+    if (
+      placements.length === 0 &&
+      doc.redactions.length === 0 &&
+      doc.texts.length === 0 &&
+      doc.comments.length === 0
+    ) {
       skipped.push(doc.file.name);
       continue;
     }
@@ -401,6 +454,7 @@ export async function exportAllAsZip(
       stripScripts,
       redactions: doc.redactions,
       texts: doc.texts,
+      comments: doc.comments,
       securePdf,
     });
 
@@ -456,6 +510,7 @@ export async function exportMergedPdf(
       stripScripts,
       redactions: doc.redactions,
       texts: doc.texts,
+      comments: doc.comments,
     });
 
     const sourceDoc = await PDFDocument.load(bytes);

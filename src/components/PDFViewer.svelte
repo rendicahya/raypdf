@@ -3,8 +3,9 @@
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { getCachedPdf } from '../lib/pdf/docCache';
-  import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox } from '../stores/editor';
+  import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
   import { redactMode } from '../stores/redact';
+  import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
   import { zoomToolMode } from '../stores/zoomTool';
   import { textSelectMode } from '../stores/textSelect';
@@ -164,13 +165,15 @@
   }
 
   function updateHoverTextSelect(e: PointerEvent) {
-    const explicitToolActive = $redactMode || $textToolMode || $clickToPlaceMode || $zoomToolMode || $textSelectMode;
+    const explicitToolActive =
+      $redactMode || $textToolMode || $commentToolMode || $clickToPlaceMode || $zoomToolMode || $textSelectMode;
     const otherInteractionInProgress =
       isPanning ||
       drawingBox ||
       movingSignatureId ||
       movingRedactionId ||
       movingTextId ||
+      movingCommentId ||
       resizingSignatureId ||
       resizingRedactionId ||
       resizingTextId;
@@ -219,6 +222,12 @@
     return doc.texts.filter((t) => t.page === doc.pageNumber);
   });
 
+  const commentsOnCurrentPage = $derived.by(() => {
+    const doc = $activeDocument;
+    if (!doc) return [];
+    return doc.comments.filter((c) => c.page === doc.pageNumber);
+  });
+
   // The "Find Signature Spot" suggestion — only shown while it's scoped to
   // the document/page currently on screen, so navigating away (or the
   // document changing) doesn't leave a stale box floating in the wrong place.
@@ -258,6 +267,8 @@
     selectedRedactionId = null;
     if (editingTextId) commitTextEdit();
     selectedTextId = null;
+    if (editingCommentId) commitCommentEdit();
+    selectedCommentId = null;
   });
 
   function onWindowPointerDown(e: PointerEvent) {
@@ -282,6 +293,16 @@
     const currentText = selectedTextId ? wrapperEl?.querySelector(`[data-placed-text="${selectedTextId}"]`) : null;
     if (!currentText?.contains(e.target as Node) && editingTextId !== selectedTextId) {
       selectedTextId = null;
+    }
+
+    // Same reasoning as currentText above — the just-created comment marker
+    // isn't painted into the DOM yet on the pointerdown that creates it.
+    const currentComment = selectedCommentId
+      ? wrapperEl?.querySelector(`[data-placed-comment="${selectedCommentId}"]`)
+      : null;
+    if (!currentComment?.contains(e.target as Node) && editingCommentId !== selectedCommentId) {
+      if (editingCommentId) commitCommentEdit();
+      selectedCommentId = null;
     }
 
     // Clicking anywhere outside the selectable-text layer collapses any
@@ -416,6 +437,17 @@
       // would discard the previous one's typed text unsaved.
       if (editingTextId) commitTextEdit();
       addTextAt(e);
+      return;
+    }
+
+    if ($commentToolMode) {
+      // Same reasoning as the Add Text branch above — prevent focus theft and
+      // stop this pointerdown from also reaching the window-level "click
+      // outside closes the editor" listener before the new marker is painted.
+      e.preventDefault();
+      e.stopPropagation();
+      if (editingCommentId) commitCommentEdit();
+      addCommentAt(e);
       return;
     }
 
@@ -600,6 +632,7 @@
     return (
       !$redactMode &&
       !$textToolMode &&
+      !$commentToolMode &&
       !$clickToPlaceMode &&
       !$zoomToolMode &&
       !textSelectActive &&
@@ -949,6 +982,124 @@
     if ('letterSpacing' in partial) defaultTextLetterSpacing.set(partial.letterSpacing!);
     if ('align' in partial) defaultTextAlign.set(partial.align!);
   }
+
+  // Comment tool: click to drop a fixed-size sticky-note marker (in
+  // commentToolMode), then type its note. Move mirrors the signature/text
+  // overlays (plain pointerdown/move/up, no resize — the marker is always
+  // the same size); editing opens a floating note panel rather than turning
+  // the marker itself into a textarea, since the marker is too small to type into.
+  const COMMENT_SIZE = 26;
+
+  let selectedCommentId: string | null = $state(null);
+  let editingCommentId: string | null = $state(null);
+  let commentEditValue = $state('');
+
+  function autofocusNote(node: HTMLTextAreaElement) {
+    node.focus();
+  }
+
+  function startEditingComment(id: string, initialValue: string) {
+    editingCommentId = id;
+    commentEditValue = initialValue;
+  }
+
+  // `forId` guards against a stale blur firing after editingCommentId has
+  // already moved on to a different marker — same race as commitTextEdit above.
+  function commitCommentEdit(forId?: string) {
+    if (forId !== undefined && forId !== editingCommentId) return;
+    if (!editingCommentId) return;
+    const id = editingCommentId;
+    const value = commentEditValue;
+    editingCommentId = null;
+    // An empty note is just clutter — drop it rather than leaving a blank marker.
+    if (!value.trim()) {
+      editorStore.removeComment(id);
+      if (selectedCommentId === id) selectedCommentId = null;
+    } else {
+      editorStore.updateComment(id, { text: value });
+    }
+  }
+
+  function addCommentAt(e: PointerEvent) {
+    const doc = $activeDocument;
+    if (!doc) return;
+
+    const rect = canvasEl.getBoundingClientRect();
+    const x = clamp(e.clientX - rect.left - COMMENT_SIZE / 2, 0, rect.width - COMMENT_SIZE);
+    const y = clamp(e.clientY - rect.top - COMMENT_SIZE / 2, 0, rect.height - COMMENT_SIZE);
+
+    const id = editorStore.addComment({
+      x,
+      y,
+      width: COMMENT_SIZE,
+      height: COMMENT_SIZE,
+      page: doc.pageNumber,
+      text: '',
+    });
+    selectedCommentId = id;
+    startEditingComment(id, '');
+  }
+
+  let movingCommentId: string | null = null;
+  let commentMoveOffset = { x: 0, y: 0 };
+
+  function onCommentPointerDown(e: PointerEvent, id: string) {
+    if (editingCommentId === id) return;
+    e.stopPropagation();
+    selectedCommentId = id;
+    movingCommentId = id;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const markerRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    commentMoveOffset = { x: e.clientX - markerRect.left, y: e.clientY - markerRect.top };
+  }
+
+  function onCommentPointerMove(e: PointerEvent, id: string) {
+    if (movingCommentId !== id) return;
+    const c = $activeDocument?.comments.find((x) => x.id === id);
+    if (!c) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const x = clamp(e.clientX - rect.left - commentMoveOffset.x, 0, rect.width - c.width);
+    const y = clamp(e.clientY - rect.top - commentMoveOffset.y, 0, rect.height - c.height);
+    editorStore.updateComment(id, { x, y });
+  }
+
+  function onCommentPointerUp() {
+    movingCommentId = null;
+  }
+
+  function onCommentDoubleClick(e: MouseEvent, c: PlacedComment) {
+    e.stopPropagation();
+    selectedCommentId = c.id;
+    startEditingComment(c.id, c.text);
+  }
+
+  function onCommentKeydown(e: KeyboardEvent, id: string) {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      editorStore.removeComment(id);
+      if (selectedCommentId === id) selectedCommentId = null;
+      return;
+    }
+
+    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
+    e.preventDefault();
+
+    const c = $activeDocument?.comments.find((x) => x.id === id);
+    if (!c) return;
+
+    const rect = canvasEl.getBoundingClientRect();
+    const dx = e.key === 'ArrowLeft' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowRight' ? KEYBOARD_MOVE_STEP : 0;
+    const dy = e.key === 'ArrowUp' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowDown' ? KEYBOARD_MOVE_STEP : 0;
+    const x = clamp(c.x + dx, 0, rect.width - c.width);
+    const y = clamp(c.y + dy, 0, rect.height - c.height);
+    editorStore.updateComment(id, { x, y });
+  }
+
+  function removeComment(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    editorStore.removeComment(id);
+    if (selectedCommentId === id) selectedCommentId = null;
+  }
 </script>
 
 <svelte:window onpointerdown={onWindowPointerDown} />
@@ -972,9 +1123,14 @@
     bind:this={canvasEl}
     class="rounded-lg shadow-lg active:cursor-grabbing"
     class:cursor-crosshair={$redactMode}
-    class:cursor-text={$textToolMode && !$redactMode}
-    class:cursor-zoom-in={$zoomToolMode && !$redactMode && !$textToolMode}
-    class:cursor-grab={!$redactMode && !$textToolMode && !$clickToPlaceMode && !$zoomToolMode && !textSelectActive}
+    class:cursor-text={($textToolMode || $commentToolMode) && !$redactMode}
+    class:cursor-zoom-in={$zoomToolMode && !$redactMode && !$textToolMode && !$commentToolMode}
+    class:cursor-grab={!$redactMode &&
+      !$textToolMode &&
+      !$commentToolMode &&
+      !$clickToPlaceMode &&
+      !$zoomToolMode &&
+      !textSelectActive}
     onpointerdown={onCanvasClick}
     onpointermove={onCanvasMouseMove}
   ></canvas>
@@ -1399,6 +1555,82 @@
               class="w-16 accent-blue-600"
             />
           </label>
+        </div>
+      {/if}
+    </div>
+  {/each}
+
+  {#each commentsOnCurrentPage as c (c.id)}
+    {@const isSelected = selectedCommentId === c.id}
+    {@const isEditing = editingCommentId === c.id}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      data-placed-comment={c.id}
+      role="group"
+      tabindex="0"
+      aria-label="Comment marker — double-click to edit, drag to move, Delete to remove"
+      title={c.text || 'Empty note — double-click to edit'}
+      class="absolute flex touch-none items-center justify-center rounded-full bg-amber-400 text-amber-950
+        shadow-md cursor-move {isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : 'hover:bg-amber-300'}"
+      style:left="{c.x}px"
+      style:top="{c.y}px"
+      style:width="{c.width}px"
+      style:height="{c.height}px"
+      onpointerdown={(e) => onCommentPointerDown(e, c.id)}
+      onpointermove={(e) => onCommentPointerMove(e, c.id)}
+      onpointerup={onCommentPointerUp}
+      ondblclick={(e) => onCommentDoubleClick(e, c)}
+      onfocus={() => (selectedCommentId = c.id)}
+      onkeydown={(e) => onCommentKeydown(e, c.id)}
+    >
+      <svg viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5">
+        <path d="M4 5h16v11H8l-4 4V5Z" />
+      </svg>
+
+      {#if isSelected}
+        <button
+          type="button"
+          aria-label="Remove comment"
+          title="Remove comment"
+          class="absolute -right-1.5 -top-1.5 flex h-5 w-5 touch-none items-center justify-center rounded-full
+            border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={(e) => removeComment(e, c.id)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
+            <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      {/if}
+
+      {#if isEditing}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="absolute z-10 w-56 rounded-lg border border-neutral-200 bg-white p-2 text-left shadow-lg
+            dark:border-neutral-700 dark:bg-neutral-900"
+          style:left="0px"
+          style:top={c.y < 100 ? `${c.height + 8}px` : '-108px'}
+          onpointerdown={(e) => e.stopPropagation()}
+        >
+          <!-- svelte-ignore a11y_autofocus -->
+          <textarea
+            use:autofocusNote
+            bind:value={commentEditValue}
+            placeholder="Write a comment…"
+            rows="3"
+            onblur={() => commitCommentEdit(c.id)}
+            onkeydown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.preventDefault();
+              e.stopPropagation();
+              commitCommentEdit(c.id);
+              commentToolMode.set(false);
+            }}
+            class="w-full resize-none rounded border border-neutral-200 bg-transparent p-1.5 text-xs
+              text-neutral-900 outline-none focus:ring-1 focus:ring-blue-400 dark:border-neutral-700
+              dark:text-neutral-100"
+          ></textarea>
         </div>
       {/if}
     </div>

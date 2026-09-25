@@ -57,8 +57,13 @@
     const sig = $signatureStore;
     const placements = sig.signature ? await resolvePlacements(doc, $editorStore.renderScale, $lastPlacement) : [];
 
-    if (placements.length === 0 && doc.redactions.length === 0 && doc.texts.length === 0) {
-      throw new Error('Nothing to export yet — place a signature, draw a redaction, or add text first.');
+    if (
+      placements.length === 0 &&
+      doc.redactions.length === 0 &&
+      doc.texts.length === 0 &&
+      doc.comments.length === 0
+    ) {
+      throw new Error('Nothing to export yet — place a signature, draw a redaction, add text, or add a comment first.');
     }
 
     return {
@@ -87,6 +92,7 @@
         stripScripts: $stripEmbeddedScripts,
         redactions: doc.redactions,
         texts: doc.texts,
+        comments: doc.comments,
         securePdf: $securePdf,
       });
       downloadSignedPdf(bytes, doc.file.name);
@@ -118,6 +124,7 @@
         stripScripts: $stripEmbeddedScripts,
         redactions: doc.redactions,
         texts: doc.texts,
+        comments: doc.comments,
         onlyPage: doc.pageNumber,
         securePdf: $securePdf,
       });
@@ -178,6 +185,7 @@
         stripScripts: $stripEmbeddedScripts,
         redactions: doc.redactions,
         texts: doc.texts,
+        comments: doc.comments,
         securePdf: $securePdf,
       });
       printPdfBytes(bytes);
