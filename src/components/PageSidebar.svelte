@@ -8,17 +8,23 @@
   let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
 
+  // Only the identity of the document matters here. Depending on the whole $activeDocument object
+  // would re-run the effect (and unmount the thumbnails, resetting scroll) on every page change.
+  const docId = $derived($activeDocument?.id ?? null);
+  const docFile = $derived($activeDocument?.file ?? null);
+
   // Reloads (from the shared cache — usually a no-op parse) whenever the active document changes.
   $effect(() => {
-    const doc = $activeDocument;
-    if (!doc) {
+    const id = docId;
+    const file = docFile;
+    if (id === null || !file) {
       pdfDoc = null;
       return;
     }
     let cancelled = false;
     pdfDoc = null;
     error = null;
-    getCachedPdf(doc.id, doc.file)
+    getCachedPdf(id, file)
       .then((loaded) => {
         if (!cancelled) pdfDoc = loaded;
       })
