@@ -231,8 +231,6 @@
       </button>
     </div>
 
-    <div class="h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800"></div>
-
     <div class={groupClass}>
       <button
         type="button"
@@ -274,8 +272,6 @@
         </svg>
       </button>
     </div>
-
-    <div class="h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800"></div>
 
     <div class={groupClass}>
       <button
@@ -342,8 +338,6 @@
       </button>
     </div>
 
-    <div class="h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800"></div>
-
     <div class={groupClass}>
       <button
         type="button"
@@ -372,8 +366,6 @@
         </svg>
       </button>
     </div>
-
-    <div class="h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800"></div>
 
     <button
       type="button"
