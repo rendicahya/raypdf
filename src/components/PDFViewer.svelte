@@ -370,13 +370,15 @@
   // adjustment can't be computed up front — a ResizeObserver fires once the
   // canvas has actually taken on its new size, and only then is the scroll
   // position corrected using the ratio captured before the click.
-  function zoomAtPoint(e: PointerEvent) {
+  // Right-click zooms out instead of in.
+  function zoomAtPoint(e: PointerEvent, direction: 'in' | 'out') {
+    const zoom = direction === 'in' ? editorStore.zoomIn : editorStore.zoomOut;
     const container = wrapperEl?.closest('[data-pdf-scroll-container]') as HTMLElement | null;
     const oldScale = $editorStore.renderScale;
     const oldRect = canvasEl.getBoundingClientRect();
 
     if (!container || oldRect.width === 0 || oldRect.height === 0) {
-      editorStore.zoomIn();
+      zoom();
       return;
     }
 
@@ -387,8 +389,8 @@
     const anchorX = e.clientX;
     const anchorY = e.clientY;
 
-    editorStore.zoomIn();
-    if ($editorStore.renderScale === oldScale) return; // already at max zoom — nothing to reposition
+    zoom();
+    if ($editorStore.renderScale === oldScale) return; // already at the zoom limit — nothing to reposition
 
     let settled = false;
     const finish = () => {
@@ -409,7 +411,8 @@
 
   function onCanvasClick(e: PointerEvent) {
     if ($zoomToolMode) {
-      zoomAtPoint(e);
+      if (e.button === 0) zoomAtPoint(e, 'in');
+      else if (e.button === 2) zoomAtPoint(e, 'out');
       return;
     }
 
@@ -1133,6 +1136,9 @@
       !textSelectActive}
     onpointerdown={onCanvasClick}
     onpointermove={onCanvasMouseMove}
+    oncontextmenu={(e) => {
+      if ($zoomToolMode) e.preventDefault();
+    }}
   ></canvas>
 
   <!-- Invisible, selectable text built by lib/pdf/textLayer.ts — always
