@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import { getCachedPdf } from '../lib/pdf/docCache';
 import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
+import { movePdfPage } from '../lib/pdf/reorder';
 
 /** Signature instance placed on the page, in canvas pixel coordinates. */
 export interface PlacedSignature {
@@ -207,6 +208,8 @@ async function rotateGeometry<T extends { x: number; y: number; width: number; h
  * user places or changes on the page, but not navigation (page number),
  * loading state (pageCount), or the "saved yet" flag. */
 interface DocSnapshot {
+  /** Replaced when the user reorders pages, so undo/redo can swap it back. */
+  file: File;
   placedSignatures: PlacedSignature[];
   redactions: RedactionBox[];
   texts: PlacedText[];
@@ -253,6 +256,7 @@ function createEditorStore() {
 
   function snapshotOf(doc: PdfDocumentState): DocSnapshot {
     return {
+      file: doc.file,
       placedSignatures: doc.placedSignatures,
       redactions: doc.redactions,
       texts: doc.texts,
@@ -723,6 +727,50 @@ function createEditorStore() {
     }
   }
 
+  /**
+   * Moves page `from` to position `to` (both 1-indexed) in the active
+   * document. The PDF file itself is rewritten with the new page order, so
+   * rendering, thumbnails, and export all keep working on plain page numbers;
+   * every placement/redaction/text/comment is renumbered to follow its page,
+   * and the page being viewed stays on screen.
+   */
+  async function movePage(from: number, to: number) {
+    const doc = getActiveDocument(currentState());
+    if (!doc || from === to || from < 1 || to < 1 || from > doc.pageCount || to > doc.pageCount) return;
+
+    const order = Array.from({ length: doc.pageCount }, (_, i) => i + 1);
+    const [moved] = order.splice(from - 1, 1);
+    order.splice(to - 1, 0, moved);
+    const newPageOf = new Map(order.map((original, i) => [original, i + 1]));
+    const renumber = <T extends { page: number }>(item: T): T => ({ ...item, page: newPageOf.get(item.page) ?? item.page });
+
+    const file = await movePdfPage(doc.file, from, to);
+
+    // The rewrite is async — re-read the document in case it changed in the
+    // meantime, and bail if another reorder already replaced its file.
+    const latest = currentState().documents.find((d) => d.id === doc.id);
+    if (!latest || latest.file !== doc.file) return;
+
+    recordHistory(latest.id, `move-page-${crypto.randomUUID()}`, latest);
+    update((state) => ({
+      ...state,
+      documents: state.documents.map((d) =>
+        d.id === latest.id
+          ? {
+              ...d,
+              file,
+              pageNumber: newPageOf.get(d.pageNumber) ?? d.pageNumber,
+              placedSignatures: d.placedSignatures.map(renumber),
+              redactions: d.redactions.map(renumber),
+              texts: d.texts.map(renumber),
+              comments: d.comments.map(renumber),
+              exported: false,
+            }
+          : d,
+      ),
+    }));
+  }
+
   function rotateLeft() {
     rotateBy(-90);
   }
@@ -812,6 +860,7 @@ function createEditorStore() {
     resetZoom,
     rotateLeft,
     rotateRight,
+    movePage,
     markExported,
     undo,
     redo,

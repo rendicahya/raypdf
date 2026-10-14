@@ -3,6 +3,7 @@
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { getCachedPdf } from '../lib/pdf/docCache';
+  import { PAGE_DRAG_TYPE } from '../lib/pdf/reorder';
   import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
@@ -65,19 +66,31 @@
   const previewAlign = $derived(positionToFlex($watermarkPosition));
 
   // This component is remounted (via a #key block in App.svelte) whenever
-  // the active document changes, so `onMount` always loads the right file.
-  async function loadDocument() {
-    const doc = $activeDocument;
-    if (!doc) return;
-    try {
-      pdfDoc = await getCachedPdf(doc.id, doc.file);
-      editorStore.setPageCount(pdfDoc.numPages);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load PDF';
-    }
-  }
+  // the active document changes; within one document the file itself can
+  // still be swapped (reordering pages, or undoing that), so reload on that too.
+  // Only the identity of the document/file matters here — depending on the
+  // whole $activeDocument would reload on every edit.
+  const docId = $derived($activeDocument?.id ?? null);
+  const docFile = $derived($activeDocument?.file ?? null);
 
-  onMount(loadDocument);
+  $effect(() => {
+    const id = docId;
+    const file = docFile;
+    if (id === null || !file) return;
+    let cancelled = false;
+    getCachedPdf(id, file)
+      .then((loaded) => {
+        if (cancelled) return;
+        pdfDoc = loaded;
+        editorStore.setPageCount(loaded.numPages);
+      })
+      .catch((e) => {
+        if (!cancelled) error = e instanceof Error ? e.message : 'Failed to load PDF';
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   // Tracks whether there's a live (non-collapsed) selection anchored inside
   // the text layer, independent of hoverTextSelect/$textSelectMode — so that
@@ -333,12 +346,19 @@
     });
   }
 
+  // Thumbnails being reordered in the page sidebar aren't signatures.
+  function isPageDrag(e: DragEvent) {
+    return !!e.dataTransfer?.types.includes(PAGE_DRAG_TYPE);
+  }
+
   function onDragOver(e: DragEvent) {
+    if (isPageDrag(e)) return;
     e.preventDefault();
     isDragOver = true;
   }
 
   function onDrop(e: DragEvent) {
+    if (isPageDrag(e)) return;
     e.preventDefault();
     isDragOver = false;
 
