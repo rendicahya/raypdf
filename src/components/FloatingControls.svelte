@@ -237,6 +237,41 @@
 </script>
 
 <div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex flex-col items-center gap-1.5 px-4">
+  {#if $screenshotResult}
+    {@const result = $screenshotResult}
+    <div
+      role="status"
+      class="pointer-events-auto mb-1 flex max-w-full items-center gap-2 rounded-full bg-white/90 py-1 pl-3 pr-1
+        text-xs shadow dark:bg-neutral-900/90"
+    >
+      {#if result.ok}
+        <span class="text-emerald-600 dark:text-emerald-400">
+          {result.copied ? 'Screenshot copied to clipboard' : 'Screenshot ready'}
+        </span>
+        <button
+          type="button"
+          class="rounded-full bg-sky-600 px-2.5 py-0.5 font-medium text-white hover:bg-sky-700"
+          onclick={saveScreenshot}
+        >
+          Save PNG
+        </button>
+      {:else}
+        <span class="text-red-600 dark:text-red-400">{result.message}</span>
+      {/if}
+      <button
+        type="button"
+        aria-label="Dismiss"
+        class="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100
+          dark:text-neutral-400 dark:hover:bg-neutral-800"
+        onclick={() => screenshotResult.set(null)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
+        </svg>
+      </button>
+    </div>
+  {/if}
+
   <div class="pointer-events-auto flex max-w-full items-center gap-2 overflow-x-auto rounded-full border
     border-neutral-200 bg-white/90 px-2 py-1.5 shadow-lg backdrop-blur dark:border-neutral-800
     dark:bg-neutral-900/90">
@@ -589,41 +624,6 @@
       </button>
     {/if}
   </div>
-
-  {#if $screenshotResult}
-    {@const result = $screenshotResult}
-    <div
-      role="status"
-      class="pointer-events-auto mt-1 flex max-w-full items-center gap-2 rounded-full bg-white/90 py-1 pl-3 pr-1
-        text-xs shadow dark:bg-neutral-900/90"
-    >
-      {#if result.ok}
-        <span class="text-emerald-600 dark:text-emerald-400">
-          {result.copied ? 'Screenshot copied to clipboard' : 'Screenshot ready'}
-        </span>
-        <button
-          type="button"
-          class="rounded-full bg-sky-600 px-2.5 py-0.5 font-medium text-white hover:bg-sky-700"
-          onclick={saveScreenshot}
-        >
-          Save PNG
-        </button>
-      {:else}
-        <span class="text-red-600 dark:text-red-400">{result.message}</span>
-      {/if}
-      <button
-        type="button"
-        aria-label="Dismiss"
-        class="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100
-          dark:text-neutral-400 dark:hover:bg-neutral-800"
-        onclick={() => screenshotResult.set(null)}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-          <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
-        </svg>
-      </button>
-    </div>
-  {/if}
 
   {#if applyRedactionError}
     <p class="pointer-events-auto mt-1 max-w-full rounded-full bg-white/90 px-3 py-1 text-center text-xs

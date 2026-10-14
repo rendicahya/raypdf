@@ -4,7 +4,7 @@ import { persistedWritable } from '../lib/utils/persist';
  * Watermark preferences persist across sessions (localStorage) so users
  * don't have to retype them every time they open the app. This is plain
  * text/boolean preference data, not the signature image itself, which
- * always stays in IndexedDB per CLAUDE.md.
+ * always stays in IndexedDB (see Principles in README.md).
  */
 
 /** Custom text (multi-line) the user wants overlaid onto the signature at export time. */

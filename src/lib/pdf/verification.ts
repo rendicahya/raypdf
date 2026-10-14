@@ -1,12 +1,12 @@
 /**
  * Lightweight, local-only "did this PDF pass through Signy" check. This is
- * explicitly NOT a cryptographic signature — CLAUDE.md is clear Signy isn't
+ * explicitly NOT a cryptographic signature — README.md is clear Signy isn't
  * a PKI replacement — it's a small metadata breadcrumb embedded in the PDF's
  * standard Keywords field at export time, and read back on the Verify page.
  * It confirms provenance (this file was exported by Signy, with this
  * document id, at this time) but not that the pages haven't been edited
  * since — a full guarantee of that is what the future invisible watermark
- * (CLAUDE.md v0.3) is for.
+ * (see Roadmap in README.md) is for.
  */
 
 import type { PDFDocument } from '@cantoo/pdf-lib';

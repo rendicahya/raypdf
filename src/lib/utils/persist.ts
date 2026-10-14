@@ -2,7 +2,7 @@ import { writable, type Writable } from 'svelte/store';
 
 /**
  * A Svelte store backed by localStorage. Only for small, non-sensitive
- * preferences (text, booleans, enums) — per CLAUDE.md, signature image data
+ * preferences (text, booleans, enums) — per README.md's Principles, signature image data
  * must stay in IndexedDB, never localStorage.
  */
 export function persistedWritable<T>(key: string, initialValue: T): Writable<T> {

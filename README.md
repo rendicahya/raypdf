@@ -2,97 +2,108 @@
 
 Sign PDF documents with protected handwritten signatures, entirely in your browser.
 
-No backend, no uploads, no accounts — everything runs client-side and is designed to work fully offline once loaded. The app itself says so up front: a "100% local" badge is shown on the landing screen before any file is touched.
+No backend, no uploads, no accounts — everything runs client-side and works fully offline once loaded. A "100% local" badge on the landing screen says so before any file is touched.
 
-## Stack
+Live at https://rendicahya.github.io/signy/
 
-Svelte 5 + Vite + TypeScript, Tailwind CSS, pdf.js, pdf-lib, IndexedDB (via `idb`), JSZip.
+## What Signy is (and isn't)
 
-## Getting started
+Signy is a lightweight protection layer for organizations that still rely on scanned handwritten signature images. It binds the signature to the document it was used on with a watermark baked into the signature image, so it's harder to lift and reuse elsewhere.
+
+It is **not** a replacement for PKI-based digital signatures.
+
+### Principles
+
+- **Privacy first.** Files are processed in the browser and never uploaded. No backend, database, authentication, or cloud storage.
+- **Signature images live in IndexedDB only** — never `localStorage`. Small preferences (watermark text, toggles) use `localStorage`.
+- **The watermark is part of the signature image**, never drawn onto the PDF page directly, so the protected signature is a single image.
+- **Few clicks, no unnecessary dialogs.** The whole signing flow should take under a minute.
+- **GitHub Pages compatible**, and works offline after the first load.
+
+## Features
+
+### Getting started
+
+- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse), then upload a signature image. Files are type- and size-checked (50 MB per PDF, 10 MB per signature).
+- The signature is saved in IndexedDB, so returning users only need to upload a new PDF. It can be replaced or deleted at any time.
+
+### Editor
+
+- **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Add more PDFs any time.
+- **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page. Click to jump; **drag and drop to reorder pages** — signatures, redactions, text, and comments move with their page, and the move can be undone.
+- **Floating toolbar** (icon-only, with instant tooltips):
+  - Undo / Redo (`Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y`)
+  - Previous / next page and a page picker (`←` / `→`; `Ctrl+←` / `Ctrl+→` switches documents)
+  - Zoom out / reset / in, fit width, fit page
+  - Rotate left / right
+  - Tools (`Esc` returns to Move):
+    - **Move** — drag placed items around; drag the page background to pan. Hovering over text briefly switches to selection.
+    - **Redact** — draw boxes; the content underneath is permanently removed from the exported PDF.
+    - **Add Text** — click to place a text box (font, size, style, color, spacing, alignment).
+    - **Comment** — click to leave a sticky note, exported as a real PDF annotation.
+    - **Zoom** — click to zoom in at that spot, right-click to zoom out.
+    - **Select** — select and copy the PDF's real text.
+    - **Screenshot** — click a page to capture all of it, or drag a rectangle to capture an area. The image is copied to the clipboard, with a **Save PNG** option. Captures contain the PDF's own content, not unsaved overlays like signatures.
+  - **Apply redaction to all documents** (when several PDFs are open).
+- Dark mode (follows the OS by default) and fullscreen.
+
+### Placing the signature
+
+- Drag the signature from the right sidebar onto the page, or click it to place it. Click-to-place mode follows the cursor.
+- Move and resize (aspect ratio locked); several signatures per document are supported. Selected items can be nudged with the arrow keys and removed with `Delete`.
+- **Find Signature Spot** scans the page text for signature lines or labels ("Signature", "Tanda Tangan", "TTD") and suggests a spot — it never places anything without confirmation.
+- **Use last position** re-applies the last placement (as a ratio of the page) to the current page.
+- **Apply Signature to All N Pages** copies the current page's signature(s) to the same spot on every page.
+- **Apply to All N Documents** places the signature on page 1 of every open single-page PDF.
+
+### Visible watermark
+
+- Multi-line custom text, plus an optional date & time stamp.
+- 9-position picker, color, size, and opacity. Scroll the mouse wheel over the size and opacity sliders to adjust them.
+- Live preview on the signature in both the sidebar and the page.
+- Flattened into the signature image at export. Preferences persist across sessions.
+
+### Export
+
+- **Save This PDF**, **Save This Page Only**, **Save Each Page as Separate PDF (ZIP)**, **Save All (ZIP)**, **Merge** (choose the order), and **Print**.
+- Exported as `original_filename_signed.pdf`.
+- Optional: strip embedded JavaScript carried over from the source PDF, and lock text/content copying.
+- Each export embeds a small Signy record (document ID, name, export time, watermark text) in the PDF's metadata.
+
+### Verify
+
+- The **Verify** page reads a PDF's Signy record back, showing whether and when it was exported by Signy. This confirms provenance, not that the pages are unchanged since — that's what the planned invisible watermark is for.
+
+### Offline (PWA)
+
+- A service worker precaches the app, including the pdf.js worker. New versions wait in the background until the user clicks **Reload to update**, so work in progress is never interrupted.
+
+## Roadmap
+
+- **Invisible watermark** — DWT/DCT-based payload (signer, document ID, timestamp, signature ID), implemented as a replaceable module independent of the visible watermark.
+- Rotating a placed signature, and snapping it to page edges.
+- Signature background removal.
+- Automated tests (coordinate mapping in `lib/pdf/export.ts`, zoom rescaling in `stores/editor.ts`).
+
+## Development
+
+Stack: Svelte 5 + Vite + TypeScript (strict), Tailwind CSS, pdf.js, pdf-lib (`@cantoo/pdf-lib`), IndexedDB (via `idb`), JSZip.
 
 ```bash
 npm install
-npm run dev
+npm run dev      # dev server
+npm run check    # svelte-check type checking
+npm run build    # production build into dist/
+npm run deploy   # build and publish dist/ to the gh-pages branch
 ```
 
-## Build & deploy (GitHub Pages)
+`vite.config.ts` sets `base: '/signy/'` in production builds — update `REPO_NAME` there if the repository is renamed.
 
-```bash
-npm run build
-npm run deploy
-```
+### Layout
 
-`vite.config.ts` sets `base: '/signy/'` in production builds — update `REPO_NAME` there if the repository is renamed. Deploys to https://rendicahya.github.io/signy/ via the `gh-pages` branch.
-
-## Feature status
-
-Tracks what's actually implemented in the codebase versus what's still on the roadmap.
-
-_Last updated: 2026-08-07._
-
-### Implemented
-
-**Onboarding**
-
-- Two-step flow: step 1 is upload-PDF only (`components/UploadCard.svelte`, supports selecting/dropping multiple PDFs at once); step 2 shows the uploaded-PDF summary (with per-file remove and "+ Add more") plus the signature step.
-- On both pre-editor steps, the PDF drop target isn't just the upload card — the entire page accepts a dropped PDF, with a full-screen highlight while dragging (`App.svelte`).
-- Step 2 always requires an explicit **Continue to Editor** click before entering the editor — even for returning users whose signature is already saved from IndexedDB — so there's a chance to review or replace the signature before it's applied to a new batch of PDFs (`App.svelte`).
-- Signature upload/replace/delete via drag & drop or click-to-browse (`components/SignatureUploader.svelte`), persisted in IndexedDB (`lib/signature/db.ts`, `stores/signature.ts`) — never localStorage, never uploaded anywhere.
-- File type is validated on both the PDF and signature upload slots — including drag & drop, where the browser's `accept` attribute alone doesn't help (`lib/utils/fileValidation.ts`).
-- File size is capped too: 50 MB per PDF, 10 MB per signature image. Oversized files are skipped with a warning naming them (never silently dropped), even when other valid files in the same drop go through.
-- A "100% local — your files never leave this device" badge on the landing screen, ahead of any upload.
-
-**Multi-PDF support**
-
-- Upload and manage several PDFs in one session; each tracks its own pages, rotation, and signature placement independently (`stores/editor.ts`'s `PdfDocumentState[]`). Every document's real page count is resolved via pdf.js as soon as it's uploaded — not lazily on first open — so page-count-dependent features work correctly even for documents the user hasn't opened yet.
-- Switch the active document via a dropdown in the bottom toolbar, which also shows a "N / M signed" count and a button to remove the current document (`components/BottomToolbar.svelte`).
-- **Download This PDF** exports just the active document; **Download All (ZIP)** (shown once more than one PDF is uploaded) bundles every document into a single ZIP via JSZip, auto-applying the last-used placement ratio to any document that wasn't manually positioned, and reporting which (if any) had to be skipped for having no placement at all (`lib/pdf/export.ts`, `components/ExportButton.svelte`).
-- **Apply to All Documents** (right sidebar, shown once more than one PDF is uploaded and a placement exists): affixes the current signature placement to page 1 of every uploaded document in one click. Only enabled when every uploaded document is confirmed single-page; a real page-count check also runs at click time as a safety net (`components/SignaturePanel.svelte`).
-- A shared pdf.js document cache (`lib/pdf/docCache.ts`) avoids re-parsing the same PDF for the main viewer and the page-thumbnail sidebar.
-- Optional **"Strip embedded JavaScript"** checkbox (right sidebar, off by default, persisted in `localStorage`): removes any `/OpenAction`, `/AA`, and `Names/JavaScript` entries carried over from the source PDF at export time (`lib/pdf/sanitize.ts`). Signy never adds scripts itself, but some source PDFs (e.g. Acrobat e-forms with validation/auto-calc scripts) already contain them, which some upload systems reject outright.
-
-**Editor layout**
-
-- Three-column layout: a collapsible left sidebar of page thumbnails, the center PDF viewer with a sticky bottom toolbar, and a right sidebar for the signature panel and downloads.
-- **Left sidebar** (`components/PageSidebar.svelte`, `components/PageThumbnail.svelte`): thumbnails of every page in the active document; click one to jump to that page. Toggled via a button in the top toolbar (`stores/layout.ts`).
-- **Top toolbar** (`components/Toolbar.svelte`): sidebar toggle, enlarged "Signy" branding, and the Previous/Next page controls with a "Page X / Y" indicator (shown once the active document has more than one page).
-- **Bottom toolbar** (`components/BottomToolbar.svelte`, sticky): the document-selector dropdown (multi-PDF only), zoom in/out/reset, and rotate left/right.
-- **Right sidebar**: the signature preview/drag source, a **Replace Signature** link (works mid-session, not just during onboarding), watermark controls, a **Start Over** button, and the download button(s).
-- App background is a subtle gray (`bg-neutral-100` / `dark:bg-neutral-950`) so the white PDF page visually stands out from the surrounding chrome.
-- Dark mode toggle (`components/ThemeToggle.svelte`, `stores/theme.ts`): defaults to the OS's `prefers-color-scheme`, can be switched manually, and the choice is persisted in `localStorage`.
-
-**Placing the signature**
-
-- Drag the signature from the sidebar onto the document; drop position is calculated from the cursor. Click-to-place fallback for non-drag interactions.
-- Move a placed signature by dragging it; resize via a corner handle, with aspect ratio always locked to the original image (`lib/signature/layout.ts`). A small × button on the opposite corner clears the placement outright (`stores/editor.ts`'s `clearPlacement`), without needing to rotate the page or remove/re-add the document.
-- Zoom in / out / reset; every document's placement rescales together to stay in the same spot on the page as you zoom (`stores/editor.ts`).
-- **Use last position**, in the right sidebar: the signature's last placement (position and size, as a ratio of the page dimensions) carries over to the next page or document. Computed via pdf.js viewport math rather than a live canvas rect (`lib/pdf/placement.ts`), so it also works for documents not currently on screen (used for the ZIP bulk-export fallback too).
-- **Rotate the PDF page** 90° at a time — useful for sideways-scanned documents. Applied permanently to the exported file (via pdf-lib's `setRotation`), with the signature position mapped back to the correct PDF coordinates using pdf.js's viewport conversion regardless of rotation (`lib/pdf/loader.ts`, `lib/pdf/export.ts`). Rotating clears that document's placement, since the canvas dimensions change.
-- **Start Over** (right sidebar, above the download buttons) resets the whole session. If nothing has been downloaded yet, a confirmation dialog warns that uploaded PDFs and placements will be discarded (`stores/editor.ts`'s `hasExported` flag, `components/StartOverButton.svelte`).
-
-**Visible watermark**
-
-- Multi-line custom watermark text (textarea input).
-- Optional "stamp current date & time" checkbox, formatted as `1 Jan 2026, 14:30` (24-hour, `lib/watermark/visible.ts`).
-- 9-position picker (top/center/bottom × left/center/right) for where the text sits on the signature, centered in the sidebar.
-- Size slider (6%–24% of the signature image's height).
-- Color picker (native `<input type="color">`), default black.
-- Opacity slider (5%–100%), default 25%.
-- Live preview of the watermark directly on the placed signature in the editor, using the exact same layout math as the final export.
-- At export, the watermark is flattened into the signature image itself (never drawn on the PDF page directly), for anti-crop/anti-screenshot protection.
-- Watermark text, timestamp checkbox, position, size, color, and opacity preferences are all saved in `localStorage` so they persist across sessions (`lib/utils/persist.ts`).
-
-**Deployment**
-
-- Vite config sets the correct `base` path for GitHub Pages (`vite.config.ts`).
-- `npm run deploy` script using `gh-pages`.
-- **Offline-ready (PWA).** A service worker (`vite-plugin-pwa`, configured in `vite.config.ts`) precaches the app shell — including the ~1.3 MB pdf.js worker — so repeat visits load instantly, even offline. It never swaps itself in automatically: `registerType: 'prompt'` means a newly deployed version sits in the background until the user clicks **Reload to update** on the toast shown by `components/UpdateToast.svelte`, so a signature placement mid-session is never interrupted by a surprise reload.
-
-### Not yet implemented
-
-- **Rotate the placed signature itself** (independent of the page rotation above — e.g. angling the signature image within its box).
-- **Invisible watermark** — DWT/DCT-based payload embedding. No code exists for this yet.
-- **Verification page** — a way to check whether a PDF was signed with Signy and read back the watermark payload.
-- **One signature placement per PDF.** Each document tracks a single placed signature at a time — no way to sign multiple spots on the same document in one export yet (though different documents in the same session can each have their own placement).
-- **Signature background removal.** Scanned/photographed signatures often have an off-white background; there's no automatic cleanup.
-- **No automated tests.** In particular, the pixel-to-PDF-point coordinate mapping in `lib/pdf/export.ts` and the resize/zoom rescaling logic in `stores/editor.ts` are easy to get subtly wrong and aren't covered by any tests.
+- `src/components/` — UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyPage`, …)
+- `src/stores/` — app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
+- `src/lib/pdf/` — loading, rendering, export, redaction, page reordering, screenshots, verification
+- `src/lib/watermark/` — visible watermark layout and rendering
+- `src/lib/signature/` — signature storage and sizing
+- `src/lib/utils/` — persistence, file validation, tooltip and other Svelte actions
