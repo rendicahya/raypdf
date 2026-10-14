@@ -1,6 +1,7 @@
 import { PDFDocument, PDFString, degrees } from '@cantoo/pdf-lib';
 import JSZip from 'jszip';
-import { loadPdf, getTotalRotation } from './loader';
+import { loadPdf, getTotalRotation, type PdfDocument } from './loader';
+import { fillFormFields, type FormValues } from './forms';
 import { placementFromRatioForDocument } from './placement';
 import { stripEmbeddedScripts } from './sanitize';
 import { applyRedactions } from './redact';
@@ -34,6 +35,8 @@ export interface ExportParams {
   onlyPage?: number;
   /** Lock the exported PDF's copy/extract permission — see `applyCopyProtection`. */
   securePdf?: boolean;
+  /** Values the user entered into the PDF's own form fields, by field name — see `lib/pdf/forms.ts`. */
+  formValues?: FormValues;
 }
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
@@ -114,6 +117,17 @@ async function embedCommentAnnotations(
  * copy of the original bytes.
  */
 export async function exportSignedPdf(params: ExportParams): Promise<Uint8Array> {
+  // Parsed only for coordinate mapping — freed afterwards, since a large PDF
+  // would otherwise stay in memory once per export.
+  const pdfjsDoc = await loadPdf(params.pdfFile);
+  try {
+    return await exportWithPdfjs(params, pdfjsDoc);
+  } finally {
+    pdfjsDoc.destroy();
+  }
+}
+
+async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Promise<Uint8Array> {
   const {
     pdfFile,
     documentId,
@@ -128,10 +142,10 @@ export async function exportSignedPdf(params: ExportParams): Promise<Uint8Array>
     comments = [],
     onlyPage,
     securePdf = false,
+    formValues = {},
   } = params;
 
   const pdfBytes = await blobToBytes(pdfFile);
-  const pdfjsDoc = await loadPdf(pdfFile);
   const pdfDoc = await PDFDocument.load(pdfBytes);
 
   // Flatten any redacted pages — including pages with signatures — before
@@ -217,6 +231,8 @@ export async function exportSignedPdf(params: ExportParams): Promise<Uint8Array>
     await embedCommentAnnotations(pdfDoc, pdfjsDoc, comments, renderScale, rotation);
   }
 
+  fillFormFields(pdfDoc, formValues);
+
   // The rotation the user chose represents "this scan is sideways" and is
   // applied to every page uniformly (each relative to its own existing
   // rotation), so the whole exported document keeps a consistent orientation.
@@ -251,12 +267,17 @@ export async function exportSignedPdf(params: ExportParams): Promise<Uint8Array>
     singlePageDoc.addPage(copiedPage);
     embedVerificationRecord(singlePageDoc, verificationRecord);
     if (securePdf) applyCopyProtection(singlePageDoc);
-    return singlePageDoc.save();
+    return singlePageDoc.save(SAVE_OPTIONS);
   }
 
   if (securePdf) applyCopyProtection(pdfDoc);
-  return pdfDoc.save();
+  return pdfDoc.save(SAVE_OPTIONS);
 }
+
+// Field appearances are already brought up to date by fillFormFields, which
+// falls back to asking the reader to redraw them if pdf-lib can't — letting
+// save() retry would throw on the same unsupported characters.
+const SAVE_OPTIONS = { updateFieldAppearances: false };
 
 export function signedFileName(originalFileName: string): string {
   const base = originalFileName.replace(/\.pdf$/i, '');
@@ -346,6 +367,18 @@ export function printPdfBytes(bytes: Uint8Array): void {
   document.body.appendChild(iframe);
 }
 
+/** Whether a document has anything to export besides a signature: redactions, text, comments, form input, or page/rotation changes. */
+export function hasDocumentEdits(doc: PdfDocumentState): boolean {
+  return (
+    doc.redactions.length > 0 ||
+    doc.texts.length > 0 ||
+    doc.comments.length > 0 ||
+    Object.keys(doc.formValues).length > 0 ||
+    doc.file !== doc.originalFile ||
+    doc.rotation !== 0
+  );
+}
+
 /**
  * Resolves what placements to use for a document: its own manual placements if
  * the user positioned any, otherwise the last-used ratio applied to page 1 —
@@ -361,8 +394,12 @@ export async function resolvePlacements(
   if (!lastPlacementRatio) return [];
 
   const pdfjsDoc = await loadPdf(doc.file);
-  const placement = await placementFromRatioForDocument(pdfjsDoc, 1, renderScale, doc.rotation, lastPlacementRatio);
-  return [placement];
+  try {
+    const placement = await placementFromRatioForDocument(pdfjsDoc, 1, renderScale, doc.rotation, lastPlacementRatio);
+    return [placement];
+  } finally {
+    pdfjsDoc.destroy();
+  }
 }
 
 /**
@@ -397,6 +434,7 @@ export async function exportPagesAsZip(
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      formValues: doc.formValues,
       onlyPage: page,
       securePdf,
     });
@@ -433,12 +471,7 @@ export async function exportAllAsZip(
 
   for (const doc of documents) {
     const placements = signatureBlob ? await resolvePlacements(doc, renderScale, lastPlacementRatio) : [];
-    if (
-      placements.length === 0 &&
-      doc.redactions.length === 0 &&
-      doc.texts.length === 0 &&
-      doc.comments.length === 0
-    ) {
+    if (placements.length === 0 && !hasDocumentEdits(doc)) {
       skipped.push(doc.file.name);
       continue;
     }
@@ -455,6 +488,7 @@ export async function exportAllAsZip(
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      formValues: doc.formValues,
       securePdf,
     });
 
@@ -511,6 +545,7 @@ export async function exportMergedPdf(
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      formValues: doc.formValues,
     });
 
     const sourceDoc = await PDFDocument.load(bytes);

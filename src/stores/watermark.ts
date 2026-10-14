@@ -1,4 +1,6 @@
+import { get } from 'svelte/store';
 import { persistedWritable } from '../lib/utils/persist';
+import type { WatermarkOptions } from '../lib/watermark/visible';
 
 /**
  * Watermark preferences persist across sessions (localStorage) so users
@@ -39,6 +41,18 @@ export const watermarkColor = persistedWritable<string>('watermarkColor', '#0000
 
 /** Watermark opacity, 0 (invisible) to 1 (fully opaque). Controlled by a slider in the UI. */
 export const watermarkOpacity = persistedWritable<number>('watermarkOpacity', 0.25);
+
+/** The current settings, as passed to applyVisibleWatermark (lib/watermark/visible.ts) by export and screenshots. */
+export function currentWatermarkOptions(): WatermarkOptions {
+  return {
+    customText: get(watermarkText),
+    includeTimestamp: get(includeTimestamp),
+    position: get(watermarkPosition),
+    fontScale: get(watermarkFontScale),
+    color: get(watermarkColor),
+    opacity: get(watermarkOpacity),
+  };
+}
 
 export const WATERMARK_OPACITY_MIN = 0.05;
 export const WATERMARK_OPACITY_MAX = 1;

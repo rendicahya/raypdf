@@ -1,6 +1,7 @@
 <script lang="ts">
   import { editorStore, activeDocument } from '../stores/editor';
   import { clearCachedPdf } from '../lib/pdf/docCache';
+  import { hasDocumentEdits } from '../lib/pdf/export';
   import { portal } from '../lib/utils/portal';
 
   function selectDocument(id: string) {
@@ -29,7 +30,7 @@
     return $editorStore.documents.filter(
       (d) =>
         ids.includes(d.id) &&
-        (d.placedSignatures.length > 0 || d.redactions.length > 0) &&
+        (d.placedSignatures.length > 0 || hasDocumentEdits(d)) &&
         !d.exported,
     );
   }
@@ -161,7 +162,7 @@
       onmousedown={onTabMouseDown}
       onauxclick={(e) => onTabAuxClick(e, doc.id)}
     >
-      {#if doc.placedSignatures.length > 0 || doc.redactions.length > 0}
+      {#if doc.placedSignatures.length > 0 || hasDocumentEdits(doc)}
         <svg
           viewBox="0 0 24 24"
           fill="none"

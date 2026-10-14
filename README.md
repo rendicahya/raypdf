@@ -32,7 +32,9 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Editor
 
 - **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Add more PDFs any time.
-- **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page. Click to jump; **drag and drop to reorder pages** — signatures, redactions, text, and comments move with their page, and the move can be undone.
+- **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page, rendered as they scroll into view so long documents open quickly. Click to jump; **drag and drop to reorder pages**.
+- **Page tools** on each thumbnail (on hover, and always on the current page): rotate that page left/right, duplicate it, insert a blank page after it, or delete it. These change the PDF itself; signatures, redactions, text, and comments follow their page, and every edit can be undone.
+- **Fill in PDF forms**: a PDF's own text fields, checkboxes, radio buttons, and dropdowns can be filled in directly on the page. The values are written into the real fields on export, so the result is still a normal fillable form.
 - **Floating toolbar** (icon-only, with instant tooltips):
   - Undo / Redo (`Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y`)
   - Previous / next page and a page picker (`←` / `→`; `Ctrl+←` / `Ctrl+→` switches documents)
@@ -45,7 +47,7 @@ It is **not** a replacement for PKI-based digital signatures.
     - **Comment** — click to leave a sticky note, exported as a real PDF annotation.
     - **Zoom** — click to zoom in at that spot, right-click to zoom out.
     - **Select** — select and copy the PDF's real text.
-    - **Screenshot** — click a page to capture all of it, or drag a rectangle to capture an area. The image is copied to the clipboard, with a **Save PNG** option. Captures contain the PDF's own content, not unsaved overlays like signatures.
+    - **Screenshot** — click a page to capture all of it, or drag a rectangle to capture an area. The image is copied to the clipboard, with a **Save PNG** option. Captures include placed signatures (with their watermark), text, redactions, and form values — everything except comments, which are notes rather than page content.
   - **Apply redaction to all documents** (when several PDFs are open).
 - Dark mode (follows the OS by default) and fullscreen.
 
@@ -107,7 +109,7 @@ Project guidelines — product vision, principles, UX rules, code structure, and
 
 - `src/components/` — UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyPage`, …)
 - `src/stores/` — app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
-- `src/lib/pdf/` — loading, rendering, export, redaction, page reordering, screenshots, verification
+- `src/lib/pdf/` — loading, rendering, export, redaction, page operations, form filling, screenshots, verification
 - `src/lib/watermark/` — visible watermark layout and rendering
 - `src/lib/signature/` — signature storage and sizing
 - `src/lib/utils/` — persistence, file validation, tooltip and other Svelte actions

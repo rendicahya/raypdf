@@ -3,8 +3,11 @@
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { getCachedPdf } from '../lib/pdf/docCache';
-  import { PAGE_DRAG_TYPE } from '../lib/pdf/reorder';
-  import { capturePage, copyImageToClipboard } from '../lib/pdf/screenshot';
+  import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
+  import { capturePage, copyImageToClipboard, type CaptureOverlays } from '../lib/pdf/screenshot';
+  import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
+  import { getTotalRotation } from '../lib/pdf/loader';
+  import { applyVisibleWatermark } from '../lib/watermark/visible';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
   import { redactMode } from '../stores/redact';
@@ -37,6 +40,7 @@
     watermarkFontScale,
     watermarkColor,
     watermarkOpacity,
+    currentWatermarkOptions,
     type WatermarkPosition,
   } from '../stores/watermark';
   import { lastPlacement } from '../stores/placement';
@@ -84,6 +88,7 @@
       .then((loaded) => {
         if (cancelled) return;
         pdfDoc = loaded;
+        error = null;
         editorStore.setPageCount(loaded.numPages);
       })
       .catch((e) => {
@@ -111,11 +116,17 @@
     return () => document.removeEventListener('selectionchange', updateHasTextSelection);
   });
 
+  // After a page edit or undo swaps the file, the page number can briefly point
+  // past the end of the previous parse until the new one has loaded.
+  function pageExists(doc: { pageNumber: number }, loaded: PdfDocument): boolean {
+    return doc.pageNumber <= loaded.numPages;
+  }
+
   // Re-render the current page whenever the page number, zoom level, rotation, or the document changes.
   $effect(() => {
     const doc = $activeDocument;
     const scale = $editorStore.renderScale;
-    if (!doc || !pdfDoc || !canvasEl) return;
+    if (!doc || !pdfDoc || !canvasEl || !pageExists(doc, pdfDoc)) return;
     renderPageToCanvas(pdfDoc, doc.pageNumber, canvasEl, scale, doc.rotation).catch((e) => {
       error = e instanceof Error ? e.message : 'Failed to render PDF';
     });
@@ -135,7 +146,7 @@
     const scale = $editorStore.renderScale;
 
     if (!textLayerEl) return;
-    if (!doc || !pdfDoc) {
+    if (!doc || !pdfDoc || !pageExists(doc, pdfDoc)) {
       cancelTextLayer(textLayerEl);
       return;
     }
@@ -146,6 +157,62 @@
 
     return () => cancelTextLayer(textLayerEl);
   });
+
+  // The PDF's own form fields on this page (lib/pdf/forms.ts), positioned in
+  // canvas pixels. pdf.js leaves form widgets out of the canvas render, so
+  // these HTML inputs are what the user sees and types into. Recomputed only
+  // when the page view changes, not on every edit.
+  type FormBox = FormWidget & { left: number; top: number; boxWidth: number; boxHeight: number; fontPx: number };
+  let formBoxes: FormBox[] = $state([]);
+  const viewPage = $derived($activeDocument?.pageNumber ?? 1);
+  const viewRotation = $derived($activeDocument?.rotation ?? 0);
+  const formValues = $derived($activeDocument?.formValues ?? {});
+
+  $effect(() => {
+    const loaded = pdfDoc;
+    const pageNumber = viewPage;
+    const rotation = viewRotation;
+    const scale = $editorStore.renderScale;
+    if (!loaded || pageNumber > loaded.numPages) {
+      formBoxes = [];
+      return;
+    }
+    let cancelled = false;
+    Promise.all([getPageFormWidgets(loaded, pageNumber), loaded.getPage(pageNumber)])
+      .then(([widgets, page]) => {
+        if (cancelled) return;
+        const viewport = page.getViewport({ scale, rotation: getTotalRotation(page, rotation) });
+        formBoxes = widgets.map((w) => {
+          const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(w.rect);
+          const boxWidth = Math.abs(x2 - x1);
+          const boxHeight = Math.abs(y2 - y1);
+          // A size of 0 in the PDF means "fit the box", like readers do; a set
+          // size is still capped so it can't overflow the box.
+          const fontPx = w.multiLine
+            ? Math.min(w.fontSize > 0 ? w.fontSize : 10, 14) * scale
+            : Math.min(w.fontSize > 0 ? w.fontSize * scale : 12 * scale, boxHeight * 0.75);
+          return { ...w, left: Math.min(x1, x2), top: Math.min(y1, y2), boxWidth, boxHeight, fontPx };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) formBoxes = [];
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // Fields only take input in the default Move mode, so they never swallow a
+  // click meant for a tool (placing text, drawing a redaction, …).
+  const formFieldsInteractive = $derived(
+    !$redactMode &&
+      !$textToolMode &&
+      !$commentToolMode &&
+      !$clickToPlaceMode &&
+      !$zoomToolMode &&
+      !$textSelectMode &&
+      !$screenshotToolMode,
+  );
 
   // Move mode auto-switches into text selection when the pointer hovers
   // (not moves) over real text for HOVER_SELECT_DELAY, so the user doesn't
@@ -791,7 +858,7 @@
     const fileName = `${baseName}_page${doc.pageNumber}${isArea ? '_area' : ''}.png`;
 
     capturing = true;
-    const png = capturePage(pdfDoc, doc.pageNumber, doc.rotation, area);
+    const png = captureWithEdits(pdfDoc, doc, area);
     // Started synchronously, while this pointerup still counts as a user gesture.
     const copied = copyImageToClipboard(png);
     Promise.all([png, copied])
@@ -803,6 +870,46 @@
         }),
       )
       .finally(() => (capturing = false));
+  }
+
+  // Captures include what's been placed on the page, drawn the way export
+  // will: the signature with its watermark, text, redactions, and form values.
+  async function captureWithEdits(
+    loaded: PdfDocument,
+    doc: NonNullable<typeof $activeDocument>,
+    area: Parameters<typeof capturePage>[3],
+  ): Promise<Blob> {
+    const signatures = signaturesOnCurrentPage;
+    const sigBlob = $signatureStore.signature?.blob;
+    const overlays: CaptureOverlays = {
+      renderScale: $editorStore.renderScale,
+      fields: formBoxes.map((f) => {
+        const value = widgetValue(f, formValues);
+        const shown =
+          f.kind === 'radio'
+            ? value === f.onValue
+            : f.kind === 'select'
+              ? (f.options.find((o) => o.value === value)?.label ?? value)
+              : value;
+        return {
+          kind: f.kind,
+          value: shown,
+          multiLine: f.multiLine,
+          fontSize: f.fontPx,
+          align: f.align,
+          x: f.left,
+          y: f.top,
+          width: f.boxWidth,
+          height: f.boxHeight,
+        };
+      }),
+      redactions: redactionsOnCurrentPage,
+      signatures,
+      signatureImage:
+        sigBlob && signatures.length > 0 ? await applyVisibleWatermark(sigBlob, currentWatermarkOptions()) : null,
+      texts: textsOnCurrentPage,
+    };
+    return capturePage(loaded, doc.pageNumber, doc.rotation, area, overlays);
   }
 
   // Move an existing box. Looks the box up fresh by id on every step (rather
@@ -1244,6 +1351,77 @@
        never steals clicks/drags meant for the canvas or the other overlays
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
+
+  <!-- The PDF's own form fields. The layer itself never takes clicks, only
+       the inputs do, and only in Move mode (see formFieldsInteractive). -->
+  {#if formBoxes.length > 0}
+    <div class="pointer-events-none absolute inset-0">
+      {#each formBoxes as f (f.id)}
+        {@const value = widgetValue(f, formValues)}
+        {@const fieldClass = `absolute m-0 rounded-sm border border-blue-400/50 bg-blue-100/40 text-black outline-none
+          focus:border-blue-500 focus:bg-white/90 disabled:cursor-not-allowed disabled:bg-transparent
+          ${formFieldsInteractive ? 'pointer-events-auto' : ''}`}
+        {@const position = `left:${f.left}px;top:${f.top}px;width:${f.boxWidth}px;height:${f.boxHeight}px;`}
+        {#if f.kind === 'text' && f.multiLine}
+          <textarea
+            aria-label={f.fieldName}
+            class="{fieldClass} resize-none p-0.5 leading-tight"
+            style="{position}font-size:{f.fontPx}px;text-align:{f.align};"
+            value={typeof value === 'string' ? value : ''}
+            maxlength={f.maxLen ?? undefined}
+            disabled={f.readOnly}
+            oninput={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.value)}
+          ></textarea>
+        {:else if f.kind === 'text'}
+          <input
+            type="text"
+            aria-label={f.fieldName}
+            class="{fieldClass} px-0.5"
+            style="{position}font-size:{f.fontPx}px;text-align:{f.align};"
+            value={typeof value === 'string' ? value : ''}
+            maxlength={f.maxLen ?? undefined}
+            disabled={f.readOnly}
+            oninput={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.value)}
+          />
+        {:else if f.kind === 'checkbox'}
+          <input
+            type="checkbox"
+            aria-label={f.fieldName}
+            class="{fieldClass} cursor-pointer accent-blue-600"
+            style={position}
+            checked={value === true}
+            disabled={f.readOnly}
+            onchange={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.checked)}
+          />
+        {:else if f.kind === 'radio'}
+          <input
+            type="radio"
+            aria-label="{f.fieldName}: {f.onValue}"
+            name="{docId}:{f.fieldName}"
+            class="{fieldClass} cursor-pointer accent-blue-600"
+            style={position}
+            checked={value === f.onValue}
+            disabled={f.readOnly}
+            onchange={() => editorStore.setFormValue(f.fieldName, f.onValue)}
+          />
+        {:else}
+          <select
+            aria-label={f.fieldName}
+            class="{fieldClass} cursor-pointer p-0"
+            style="{position}font-size:{f.fontPx}px;"
+            value={typeof value === 'string' ? value : ''}
+            disabled={f.readOnly}
+            onchange={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.value)}
+          >
+            <option value=""></option>
+            {#each f.options as option}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+          </select>
+        {/if}
+      {/each}
+    </div>
+  {/if}
 
   {#if $clickToPlaceMode && !$redactMode && $signatureStore.previewUrl}
     {@const sig = $signatureStore}

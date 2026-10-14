@@ -1,14 +1,7 @@
 <script lang="ts">
   import { editorStore, activeDocument, type PdfDocumentState } from '../stores/editor';
   import { signatureStore } from '../stores/signature';
-  import {
-    watermarkText,
-    includeTimestamp,
-    watermarkPosition,
-    watermarkFontScale,
-    watermarkColor,
-    watermarkOpacity,
-  } from '../stores/watermark';
+  import { currentWatermarkOptions } from '../stores/watermark';
   import { lastPlacement } from '../stores/placement';
   import { stripEmbeddedScripts, securePdf } from '../stores/exportOptions';
   import {
@@ -22,6 +15,7 @@
     exportMergedPdf,
     downloadMergedPdf,
     resolvePlacements,
+    hasDocumentEdits,
     printPdfBytes,
   } from '../lib/pdf/export';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
@@ -40,16 +34,7 @@
     ($activeDocument?.pageCount ?? 1) > 1 || $editorStore.documents.length > 1,
   );
 
-  function currentWatermark() {
-    return {
-      customText: $watermarkText,
-      includeTimestamp: $includeTimestamp,
-      position: $watermarkPosition,
-      fontScale: $watermarkFontScale,
-      color: $watermarkColor,
-      opacity: $watermarkOpacity,
-    };
-  }
+  const currentWatermark = currentWatermarkOptions;
 
   // Signing and redacting are independent — resolves whichever of the two
   // this document actually has, and only errors if it has neither.
@@ -57,13 +42,10 @@
     const sig = $signatureStore;
     const placements = sig.signature ? await resolvePlacements(doc, $editorStore.renderScale, $lastPlacement) : [];
 
-    if (
-      placements.length === 0 &&
-      doc.redactions.length === 0 &&
-      doc.texts.length === 0 &&
-      doc.comments.length === 0
-    ) {
-      throw new Error('Nothing to export yet — place a signature, draw a redaction, add text, or add a comment first.');
+    if (placements.length === 0 && !hasDocumentEdits(doc)) {
+      throw new Error(
+        'Nothing to export yet — place a signature, fill in a form, edit the pages, or add a redaction, text, or comment first.',
+      );
     }
 
     return {
@@ -93,6 +75,7 @@
         redactions: doc.redactions,
         texts: doc.texts,
         comments: doc.comments,
+        formValues: doc.formValues,
         securePdf: $securePdf,
       });
       downloadSignedPdf(bytes, doc.file.name);
@@ -125,6 +108,7 @@
         redactions: doc.redactions,
         texts: doc.texts,
         comments: doc.comments,
+        formValues: doc.formValues,
         onlyPage: doc.pageNumber,
         securePdf: $securePdf,
       });
@@ -186,6 +170,7 @@
         redactions: doc.redactions,
         texts: doc.texts,
         comments: doc.comments,
+        formValues: doc.formValues,
         securePdf: $securePdf,
       });
       printPdfBytes(bytes);

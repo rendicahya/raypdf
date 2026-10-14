@@ -42,7 +42,7 @@ Styling
 PDF
 
 - pdf.js (`pdfjs-dist`) — rendering, text layer, text extraction
-- pdf-lib (`@cantoo/pdf-lib` fork) — export, redaction, page reordering, metadata
+- pdf-lib (`@cantoo/pdf-lib` fork) — export, redaction, page operations, form filling, metadata
 
 Other
 
@@ -117,7 +117,9 @@ Users should only need to upload a new PDF.
 
 Display the PDF using pdf.js, with one tab per open document.
 
-Left sidebar: page thumbnails. Click to jump, drag and drop to reorder pages.
+Left sidebar: page thumbnails, rendered lazily as they scroll into view. Click to jump, drag and drop to reorder pages; per-page actions rotate, duplicate, insert a blank page after, or delete. Page edits rewrite the file (`lib/pdf/pageOps.ts`) and go through `editPages` in `stores/editor.ts`, which renumbers everything placed on the pages and keeps the old file for undo.
+
+The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 
 Right sidebar: the saved signature, placement helpers (Find Signature Spot, Use last position, Apply Signature to All Pages, Apply to All Documents), watermark controls, and export.
 
@@ -232,7 +234,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, redact, sanitize, placement, reorder, screenshot, signatureDetect, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, forms, pageOps, redact, sanitize, placement, screenshot, signatureDetect, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage, sizing
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange

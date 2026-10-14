@@ -1,7 +1,14 @@
 import { writable, derived } from 'svelte/store';
 import { getCachedPdf } from '../lib/pdf/docCache';
 import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
-import { movePdfPage } from '../lib/pdf/reorder';
+import {
+  movePdfPage,
+  deletePdfPage,
+  duplicatePdfPage,
+  insertBlankPdfPage,
+  rotatePdfPage,
+} from '../lib/pdf/pageOps';
+import type { FormValues } from '../lib/pdf/forms';
 
 /** Signature instance placed on the page, in canvas pixel coordinates. */
 export interface PlacedSignature {
@@ -67,13 +74,18 @@ export interface PlacedComment {
 /** Per-document editing state — one entry per uploaded PDF. */
 export interface PdfDocumentState {
   id: string;
+  /** The current version of the PDF — replaced whenever pages are moved, deleted, duplicated, inserted, or rotated. */
   file: File;
+  /** The file as uploaded, to tell whether any page edits have been made. */
+  originalFile: File;
   pageNumber: number;
   pageCount: number;
   placedSignatures: PlacedSignature[];
   redactions: RedactionBox[];
   texts: PlacedText[];
   comments: PlacedComment[];
+  /** Values entered into the PDF's own form fields, by field name — only fields the user changed. */
+  formValues: FormValues;
   /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
   rotation: number;
   /** Whether the current placement/redactions have been saved/printed — cleared whenever either changes. Used to warn before closing an unsaved tab. */
@@ -102,12 +114,14 @@ function createDocumentState(file: File): PdfDocumentState {
   return {
     id: crypto.randomUUID(),
     file,
+    originalFile: file,
     pageNumber: 1,
     pageCount: 1,
     placedSignatures: [],
     redactions: [],
     texts: [],
     comments: [],
+    formValues: {},
     rotation: 0,
     exported: false,
   };
@@ -171,6 +185,13 @@ function rescale(state: EditorState, nextScale: number): EditorState {
   return { ...state, renderScale, documents };
 }
 
+interface Geometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
  * Re-derives a box's canvas-pixel position after the page's rotation changes,
  * by round-tripping through pdf.js's own PDF-point conversion (old viewport
@@ -178,7 +199,7 @@ function rescale(state: EditorState, nextScale: number): EditorState {
  * signature or redaction the user placed shouldn't vanish just because they
  * rotated the page afterward.
  */
-async function rotateGeometry<T extends { x: number; y: number; width: number; height: number }>(
+function rotateGeometry<T extends Geometry>(
   pdfjsDoc: PdfDocument,
   pageNumber: number,
   renderScale: number,
@@ -186,9 +207,29 @@ async function rotateGeometry<T extends { x: number; y: number; width: number; h
   newRotation: number,
   box: T,
 ): Promise<T> {
-  const page = await pdfjsDoc.getPage(pageNumber);
-  const oldViewport = page.getViewport({ scale: renderScale, rotation: getTotalRotation(page, oldRotation) });
-  const newViewport = page.getViewport({ scale: renderScale, rotation: getTotalRotation(page, newRotation) });
+  return convertGeometry(
+    { pdfjsDoc, pageNumber, rotation: oldRotation },
+    { pdfjsDoc, pageNumber, rotation: newRotation },
+    renderScale,
+    box,
+  );
+}
+
+/**
+ * The general form of rotateGeometry: maps a box from one page view to
+ * another — possibly in a different version of the file, e.g. after a single
+ * page's own rotation was changed by rewriting the PDF.
+ */
+async function convertGeometry<T extends Geometry>(
+  from: { pdfjsDoc: PdfDocument; pageNumber: number; rotation: number },
+  to: { pdfjsDoc: PdfDocument; pageNumber: number; rotation: number },
+  renderScale: number,
+  box: T,
+): Promise<T> {
+  const oldPage = await from.pdfjsDoc.getPage(from.pageNumber);
+  const newPage = await to.pdfjsDoc.getPage(to.pageNumber);
+  const oldViewport = oldPage.getViewport({ scale: renderScale, rotation: getTotalRotation(oldPage, from.rotation) });
+  const newViewport = newPage.getViewport({ scale: renderScale, rotation: getTotalRotation(newPage, to.rotation) });
 
   const [px1, py1] = oldViewport.convertToPdfPoint(box.x, box.y);
   const [px2, py2] = oldViewport.convertToPdfPoint(box.x + box.width, box.y + box.height);
@@ -208,13 +249,32 @@ async function rotateGeometry<T extends { x: number; y: number; width: number; h
  * user places or changes on the page, but not navigation (page number),
  * loading state (pageCount), or the "saved yet" flag. */
 interface DocSnapshot {
-  /** Replaced when the user reorders pages, so undo/redo can swap it back. */
+  /** Replaced by page edits (move, delete, …), so undo/redo can swap it back. */
   file: File;
+  /** Kept alongside `file` so the page count is right the moment undo/redo swaps the file. */
+  pageCount: number;
   placedSignatures: PlacedSignature[];
   redactions: RedactionBox[];
   texts: PlacedText[];
   comments: PlacedComment[];
+  formValues: FormValues;
   rotation: number;
+}
+
+/** Anything placed on a page. */
+type PageItem = Geometry & { id: string; page: number };
+
+/** A page-level edit of the active document — see editPages. */
+interface PageEdit {
+  rewrite: (file: File) => Promise<File>;
+  /** Where each old page ends up (1-indexed), or null if it was removed. */
+  mapPage: (page: number) => number | null;
+  /** The page to show afterwards, given the one being viewed and the new page count. */
+  mapCurrent: (page: number, newCount: number) => number;
+  /** Old page whose items are copied onto its duplicate (the page right after it). */
+  copiesPage?: number;
+  /** Old page whose shape changes (rotation) — its items are re-derived to stay over the same content. */
+  reshapesPage?: number;
 }
 
 interface DocHistory {
@@ -257,16 +317,18 @@ function createEditorStore() {
   function snapshotOf(doc: PdfDocumentState): DocSnapshot {
     return {
       file: doc.file,
+      pageCount: doc.pageCount,
       placedSignatures: doc.placedSignatures,
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      formValues: doc.formValues,
       rotation: doc.rotation,
     };
   }
 
   function applySnapshot(doc: PdfDocumentState, snap: DocSnapshot): PdfDocumentState {
-    return { ...doc, ...snap, exported: false };
+    return { ...doc, ...snap, pageNumber: clamp(doc.pageNumber, 1, snap.pageCount), exported: false };
   }
 
   // Records `doc`'s state *before* a mutation identified by `actionKey`.
@@ -383,15 +445,20 @@ function createEditorStore() {
     });
   }
 
+  function withPageCount(doc: PdfDocumentState, count: number): PdfDocumentState {
+    const pageCount = Math.max(1, count);
+    return { ...doc, pageCount, pageNumber: clamp(doc.pageNumber, 1, pageCount) };
+  }
+
   function setPageCount(count: number) {
-    update((state) => updateActiveDocument(state, (doc) => ({ ...doc, pageCount: Math.max(1, count) })));
+    update((state) => updateActiveDocument(state, (doc) => withPageCount(doc, count)));
   }
 
   /** Sets the page count on an arbitrary document, not just the active one. */
   function setPageCountForDocument(id: string, count: number) {
     update((state) => ({
       ...state,
-      documents: state.documents.map((doc) => (doc.id === id ? { ...doc, pageCount: Math.max(1, count) } : doc)),
+      documents: state.documents.map((doc) => (doc.id === id ? withPageCount(doc, count) : doc)),
     }));
   }
 
@@ -640,6 +707,18 @@ function createEditorStore() {
     }));
   }
 
+  /** Records a value typed or picked into one of the PDF's own form fields. */
+  function setFormValue(fieldName: string, value: string | boolean) {
+    recordActiveHistory(`form-${fieldName}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        formValues: { ...doc.formValues, [fieldName]: value },
+        exported: false,
+      })),
+    );
+  }
+
   /** Marks a specific document as saved/printed in its current placement — clears the "signed but not downloaded" warning for that tab. */
   function markDocumentExported(id: string) {
     update((state) => ({
@@ -728,30 +807,61 @@ function createEditorStore() {
   }
 
   /**
-   * Moves page `from` to position `to` (both 1-indexed) in the active
-   * document. The PDF file itself is rewritten with the new page order, so
-   * rendering, thumbnails, and export all keep working on plain page numbers;
-   * every placement/redaction/text/comment is renumbered to follow its page,
-   * and the page being viewed stays on screen.
+   * Applies a page-level edit to the active document. The PDF file itself is
+   * rewritten, so rendering, thumbnails, and export all keep working on plain
+   * page numbers; every placement/redaction/text/comment follows its page (or
+   * is dropped with it), and the old file stays in the undo history.
    */
-  async function movePage(from: number, to: number) {
+  async function editPages(edit: PageEdit) {
     const doc = getActiveDocument(currentState());
-    if (!doc || from === to || from < 1 || to < 1 || from > doc.pageCount || to > doc.pageCount) return;
+    if (!doc) return;
+    const { renderScale } = currentState();
 
-    const order = Array.from({ length: doc.pageCount }, (_, i) => i + 1);
-    const [moved] = order.splice(from - 1, 1);
-    order.splice(to - 1, 0, moved);
-    const newPageOf = new Map(order.map((original, i) => [original, i + 1]));
-    const renumber = <T extends { page: number }>(item: T): T => ({ ...item, page: newPageOf.get(item.page) ?? item.page });
+    const oldPdf = edit.reshapesPage !== undefined ? await getCachedPdf(doc.id, doc.file) : null;
+    const file = await edit.rewrite(doc.file);
+    // Parsed up front (and cached for the viewer), so the new page count is
+    // known the moment the file is swapped in.
+    const newPdf = await getCachedPdf(doc.id, file);
+    const pageCount = newPdf.numPages;
 
-    const file = await movePdfPage(doc.file, from, to);
+    const remap = async <T extends PageItem>(items: T[]): Promise<T[]> => {
+      const result: T[] = [];
+      for (const item of items) {
+        const page = edit.mapPage(item.page);
+        if (page === null) continue;
+        let moved: T = { ...item, page };
+        if (oldPdf && item.page === edit.reshapesPage) {
+          moved = await convertGeometry(
+            { pdfjsDoc: oldPdf, pageNumber: item.page, rotation: doc.rotation },
+            { pdfjsDoc: newPdf, pageNumber: page, rotation: doc.rotation },
+            renderScale,
+            moved,
+          );
+        }
+        result.push(moved);
+        if (item.page === edit.copiesPage) result.push({ ...moved, id: crypto.randomUUID(), page: page + 1 });
+      }
+      return result;
+    };
 
-    // The rewrite is async — re-read the document in case it changed in the
-    // meantime, and bail if another reorder already replaced its file.
-    const latest = currentState().documents.find((d) => d.id === doc.id);
+    // The rewrite is async — work from the document as it is now (the user
+    // may have moved something meanwhile), and bail if another page edit (or
+    // undo) already replaced the file.
+    const findLatest = () => currentState().documents.find((d) => d.id === doc.id);
+    const current = findLatest();
+    if (!current || current.file !== doc.file) return;
+
+    const [placedSignatures, redactions, texts, comments] = await Promise.all([
+      remap(current.placedSignatures),
+      remap(current.redactions),
+      remap(current.texts),
+      remap(current.comments),
+    ]);
+
+    const latest = findLatest();
     if (!latest || latest.file !== doc.file) return;
 
-    recordHistory(latest.id, `move-page-${crypto.randomUUID()}`, latest);
+    recordHistory(latest.id, `edit-pages-${crypto.randomUUID()}`, latest);
     update((state) => ({
       ...state,
       documents: state.documents.map((d) =>
@@ -759,16 +869,74 @@ function createEditorStore() {
           ? {
               ...d,
               file,
-              pageNumber: newPageOf.get(d.pageNumber) ?? d.pageNumber,
-              placedSignatures: d.placedSignatures.map(renumber),
-              redactions: d.redactions.map(renumber),
-              texts: d.texts.map(renumber),
-              comments: d.comments.map(renumber),
+              pageCount,
+              pageNumber: clamp(edit.mapCurrent(d.pageNumber, pageCount), 1, pageCount),
+              placedSignatures,
+              redactions,
+              texts,
+              comments,
               exported: false,
             }
           : d,
       ),
     }));
+  }
+
+  /** Moves page `from` to position `to` (both 1-indexed); the page being viewed stays on screen. */
+  function movePage(from: number, to: number) {
+    const doc = getActiveDocument(currentState());
+    if (!doc || from === to || from < 1 || to < 1 || from > doc.pageCount || to > doc.pageCount) {
+      return Promise.resolve();
+    }
+
+    const order = Array.from({ length: doc.pageCount }, (_, i) => i + 1);
+    const [moved] = order.splice(from - 1, 1);
+    order.splice(to - 1, 0, moved);
+    const newPageOf = new Map(order.map((original, i) => [original, i + 1]));
+    const mapPage = (page: number) => newPageOf.get(page) ?? page;
+
+    return editPages({ rewrite: (file) => movePdfPage(file, from, to), mapPage, mapCurrent: mapPage });
+  }
+
+  /** Deletes a page (1-indexed) along with everything placed on it. */
+  function deletePage(page: number) {
+    return editPages({
+      rewrite: (file) => deletePdfPage(file, page),
+      mapPage: (p) => (p === page ? null : p > page ? p - 1 : p),
+      mapCurrent: (p) => (p > page ? p - 1 : p),
+    });
+  }
+
+  /** Inserts a copy of a page (1-indexed), with everything placed on it, right after it — and shows the copy. */
+  function duplicatePage(page: number) {
+    return editPages({
+      rewrite: (file) => duplicatePdfPage(file, page),
+      mapPage: (p) => (p > page ? p + 1 : p),
+      mapCurrent: () => page + 1,
+      copiesPage: page,
+    });
+  }
+
+  /** Inserts a blank page after page `after` (1-indexed) and shows it. */
+  function insertBlankPage(after: number) {
+    return editPages({
+      rewrite: (file) => insertBlankPdfPage(file, after),
+      mapPage: (p) => (p > after ? p + 1 : p),
+      mapCurrent: () => after + 1,
+    });
+  }
+
+  /**
+   * Rotates one page (1-indexed) by `delta` degrees, saved into the file —
+   * unlike rotateLeft/rotateRight, which turn the whole document.
+   */
+  function rotatePage(page: number, delta: number) {
+    return editPages({
+      rewrite: (file) => rotatePdfPage(file, page, delta),
+      mapPage: (p) => p,
+      mapCurrent: (p) => p,
+      reshapesPage: page,
+    });
   }
 
   function rotateLeft() {
@@ -853,6 +1021,7 @@ function createEditorStore() {
     updateComment,
     removeComment,
     setCommentsForDocument,
+    setFormValue,
     markDocumentExported,
     setRenderScale,
     zoomIn,
@@ -861,6 +1030,10 @@ function createEditorStore() {
     rotateLeft,
     rotateRight,
     movePage,
+    deletePage,
+    duplicatePage,
+    insertBlankPage,
+    rotatePage,
     markExported,
     undo,
     redo,
