@@ -14,6 +14,8 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Principles
 
+(Full version in [CLAUDE.md](CLAUDE.md).)
+
 - **Privacy first.** Files are processed in the browser and never uploaded. No backend, database, authentication, or cloud storage.
 - **Signature images live in IndexedDB only** — never `localStorage`. Small preferences (watermark text, toggles) use `localStorage`.
 - **The watermark is part of the signature image**, never drawn onto the PDF page directly, so the protected signature is a single image.
@@ -98,6 +100,8 @@ npm run deploy   # build and publish dist/ to the gh-pages branch
 ```
 
 `vite.config.ts` sets `base: '/signy/'` in production builds — update `REPO_NAME` there if the repository is renamed.
+
+Project guidelines — product vision, principles, UX rules, code structure, and workflow — live in [CLAUDE.md](CLAUDE.md). In short: run `npm run check` before committing, then push and `npm run deploy` after each change, and keep this README's feature list up to date.
 
 ### Layout
 
