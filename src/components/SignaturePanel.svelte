@@ -24,7 +24,7 @@
   import { buildWatermarkLines, parsePosition } from '../lib/watermark/visible';
   import { fitWithinBox } from '../lib/signature/layout';
   import { getCachedPdf } from '../lib/pdf/docCache';
-  import { placementFromRatioForDocument } from '../lib/pdf/placement';
+  import { boxToRatio, placementFromRatioForDocument } from '../lib/pdf/placement';
   import { findSignatureSpot } from '../lib/pdf/signatureDetect';
   import { signatureSuggestion } from '../stores/signatureSuggestion';
   import { isFileAccepted, formatFileSize, MAX_SIGNATURE_SIZE_BYTES } from '../lib/utils/fileValidation';
@@ -160,6 +160,65 @@
       editorStore.addSignature(rest);
     } finally {
       applyingLastPosition = false;
+    }
+  }
+
+  // The signature(s) placed on whichever page is currently on screen — the
+  // source for "Apply Signature to All Pages" below.
+  const currentPageSignatures = $derived(
+    $activeDocument?.placedSignatures.filter((sig) => sig.page === $activeDocument?.pageNumber) ?? [],
+  );
+  const canApplySignatureToAllPages = $derived(
+    ($activeDocument?.pageCount ?? 1) > 1 && currentPageSignatures.length > 0,
+  );
+
+  let applyingSignatureToAllPages = $state(false);
+  let applySignatureError: string | null = $state(null);
+  let applySignatureSuccess: string | null = $state(null);
+  let applySignatureSuccessTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  // Replicates the current page's signature placement(s) onto every other
+  // page of the same document, at the same relative position — for
+  // documents that need a signature/initial on each page rather than just
+  // one. This is a full replace (not a merge) of every other page's
+  // placements, so re-running it after moving the source placement keeps
+  // every page in sync rather than accumulating stale copies.
+  async function applySignatureToAllPages() {
+    const doc = $activeDocument;
+    if (!doc) return;
+    const sourcePage = doc.pageNumber;
+    const sourcePlacements = doc.placedSignatures.filter((sig) => sig.page === sourcePage);
+    if (sourcePlacements.length === 0) return;
+
+    applyingSignatureToAllPages = true;
+    applySignatureError = null;
+    applySignatureSuccess = null;
+    clearTimeout(applySignatureSuccessTimeout);
+    try {
+      const pdfjsDoc = await getCachedPdf(doc.id, doc.file);
+      const ratios = await Promise.all(
+        sourcePlacements.map((sig) => boxToRatio(pdfjsDoc, sourcePage, $editorStore.renderScale, doc.rotation, sig)),
+      );
+
+      const allPlacements = [];
+      for (let page = 1; page <= doc.pageCount; page++) {
+        if (page === sourcePage) {
+          allPlacements.push(...sourcePlacements);
+          continue;
+        }
+        const placed = await Promise.all(
+          ratios.map((ratio) => placementFromRatioForDocument(pdfjsDoc, page, $editorStore.renderScale, doc.rotation, ratio)),
+        );
+        allPlacements.push(...placed);
+      }
+
+      editorStore.applySignaturesToAllPages(allPlacements);
+      applySignatureSuccess = `Applied to all ${doc.pageCount} pages`;
+      applySignatureSuccessTimeout = setTimeout(() => (applySignatureSuccess = null), 2500);
+    } catch (e) {
+      applySignatureError = e instanceof Error ? e.message : 'Failed to apply signature to all pages';
+    } finally {
+      applyingSignatureToAllPages = false;
     }
   }
 
@@ -313,6 +372,25 @@
       </button>
     {/if}
 
+    {#if canApplySignatureToAllPages}
+      <button
+        type="button"
+        title="Place the signature at this same spot on every page of this document"
+        class="mt-3 w-full rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium
+          text-blue-600 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50
+          dark:border-blue-700 dark:bg-blue-950 dark:text-blue-400 dark:hover:bg-blue-900"
+        disabled={applyingSignatureToAllPages}
+        onclick={applySignatureToAllPages}
+      >
+        {applyingSignatureToAllPages ? 'Applying…' : `Apply Signature to All ${$activeDocument?.pageCount} Pages`}
+      </button>
+    {/if}
+    {#if applySignatureError}
+      <p class="mt-1 text-xs text-red-600 dark:text-red-400">{applySignatureError}</p>
+    {:else if applySignatureSuccess}
+      <p class="mt-1 text-xs text-emerald-600 dark:text-emerald-400">{applySignatureSuccess}</p>
+    {/if}
+
     {#if $editorStore.documents.length > 1}
       <div class="mt-3">
         {#if $lastPlacement}
@@ -337,11 +415,9 @@
     <div class="mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
       <h4 class="mb-2 text-sm font-semibold text-neutral-600 dark:text-neutral-300">Watermark</h4>
 
-      <label for="watermark-text" class="mb-1 block text-xs font-medium text-neutral-500 dark:text-neutral-400">
-        Text
-      </label>
       <textarea
         id="watermark-text"
+        aria-label="Watermark text"
         rows="3"
         placeholder="e.g. Jane Doe&#10;Contract #123"
         class="w-full resize-none rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm

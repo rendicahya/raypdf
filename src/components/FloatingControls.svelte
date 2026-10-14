@@ -132,66 +132,6 @@
     $editorStore.documents.length > 1 && ($activeDocument?.redactions.length ?? 0) > 0,
   );
 
-  // The signature(s) placed on whichever page is currently on screen — the
-  // source for "Apply Signature to All Pages" below.
-  const currentPageSignatures = $derived(
-    $activeDocument?.placedSignatures.filter((sig) => sig.page === $activeDocument?.pageNumber) ?? [],
-  );
-  const canApplySignatureToAllPages = $derived(
-    ($activeDocument?.pageCount ?? 1) > 1 && currentPageSignatures.length > 0,
-  );
-
-  let applyingSignatureToAllPages = $state(false);
-  let applySignatureError: string | null = $state(null);
-  let applySignatureSuccess: string | null = $state(null);
-  let applySignatureSuccessTimeout: ReturnType<typeof setTimeout> | undefined;
-
-  // Replicates the current page's signature placement(s) onto every other
-  // page of the same document, at the same relative position — for
-  // documents that need a signature/initial on each page rather than just
-  // one. Like applyRedactionsToAll below, this is a full replace (not a
-  // merge) of every other page's placements, so re-running it after moving
-  // the source placement keeps every page in sync rather than accumulating
-  // stale copies.
-  async function applySignatureToAllPages() {
-    const doc = $activeDocument;
-    if (!doc) return;
-    const sourcePage = doc.pageNumber;
-    const sourcePlacements = doc.placedSignatures.filter((sig) => sig.page === sourcePage);
-    if (sourcePlacements.length === 0) return;
-
-    applyingSignatureToAllPages = true;
-    applySignatureError = null;
-    applySignatureSuccess = null;
-    clearTimeout(applySignatureSuccessTimeout);
-    try {
-      const pdfjsDoc = await getCachedPdf(doc.id, doc.file);
-      const ratios = await Promise.all(
-        sourcePlacements.map((sig) => boxToRatio(pdfjsDoc, sourcePage, $editorStore.renderScale, doc.rotation, sig)),
-      );
-
-      const allPlacements = [];
-      for (let page = 1; page <= doc.pageCount; page++) {
-        if (page === sourcePage) {
-          allPlacements.push(...sourcePlacements);
-          continue;
-        }
-        const placed = await Promise.all(
-          ratios.map((ratio) => placementFromRatioForDocument(pdfjsDoc, page, $editorStore.renderScale, doc.rotation, ratio)),
-        );
-        allPlacements.push(...placed);
-      }
-
-      editorStore.applySignaturesToAllPages(allPlacements);
-      applySignatureSuccess = `Applied to all ${doc.pageCount} pages`;
-      applySignatureSuccessTimeout = setTimeout(() => (applySignatureSuccess = null), 2500);
-    } catch (e) {
-      applySignatureError = e instanceof Error ? e.message : 'Failed to apply signature to all pages';
-    } finally {
-      applyingSignatureToAllPages = false;
-    }
-  }
-
   let applyingRedactionToAll = $state(false);
   let applyRedactionError: string | null = $state(null);
   let applyRedactionSuccess: string | null = $state(null);
@@ -581,20 +521,6 @@
         {applyingRedactionToAll ? 'Applying…' : `Apply Redaction to All ${$editorStore.documents.length}`}
       </button>
     {/if}
-
-    {#if canApplySignatureToAllPages}
-      <button
-        type="button"
-        title="Place the signature at this same spot on every page of this document"
-        class="rounded-full border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-600
-          transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
-          dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-        disabled={applyingSignatureToAllPages}
-        onclick={applySignatureToAllPages}
-      >
-        {applyingSignatureToAllPages ? 'Applying…' : `Apply Signature to All ${$activeDocument?.pageCount} Pages`}
-      </button>
-    {/if}
   </div>
 
   {#if applyRedactionError}
@@ -609,21 +535,6 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
       </svg>
       {applyRedactionSuccess}
-    </p>
-  {/if}
-
-  {#if applySignatureError}
-    <p class="pointer-events-auto mt-1 max-w-full rounded-full bg-white/90 px-3 py-1 text-center text-xs
-      text-red-600 shadow dark:bg-neutral-900/90 dark:text-red-400">
-      {applySignatureError}
-    </p>
-  {:else if applySignatureSuccess}
-    <p class="pointer-events-auto mt-1 flex max-w-full items-center gap-1.5 rounded-full bg-white/90 px-3 py-1
-      text-center text-xs text-emerald-600 shadow dark:bg-neutral-900/90 dark:text-emerald-400">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-      </svg>
-      {applySignatureSuccess}
     </p>
   {/if}
 </div>
