@@ -4,6 +4,8 @@
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/reorder';
+  import { capturePage, copyImageToClipboard } from '../lib/pdf/screenshot';
+  import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
@@ -179,7 +181,13 @@
 
   function updateHoverTextSelect(e: PointerEvent) {
     const explicitToolActive =
-      $redactMode || $textToolMode || $commentToolMode || $clickToPlaceMode || $zoomToolMode || $textSelectMode;
+      $redactMode ||
+      $textToolMode ||
+      $commentToolMode ||
+      $clickToPlaceMode ||
+      $zoomToolMode ||
+      $textSelectMode ||
+      $screenshotToolMode;
     const otherInteractionInProgress =
       isPanning ||
       drawingBox ||
@@ -727,6 +735,74 @@
       panScrollContainer = null;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     }
+  }
+
+  // Screenshot tool: a click (or a drag too small to be deliberate) captures
+  // the whole page; a drag captures just the rectangle drawn. See
+  // lib/pdf/screenshot.ts — the area is handed over as fractions of the page
+  // so the capture can be rendered at its own, higher resolution.
+  const SHOT_DRAW_MIN_SIZE = 8;
+  let shotBox: { x: number; y: number; width: number; height: number } | null = $state(null);
+  let shotStart = { x: 0, y: 0 };
+  let capturing = $state(false);
+
+  $effect(() => {
+    if (!$screenshotToolMode) shotBox = null;
+  });
+
+  function shotPoint(e: PointerEvent) {
+    const rect = canvasEl.getBoundingClientRect();
+    return { x: clamp(e.clientX - rect.left, 0, rect.width), y: clamp(e.clientY - rect.top, 0, rect.height) };
+  }
+
+  function onShotPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || capturing) return;
+    e.stopPropagation();
+    shotStart = shotPoint(e);
+    shotBox = { ...shotStart, width: 0, height: 0 };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onShotPointerMove(e: PointerEvent) {
+    if (!shotBox) return;
+    const { x, y } = shotPoint(e);
+    shotBox = {
+      x: Math.min(x, shotStart.x),
+      y: Math.min(y, shotStart.y),
+      width: Math.abs(x - shotStart.x),
+      height: Math.abs(y - shotStart.y),
+    };
+  }
+
+  function onShotPointerUp(e: PointerEvent) {
+    const box = shotBox;
+    shotBox = null;
+    const doc = $activeDocument;
+    if (!box || !doc || !pdfDoc) return;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+
+    const rect = canvasEl.getBoundingClientRect();
+    const isArea = box.width >= SHOT_DRAW_MIN_SIZE && box.height >= SHOT_DRAW_MIN_SIZE;
+    const area = isArea
+      ? { x: box.x / rect.width, y: box.y / rect.height, width: box.width / rect.width, height: box.height / rect.height }
+      : null;
+
+    const baseName = doc.file.name.replace(/\.pdf$/i, '');
+    const fileName = `${baseName}_page${doc.pageNumber}${isArea ? '_area' : ''}.png`;
+
+    capturing = true;
+    const png = capturePage(pdfDoc, doc.pageNumber, doc.rotation, area);
+    // Started synchronously, while this pointerup still counts as a user gesture.
+    const copied = copyImageToClipboard(png);
+    Promise.all([png, copied])
+      .then(([blob, ok]) => screenshotResult.set({ ok: true, blob, fileName, copied: ok }))
+      .catch((err) =>
+        screenshotResult.set({
+          ok: false,
+          message: err instanceof Error ? err.message : 'Failed to take the screenshot',
+        }),
+      )
+      .finally(() => (capturing = false));
   }
 
   // Move an existing box. Looks the box up fresh by id on every step (rather
@@ -1670,5 +1746,31 @@
       style:width="{drawingBox.width}px"
       style:height="{drawingBox.height}px"
     ></div>
+  {/if}
+
+  <!-- Screenshot tool: covers the page (and every overlay on it) so a click
+       or drag is always a capture, never a move/resize of something below. -->
+  {#if $screenshotToolMode}
+    <div
+      role="presentation"
+      class="absolute inset-0 z-[60] cursor-crosshair touch-none"
+      onpointerdown={onShotPointerDown}
+      onpointermove={onShotPointerMove}
+      onpointerup={onShotPointerUp}
+      onpointercancel={() => (shotBox = null)}
+    >
+      {#if shotBox && (shotBox.width > 0 || shotBox.height > 0)}
+        <div
+          class="pointer-events-none absolute border-2 border-dashed border-sky-500 bg-sky-400/15"
+          style:left="{shotBox.x}px"
+          style:top="{shotBox.y}px"
+          style:width="{shotBox.width}px"
+          style:height="{shotBox.height}px"
+        ></div>
+      {/if}
+      {#if capturing}
+        <div class="pointer-events-none absolute inset-0 animate-pulse bg-white/30 dark:bg-black/20"></div>
+      {/if}
+    </div>
   {/if}
 </div>

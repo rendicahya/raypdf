@@ -6,6 +6,7 @@
   import { textToolMode } from '../stores/textTool';
   import { zoomToolMode } from '../stores/zoomTool';
   import { textSelectMode } from '../stores/textSelect';
+  import { screenshotToolMode } from '../stores/screenshotTool';
   import {
     watermarkText,
     includeTimestamp,
@@ -337,6 +338,7 @@
               textToolMode.set(false);
               zoomToolMode.set(false);
               textSelectMode.set(false);
+              screenshotToolMode.set(false);
             }
           }}
           class="rounded"

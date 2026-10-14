@@ -16,6 +16,7 @@
   import { redactMode } from './stores/redact';
   import { textToolMode } from './stores/textTool';
   import { zoomToolMode } from './stores/zoomTool';
+  import { screenshotToolMode } from './stores/screenshotTool';
   import { textSelectMode } from './stores/textSelect';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf } from './lib/pdf/docCache';
@@ -212,6 +213,11 @@
       if ($textSelectMode) {
         e.preventDefault();
         textSelectMode.set(false);
+        return;
+      }
+      if ($screenshotToolMode) {
+        e.preventDefault();
+        screenshotToolMode.set(false);
         return;
       }
     }

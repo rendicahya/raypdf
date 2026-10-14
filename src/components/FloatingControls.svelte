@@ -10,6 +10,8 @@
   import { getTotalRotation } from '../lib/pdf/loader';
   import { boxToRatio, placementFromRatioForDocument } from '../lib/pdf/placement';
   import { tooltip } from '../lib/utils/tooltip';
+  import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
+  import { downloadBlob } from '../lib/pdf/screenshot';
 
   const groupClass = 'flex items-center gap-0.5 rounded-full border border-neutral-200 p-0.5 dark:border-neutral-800';
   const iconButtonClass =
@@ -31,6 +33,7 @@
       commentToolMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
+      screenshotToolMode.set(false);
     }
   }
 
@@ -42,6 +45,7 @@
       clickToPlaceMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
+      screenshotToolMode.set(false);
     }
   }
 
@@ -53,6 +57,7 @@
       clickToPlaceMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
+      screenshotToolMode.set(false);
     }
   }
 
@@ -64,6 +69,7 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       textSelectMode.set(false);
+      screenshotToolMode.set(false);
     }
   }
 
@@ -75,6 +81,7 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       zoomToolMode.set(false);
+      screenshotToolMode.set(false);
     }
   }
 
@@ -90,8 +97,36 @@
       !$commentToolMode &&
       !$clickToPlaceMode &&
       !$zoomToolMode &&
-      !$textSelectMode,
+      !$textSelectMode &&
+      !$screenshotToolMode,
   );
+
+  function toggleScreenshotToolMode() {
+    screenshotToolMode.update((v) => !v);
+    if ($screenshotToolMode) {
+      redactMode.set(false);
+      textToolMode.set(false);
+      commentToolMode.set(false);
+      clickToPlaceMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+    }
+  }
+
+  // Toast for the latest screenshot — stays a few seconds, longer if it's an error.
+  let screenshotToastTimeout: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const result = $screenshotResult;
+    clearTimeout(screenshotToastTimeout);
+    if (result) screenshotToastTimeout = setTimeout(() => screenshotResult.set(null), result.ok ? 6000 : 8000);
+  });
+
+  function saveScreenshot() {
+    const result = $screenshotResult;
+    if (!result?.ok) return;
+    downloadBlob(result.blob, result.fileName);
+    screenshotResult.set(null);
+  }
 
   function activateMoveMode() {
     redactMode.set(false);
@@ -100,6 +135,7 @@
     clickToPlaceMode.set(false);
     zoomToolMode.set(false);
     textSelectMode.set(false);
+    screenshotToolMode.set(false);
   }
 
   // Fits the current page to the visible scroll area — width-only, or both
@@ -509,6 +545,29 @@
       </svg>
     </button>
 
+    <button
+      type="button"
+      aria-label="Screenshot"
+      aria-pressed={$screenshotToolMode}
+      use:tooltip={'Screenshot — click a page to capture all of it, or drag to capture an area'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$screenshotToolMode}
+      class:text-neutral-600={!$screenshotToolMode}
+      class:hover:bg-neutral-100={!$screenshotToolMode}
+      class:dark:border-neutral-800={!$screenshotToolMode}
+      class:dark:text-neutral-300={!$screenshotToolMode}
+      class:dark:hover:bg-neutral-800={!$screenshotToolMode}
+      class:border-sky-600={$screenshotToolMode}
+      class:bg-sky-600={$screenshotToolMode}
+      class:text-white={$screenshotToolMode}
+      onclick={toggleScreenshotToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
+
     {#if canApplyRedactionToAll}
       <button
         type="button"
@@ -530,6 +589,41 @@
       </button>
     {/if}
   </div>
+
+  {#if $screenshotResult}
+    {@const result = $screenshotResult}
+    <div
+      role="status"
+      class="pointer-events-auto mt-1 flex max-w-full items-center gap-2 rounded-full bg-white/90 py-1 pl-3 pr-1
+        text-xs shadow dark:bg-neutral-900/90"
+    >
+      {#if result.ok}
+        <span class="text-emerald-600 dark:text-emerald-400">
+          {result.copied ? 'Screenshot copied to clipboard' : 'Screenshot ready'}
+        </span>
+        <button
+          type="button"
+          class="rounded-full bg-sky-600 px-2.5 py-0.5 font-medium text-white hover:bg-sky-700"
+          onclick={saveScreenshot}
+        >
+          Save PNG
+        </button>
+      {:else}
+        <span class="text-red-600 dark:text-red-400">{result.message}</span>
+      {/if}
+      <button
+        type="button"
+        aria-label="Dismiss"
+        class="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100
+          dark:text-neutral-400 dark:hover:bg-neutral-800"
+        onclick={() => screenshotResult.set(null)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
+        </svg>
+      </button>
+    </div>
+  {/if}
 
   {#if applyRedactionError}
     <p class="pointer-events-auto mt-1 max-w-full rounded-full bg-white/90 px-3 py-1 text-center text-xs
