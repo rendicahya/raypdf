@@ -27,6 +27,7 @@
   import { boxToRatio, placementFromRatioForDocument } from '../lib/pdf/placement';
   import { findSignatureSpot } from '../lib/pdf/signatureDetect';
   import { signatureSuggestion } from '../stores/signatureSuggestion';
+  import { wheelRange } from '../lib/utils/wheelRange';
   import { isFileAccepted, formatFileSize, MAX_SIGNATURE_SIZE_BYTES } from '../lib/utils/fileValidation';
 
   const sig = $derived($signatureStore);
@@ -471,6 +472,7 @@
         max={WATERMARK_FONT_SCALE_MAX}
         step={WATERMARK_FONT_SCALE_STEP}
         bind:value={$watermarkFontScale}
+        use:wheelRange
         class="w-full accent-blue-600"
       />
 
@@ -481,6 +483,7 @@
         max={WATERMARK_OPACITY_MAX}
         step={WATERMARK_OPACITY_STEP}
         bind:value={$watermarkOpacity}
+        use:wheelRange
         class="w-full accent-blue-600"
       />
     </div>
