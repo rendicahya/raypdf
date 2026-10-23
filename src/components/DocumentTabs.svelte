@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { flip } from 'svelte/animate';
   import { editorStore, activeDocument } from '../stores/editor';
   import { clearCachedPdf } from '../lib/pdf/docCache';
   import { hasDocumentEdits } from '../lib/pdf/export';
@@ -12,8 +14,70 @@
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       selectDocument(id);
+    } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      // Ctrl+Shift+←/→ moves the focused tab, keeping focus on it.
+      e.preventDefault();
+      const tab = e.currentTarget as HTMLElement;
+      moveBy(id, e.key === 'ArrowLeft' ? -1 : 1);
+      requestAnimationFrame(() => tab.focus());
     }
   }
+
+  function indexOf(id: string) {
+    return $editorStore.documents.findIndex((d) => d.id === id);
+  }
+
+  function moveBy(id: string, delta: number) {
+    editorStore.moveDocument(id, indexOf(id) + delta);
+  }
+
+  // ── Drag to reorder ─────────────────────────────────────────────────────
+  // Pointer-driven rather than HTML5 drag-and-drop, so the tabs reorder live
+  // under the pointer like browser tabs. Window listeners rather than pointer
+  // capture: reordering moves the tab's DOM node, which would drop a capture.
+  const DRAG_THRESHOLD = 4;
+  let tablistEl: HTMLDivElement;
+  let draggingId: string | null = $state(null);
+  let dragStartX = 0;
+  let pressedId: string | null = null;
+
+  function onTabPointerDown(e: PointerEvent, id: string) {
+    if (e.button !== 0 || (e.target as Element).closest('button')) return;
+    pressedId = id;
+    dragStartX = e.clientX;
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+  }
+
+  function onDragMove(e: PointerEvent) {
+    if (!pressedId) return;
+    if (!draggingId) {
+      if (Math.abs(e.clientX - dragStartX) < DRAG_THRESHOLD) return;
+      draggingId = pressedId;
+      selectDocument(pressedId);
+    }
+    e.preventDefault();
+
+    // Layout positions (offsetLeft), not on-screen ones: the slide animation
+    // shifts tabs with transforms, which would make the target flicker.
+    const pointerX = e.clientX - tablistEl.getBoundingClientRect().left + tablistEl.scrollLeft;
+    const others = Array.from(tablistEl.querySelectorAll<HTMLElement>('[data-tab-id]')).filter(
+      (el) => el.dataset.tabId !== draggingId,
+    );
+    const target = others.filter((el) => el.offsetLeft + el.offsetWidth / 2 < pointerX).length;
+    if (target !== indexOf(draggingId)) editorStore.moveDocument(draggingId, target);
+  }
+
+  function endDrag() {
+    pressedId = null;
+    draggingId = null;
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', endDrag);
+    window.removeEventListener('pointercancel', endDrag);
+  }
+
+  onDestroy(endDrag);
 
   function removeDocument(id: string) {
     clearCachedPdf(id);
@@ -145,17 +209,27 @@
     'flex w-full items-center px-3 py-1.5 text-left text-xs text-neutral-700 transition-colors hover:bg-neutral-100 disabled:pointer-events-none disabled:opacity-40 dark:text-neutral-200 dark:hover:bg-neutral-800';
 </script>
 
-<div role="tablist" aria-label="Open documents" class="flex min-w-0 items-end gap-0.5 self-stretch">
+<div
+  bind:this={tablistEl}
+  role="tablist"
+  aria-label="Open documents"
+  class="relative flex min-w-0 items-end gap-0.5 self-stretch"
+  class:cursor-grabbing={draggingId !== null}
+>
   {#each $editorStore.documents as doc (doc.id)}
     {@const isActive = doc.id === $activeDocument?.id}
+    {@const isDragging = doc.id === draggingId}
     <div
+      animate:flip={{ duration: isDragging ? 0 : 150 }}
+      data-tab-id={doc.id}
       role="tab"
       tabindex="0"
       aria-selected={isActive}
-      title={doc.file.name}
-      class="group flex min-w-0 max-w-[10rem] shrink-0 cursor-pointer items-center gap-1.5
+      title={$editorStore.documents.length > 1 ? `${doc.file.name} — drag to reorder` : doc.file.name}
+      class="group flex min-w-0 max-w-[10rem] shrink-0 cursor-pointer touch-none select-none items-center gap-1.5
         rounded-t-lg border border-b-0 px-3 py-1.5 text-xs transition-colors
-        {isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS}"
+        {isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS} {isDragging ? 'z-10 cursor-grabbing shadow-md' : ''}"
+      onpointerdown={(e) => onTabPointerDown(e, doc.id)}
       onclick={() => selectDocument(doc.id)}
       onkeydown={(e) => onTabKeydown(e, doc.id)}
       oncontextmenu={(e) => openMenu(e, doc.id)}
@@ -199,6 +273,25 @@
     role="menu"
     aria-label="Tab actions for {menuDoc.file.name}"
   >
+    <button
+      type="button"
+      role="menuitem"
+      class={MENU_ITEM_CLASS}
+      disabled={indexOf(menu.docId) <= 0}
+      onclick={() => runMenuAction(() => moveBy(menu!.docId, -1))}
+    >
+      Move left
+    </button>
+    <button
+      type="button"
+      role="menuitem"
+      class={MENU_ITEM_CLASS}
+      disabled={rightIds.length === 0}
+      onclick={() => runMenuAction(() => moveBy(menu!.docId, 1))}
+    >
+      Move right
+    </button>
+    <div role="separator" class="my-1 border-t border-neutral-200 dark:border-neutral-800"></div>
     <button
       type="button"
       role="menuitem"

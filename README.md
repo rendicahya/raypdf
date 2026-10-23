@@ -31,7 +31,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Editor
 
-- **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Add more PDFs any time.
+- **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Drag tabs to reorder them (or use Ctrl+Shift+←/→, or Move left/right in the tab menu). Add more PDFs any time.
 - **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page, rendered as they scroll into view so long documents open quickly. Click to jump; **drag and drop to reorder pages**.
 - **Page tools** on each thumbnail (on hover, and always on the current page): rotate that page left/right, duplicate it, insert a blank page after it, or delete it. These change the PDF itself; signatures, redactions, text, highlights, and comments follow their page, and every edit can be undone.
 - **Select several pages** with Ctrl/⌘-click, Shift-click for a range, the checkbox on each thumbnail, or Ctrl+A. A bar at the top of the sidebar then rotates, saves (as one PDF with just those pages), or deletes them all at once; `Delete` and `Esc` work too.

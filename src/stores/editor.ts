@@ -453,6 +453,19 @@ function createEditorStore() {
     });
   }
 
+  /** Moves a document's tab to position `toIndex` (0-based) in the tab order. */
+  function moveDocument(id: string, toIndex: number) {
+    update((state) => {
+      const from = state.documents.findIndex((d) => d.id === id);
+      const to = clamp(toIndex, 0, state.documents.length - 1);
+      if (from === -1 || from === to) return state;
+      const documents = [...state.documents];
+      const [moved] = documents.splice(from, 1);
+      documents.splice(to, 0, moved);
+      return { ...state, documents };
+    });
+  }
+
   function setActiveDocument(id: string) {
     update((state) => (state.documents.some((d) => d.id === id) ? { ...state, activeId: id } : state));
   }
@@ -1086,6 +1099,7 @@ function createEditorStore() {
     loadPdfs,
     addPdfs,
     removeDocument,
+    moveDocument,
     setActiveDocument,
     prevDocument,
     nextDocument,
