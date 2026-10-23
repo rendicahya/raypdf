@@ -7,12 +7,28 @@
   import { capturePage, copyImageToClipboard, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
-  import { HIGHLIGHT_COLOR, selectionToBoxes, type Box } from '../lib/pdf/highlight';
+  import {
+    MARKUP_COLORS,
+    MARKUP_LABELS,
+    markupPaint,
+    selectionToBoxes,
+    type Box,
+  } from '../lib/pdf/highlight';
+  import { markupColor } from '../stores/markup';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
+  import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
-  import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
+  import {
+    editorStore,
+    activeDocument,
+    type MarkupKind,
+    type PlacedSignature,
+    type PlacedText,
+    type RedactionBox,
+    type PlacedComment,
+  } from '../stores/editor';
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
@@ -142,14 +158,18 @@
     };
   });
 
-  // Highlighting: once text is selected, a Highlight button appears below it
-  // (like Foxit's selection popup) and turns the selection into a permanent
-  // highlight — one box per line, saved as a PDF Highlight annotation on export.
+  // Markup: once text is selected, a small toolbar appears below it (like
+  // Foxit's selection popup) to highlight, underline, or strike it through
+  // permanently, in the chosen color — one box per line, saved as a PDF
+  // markup annotation on export.
   let pendingHighlight: { boxes: Box[]; anchor: { x: number; y: number } } | null = $state(null);
   let selectedHighlightGroup: string | null = $state(null);
-  // Whether text on this page runs top to bottom (a page turned 90°/270°),
-  // which changes how selected spans join into lines.
-  let pageVertical = $state(false);
+  // The page's on-screen rotation (its own /Rotate plus the user's). At
+  // 90°/270° text runs top to bottom, which changes how selected spans join
+  // into lines and which edge an underline sits on.
+  let pageRotation = $state(0);
+  const pageVertical = $derived(pageRotation % 180 !== 0);
+  const MARKUP_POPUP_HALF_WIDTH = 120;
 
   function updatePendingHighlight() {
     const sel = window.getSelection();
@@ -180,24 +200,33 @@
     pendingHighlight = {
       boxes,
       anchor: {
-        x: clamp(last.x + last.width, 50, canvasRect.width - 50),
+        x: clamp(last.x + last.width, MARKUP_POPUP_HALF_WIDTH, canvasRect.width - MARKUP_POPUP_HALF_WIDTH),
         y: below ? last.y + last.height + 6 : Math.max(0, first.y - 38),
       },
     };
   }
 
-  function applyPendingHighlight(e: Event) {
+  // Applied on pointerdown (and click, for the keyboard): the selection is
+  // still intact then, before the press could clear it.
+  function applyPendingMarkup(e: Event, kind: MarkupKind) {
     e.preventDefault();
     e.stopPropagation();
-    highlightSelection();
+    if (pendingHighlight) addMarkup(pendingHighlight.boxes, kind);
   }
 
-  function highlightSelection() {
+  function addMarkup(boxes: Box[], kind: MarkupKind) {
     const doc = $activeDocument;
-    if (!doc || !pendingHighlight) return;
-    editorStore.addHighlight(doc.pageNumber, pendingHighlight.boxes);
+    if (!doc || boxes.length === 0) return;
+    editorStore.addHighlight(doc.pageNumber, boxes, kind, $markupColor);
     pendingHighlight = null;
     window.getSelection()?.removeAllRanges();
+  }
+
+  // Picking a color keeps the selection, so a markup button can follow.
+  function pickMarkupColor(e: Event, color: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    markupColor.set(color);
   }
 
   function removeHighlight(groupId: string) {
@@ -300,7 +329,7 @@
     loaded
       .getPage(pageNumber)
       .then((page) => {
-        if (!cancelled) pageVertical = getTotalRotation(page, rotation) % 180 !== 0;
+        if (!cancelled) pageRotation = getTotalRotation(page, rotation);
       })
       .catch(() => {});
     return () => {
@@ -1053,7 +1082,7 @@
           height: f.boxHeight,
         };
       }),
-      highlights: highlightsOnCurrentPage,
+      markups: highlightsOnCurrentPage.map((h) => markupPaint(h, pageRotation)),
       redactions: redactionsOnCurrentPage,
       signatures,
       texts: textsOnCurrentPage,
@@ -1569,25 +1598,34 @@
           hint: 'Ctrl+C',
           onSelect: () => navigator.clipboard.writeText(selectedText).catch(() => {}),
         },
-        {
-          label: 'Highlight',
-          icon: MENU_ICONS.highlight,
+        ...(['highlight', 'underline', 'strikeout'] as const).map((kind, i) => ({
+          label: MARKUP_LABELS[kind],
+          icon: MENU_ICONS[kind],
+          separatorBefore: i === 0,
           disabled: boxes.length === 0,
-          onSelect: () => {
-            editorStore.addHighlight(doc.pageNumber, boxes);
-            pendingHighlight = null;
-            window.getSelection()?.removeAllRanges();
-          },
-        },
+          onSelect: () => addMarkup(boxes, kind),
+        })),
       ];
     }
 
     const point: ClientPoint = { clientX: e.clientX, clientY: e.clientY };
 
     const groupId = idOf('data-highlight-group') ?? highlightAt(point)?.groupId;
-    if (groupId) {
+    const markup = groupId ? doc.highlights.find((h) => h.groupId === groupId) : undefined;
+    if (groupId && markup) {
       selectedHighlightGroup = groupId;
-      return [deleteItem('Remove highlight', () => removeHighlight(groupId))];
+      return [
+        ...MARKUP_COLORS.map((c) => ({
+          label: c.label,
+          swatch: c.value,
+          disabled: markup.color === c.value,
+          onSelect: () => editorStore.recolorHighlight(groupId, c.value),
+        })),
+        {
+          ...deleteItem(`Remove ${MARKUP_LABELS[markup.kind].toLowerCase()}`, () => removeHighlight(groupId)),
+          separatorBefore: true,
+        },
+      ];
     }
 
     const page = doc.pageNumber;
@@ -1683,26 +1721,28 @@
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
 
-  <!-- Highlights sit above the text layer so they can be clicked (then
-       removed) in Move mode; in every other mode they let clicks through, so
-       the Select tool can still select highlighted text. -->
+  <!-- Markups sit above the text layer so they can be clicked (then
+       recolored or removed) in Move mode; in every other mode they let clicks
+       through, so the Select tool can still select marked-up text. The
+       clickable box is the whole marked text; only the paint inside differs
+       by kind — the full box for a highlight, a thin line for the others. -->
   {#each highlightsOnCurrentPage as h, i (h.id)}
     {@const isSelected = selectedHighlightGroup === h.groupId}
     {@const isFirstOfGroup = highlightsOnCurrentPage.findIndex((x) => x.groupId === h.groupId) === i}
+    {@const paint = markupPaint(h, pageRotation)}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       data-highlight-group={h.groupId}
       role="group"
       tabindex={isFirstOfGroup ? 0 : -1}
-      aria-label="Highlighted text — Delete to remove"
-      class="absolute cursor-pointer mix-blend-multiply {isSelected ? 'outline outline-2 outline-blue-400' : ''}"
+      aria-label="{MARKUP_LABELS[h.kind]} — Delete to remove"
+      class="absolute cursor-pointer {isSelected ? 'outline outline-2 outline-blue-400' : ''}"
       class:pointer-events-none={!formFieldsInteractive}
       style:left="{h.x}px"
       style:top="{h.y}px"
       style:width="{h.width}px"
       style:height="{h.height}px"
-      style:background-color={HIGHLIGHT_COLOR}
       onpointerdown={(e) => {
         e.stopPropagation();
         selectedHighlightGroup = h.groupId;
@@ -1713,31 +1753,60 @@
         e.preventDefault();
         removeHighlight(h.groupId);
       }}
-    ></div>
+    >
+      <div
+        class="pointer-events-none absolute"
+        class:mix-blend-multiply={paint.multiply}
+        style:left="{paint.x - h.x}px"
+        style:top="{paint.y - h.y}px"
+        style:width="{paint.width}px"
+        style:height="{paint.height}px"
+        style:background-color={paint.color}
+      ></div>
+    </div>
   {/each}
 
-  <!-- Outside the highlight boxes, which are multiplied onto the page and
-       would tint anything inside them. -->
+  <!-- The selected markup's own toolbar: recolor or remove. Kept outside the
+       markup boxes, whose multiplied paint would tint anything inside them. -->
   {#each highlightsOnCurrentPage.filter((h) => h.groupId === selectedHighlightGroup).slice(0, 1) as h (h.id)}
-    <button
-      type="button"
+    <div
       data-highlight-group={h.groupId}
-      aria-label="Remove highlight"
-      title="Remove highlight"
-      class="absolute flex h-5 w-5 -translate-y-1.5 translate-x-[-0.875rem] touch-none items-center justify-center
-        rounded-full border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
-      style:left="{h.x + h.width}px"
-      style:top="{h.y}px"
+      role="toolbar"
+      aria-label="{MARKUP_LABELS[h.kind]} options"
+      tabindex="-1"
+      class="absolute z-40 flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-1.5 py-1
+        shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+      style:left="{h.x}px"
+      style:top={h.y < 40 ? `${h.y + h.height + 6}px` : `${h.y - 34}px`}
       onpointerdown={(e) => e.stopPropagation()}
-      onclick={(e) => {
-        e.stopPropagation();
-        removeHighlight(h.groupId);
-      }}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
-        <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
-      </svg>
-    </button>
+      {#each MARKUP_COLORS as c}
+        <button
+          type="button"
+          aria-label="{c.label}"
+          aria-pressed={h.color === c.value}
+          use:tooltip={c.label}
+          class="h-4 w-4 rounded-full border transition-transform hover:scale-110 {h.color === c.value
+            ? 'border-neutral-700 ring-2 ring-blue-400/50 dark:border-white'
+            : 'border-black/10 dark:border-white/20'}"
+          style:background-color={c.value}
+          onclick={() => editorStore.recolorHighlight(h.groupId, c.value)}
+        ></button>
+      {/each}
+      <span class="mx-0.5 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
+      <button
+        type="button"
+        aria-label="Remove {MARKUP_LABELS[h.kind].toLowerCase()}"
+        use:tooltip={`Remove ${MARKUP_LABELS[h.kind].toLowerCase()} (Delete)`}
+        class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-500 transition-colors
+          hover:bg-red-50 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-950"
+        onclick={() => removeHighlight(h.groupId)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.delete} />
+        </svg>
+      </button>
+    </div>
   {/each}
 
   <!-- The PDF's own form fields. The layer itself never takes clicks, only
@@ -2306,20 +2375,62 @@
   {/each}
 
   {#if pendingHighlight}
-    <button
-      type="button"
-      class="absolute z-50 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border
-        border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-lg transition-colors
-        hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200
-        dark:hover:bg-neutral-800"
+    <!-- Selection toolbar: highlight / underline / strikethrough in the chosen color. -->
+    <div
+      role="toolbar"
+      aria-label="Mark up selected text"
+      tabindex="-1"
+      class="absolute z-50 flex -translate-x-1/2 items-center gap-0.5 whitespace-nowrap rounded-full border
+        border-neutral-200 bg-white px-1.5 py-1 text-xs font-medium text-neutral-700 shadow-lg
+        dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
       style:left="{pendingHighlight.anchor.x}px"
       style:top="{pendingHighlight.anchor.y}px"
-      onpointerdown={applyPendingHighlight}
-      onclick={applyPendingHighlight}
+      onpointerdown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
-      <span class="h-3 w-3 rounded-sm border border-amber-400" style:background-color={HIGHLIGHT_COLOR}></span>
-      Highlight
-    </button>
+      <button
+        type="button"
+        class="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors hover:bg-neutral-100
+          dark:hover:bg-neutral-800"
+        onpointerdown={(e) => applyPendingMarkup(e, 'highlight')}
+        onclick={(e) => applyPendingMarkup(e, 'highlight')}
+      >
+        <span class="h-3 w-3 rounded-sm border border-black/10" style:background-color={$markupColor}></span>
+        Highlight
+      </button>
+      {#each ['underline', 'strikeout'] as const as kind}
+        <button
+          type="button"
+          aria-label={MARKUP_LABELS[kind]}
+          use:tooltip={MARKUP_LABELS[kind]}
+          class="flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-neutral-100
+            dark:hover:bg-neutral-800"
+          onpointerdown={(e) => applyPendingMarkup(e, kind)}
+          onclick={(e) => applyPendingMarkup(e, kind)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS[kind]} />
+          </svg>
+        </button>
+      {/each}
+      <span class="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
+      {#each MARKUP_COLORS as c}
+        <button
+          type="button"
+          aria-label="{c.label}"
+          aria-pressed={$markupColor === c.value}
+          use:tooltip={c.label}
+          class="mx-0.5 h-4 w-4 rounded-full border transition-transform hover:scale-110 {$markupColor === c.value
+            ? 'border-neutral-700 ring-2 ring-blue-400/50 dark:border-white'
+            : 'border-black/10 dark:border-white/20'}"
+          style:background-color={c.value}
+          onpointerdown={(e) => pickMarkupColor(e, c.value)}
+          onclick={(e) => pickMarkupColor(e, c.value)}
+        ></button>
+      {/each}
+    </div>
   {/if}
 
   {#if drawingBox}

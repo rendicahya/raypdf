@@ -1,6 +1,6 @@
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { getTotalRotation, type PdfDocument } from './loader';
-import type { PlacedHighlight } from '../../stores/editor';
+import type { MarkupKind, PlacedHighlight } from '../../stores/editor';
 
 export interface Box {
   x: number;
@@ -9,9 +9,61 @@ export interface Box {
   height: number;
 }
 
-/** CSS color of a highlight on screen; HIGHLIGHT_RGB is the same color for the PDF. */
-export const HIGHLIGHT_COLOR = '#ffe94d';
-export const HIGHLIGHT_RGB: [number, number, number] = [1, 0.914, 0.302];
+/** Colors offered for highlights, underlines, and strikethroughs. */
+export const MARKUP_COLORS = [
+  { value: '#ffe94d', label: 'Yellow' },
+  { value: '#6ee7a0', label: 'Green' },
+  { value: '#7cc4ff', label: 'Blue' },
+  { value: '#ff8fc8', label: 'Pink' },
+  { value: '#f05252', label: 'Red' },
+] as const;
+
+export const MARKUP_LABELS: Record<MarkupKind, string> = {
+  highlight: 'Highlight',
+  underline: 'Underline',
+  strikeout: 'Strikethrough',
+};
+
+/** What to paint for one markup box on screen (or in a screenshot). */
+export interface MarkupPaint extends Box {
+  color: string;
+  /** Highlights are multiplied over the page so the text stays readable; lines are drawn as-is. */
+  multiply: boolean;
+}
+
+/**
+ * The area to paint for one markup box, in the same canvas pixels: the whole
+ * box for a highlight, a thin line for underline/strikethrough. The page's
+ * on-screen rotation (0/90/180/270, page /Rotate plus the user's) decides
+ * where a line goes — the bottom of upright text is the left edge once the
+ * page is turned 90°, the top at 180°, the right edge at 270°.
+ */
+export function markupPaint(box: PlacedHighlight, totalRotation: number): MarkupPaint {
+  const base = { color: box.color, multiply: box.kind === 'highlight' };
+  if (box.kind === 'highlight') return { ...box, ...base };
+
+  const turned = totalRotation % 180 !== 0;
+  const thickness = turned ? box.width : box.height;
+  const line = Math.max(1.5, thickness * 0.08);
+  // Offset across the line of text where the stroke sits, from the text's own top edge.
+  const across = box.kind === 'strikeout' ? thickness * 0.5 - line / 2 : thickness * 0.92 - line;
+
+  switch (((totalRotation % 360) + 360) % 360) {
+    case 90:
+      return { ...base, x: box.x + thickness - across - line, y: box.y, width: line, height: box.height };
+    case 180:
+      return { ...base, x: box.x, y: box.y + thickness - across - line, width: box.width, height: line };
+    case 270:
+      return { ...base, x: box.x + across, y: box.y, width: line, height: box.height };
+    default:
+      return { ...base, x: box.x, y: box.y + across, width: box.width, height: line };
+  }
+}
+
+function hexToUnitRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
 
 /**
  * Turns a text selection's client rects (one per span, often overlapping)
@@ -64,12 +116,20 @@ export function selectionToBoxes(rects: Box[], vertical: boolean): Box[] {
 
 const num = (n: number) => n.toFixed(2);
 
+const ANNOT_SUBTYPE: Record<MarkupKind, string> = {
+  highlight: 'Highlight',
+  underline: 'Underline',
+  strikeout: 'StrikeOut',
+};
+
 /**
- * Embeds each highlight (all rectangles sharing a groupId) as a real PDF
- * Highlight annotation, the way Acrobat or Foxit save one — readers list it
- * with the other markups and can still remove it. It carries its own
- * appearance stream, multiplied over the page, so it looks the same in
- * readers that don't draw highlights themselves.
+ * Embeds each markup (all rectangles sharing a groupId) as a real PDF
+ * Highlight, Underline, or StrikeOut annotation, the way Acrobat or Foxit
+ * save one — readers list it with the other markups and can still remove it.
+ * It carries its own appearance stream (a highlight multiplied over the
+ * page, a line for the others), so it looks the same in readers that don't
+ * draw markups themselves. Lines assume upright text in the page's own
+ * (unrotated) coordinates, which is how nearly every PDF is laid out.
  */
 export async function embedHighlightAnnotations(
   pdfDoc: PDFDocument,
@@ -84,9 +144,9 @@ export async function embedHighlightAnnotations(
     groups.set(key, [...(groups.get(key) ?? []), h]);
   }
 
-  const [r, g, b] = HIGHLIGHT_RGB;
   for (const group of groups.values()) {
-    const page = group[0].page;
+    const { page, kind, color } = group[0];
+    const [r, g, b] = hexToUnitRgb(color);
     const pdfjsPage = await pdfjsDoc.getPage(page);
     const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: getTotalRotation(pdfjsPage, rotation) });
 
@@ -105,22 +165,34 @@ export async function embedHighlightAnnotations(
     // Upper-left, upper-right, lower-left, lower-right — the order Acrobat writes.
     const quadPoints = boxes.flatMap((q) => [q.left, q.top, q.right, q.top, q.left, q.bottom, q.right, q.bottom]);
 
+    // The painted area of each box: all of it for a highlight, a line near
+    // the bottom for an underline, through the middle for a strikethrough.
+    const painted = boxes.map((q) => {
+      const height = q.top - q.bottom;
+      if (kind === 'highlight') return { x: q.left, y: q.bottom, w: q.right - q.left, h: height };
+      const line = Math.max(0.5, height * 0.07);
+      const y = kind === 'strikeout' ? q.bottom + height * 0.5 - line / 2 : q.bottom + height * 0.08;
+      return { x: q.left, y, w: q.right - q.left, h: line };
+    });
+
     const content = [
-      '/GS0 gs',
+      ...(kind === 'highlight' ? ['/GS0 gs'] : []),
       `${num(r)} ${num(g)} ${num(b)} rg`,
-      ...boxes.map((q) => `${num(q.left)} ${num(q.bottom)} ${num(q.right - q.left)} ${num(q.top - q.bottom)} re`),
+      ...painted.map((p) => `${num(p.x)} ${num(p.y)} ${num(p.w)} ${num(p.h)} re`),
       'f',
     ].join('\n');
     const appearance = pdfDoc.context.stream(content, {
       Type: 'XObject',
       Subtype: 'Form',
       BBox: rect,
-      Resources: { ExtGState: { GS0: { Type: 'ExtGState', BM: 'Multiply' } } },
+      ...(kind === 'highlight' && {
+        Resources: { ExtGState: { GS0: { Type: 'ExtGState', BM: 'Multiply' } } },
+      }),
     });
 
     const annot = pdfDoc.context.obj({
       Type: 'Annot',
-      Subtype: 'Highlight',
+      Subtype: ANNOT_SUBTYPE[kind],
       Rect: rect,
       QuadPoints: quadPoints,
       C: [r, g, b],

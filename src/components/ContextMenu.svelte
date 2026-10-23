@@ -3,6 +3,8 @@
     label: string;
     /** SVG path data for a 24×24 stroked icon. */
     icon?: string;
+    /** A CSS color shown as a dot in place of the icon (e.g. a color choice). */
+    swatch?: string;
     /** Shortcut hint shown on the right, e.g. "Del". */
     hint?: string;
     danger?: boolean;
@@ -120,11 +122,20 @@
         : 'text-neutral-700 hover:bg-neutral-100 focus:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:focus:bg-neutral-800'}"
       onclick={() => choose(item)}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0">
-        {#if item.icon}
-          <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
-        {/if}
-      </svg>
+      {#if item.swatch}
+        <span class="flex h-4 w-4 shrink-0 items-center justify-center">
+          <span
+            class="h-3.5 w-3.5 rounded-full border border-black/10 dark:border-white/20"
+            style:background-color={item.swatch}
+          ></span>
+        </span>
+      {:else}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0">
+          {#if item.icon}
+            <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
+          {/if}
+        </svg>
+      {/if}
       <span class="flex-1 whitespace-nowrap">{item.label}</span>
       {#if item.hint}
         <span class="text-xs text-neutral-400 dark:text-neutral-500">{item.hint}</span>

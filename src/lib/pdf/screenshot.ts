@@ -1,6 +1,6 @@
 import { renderPageToCanvas, type PdfDocument } from './loader';
 import type { FormWidgetKind } from './forms';
-import { HIGHLIGHT_COLOR } from './highlight';
+import type { MarkupPaint } from './highlight';
 import type { PlacedText } from '../../stores/editor';
 import { FONT_FAMILY_CSS } from '../../stores/textTool';
 
@@ -42,7 +42,8 @@ export interface CaptureField extends Box {
 export interface CaptureOverlays {
   renderScale: number;
   fields: CaptureField[];
-  highlights: Box[];
+  /** Highlights, underlines, and strikethroughs, already resolved to what to paint (see markupPaint). */
+  markups: MarkupPaint[];
   redactions: Box[];
   /** Each placed signature with its image, visible watermark already applied (see lib/watermark/visible.ts). */
   signatures: (Box & { image: Blob })[];
@@ -95,10 +96,12 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
   // Everything below is drawn in the editor's own on-screen pixel units.
   ctx.scale(CAPTURE_SCALE / overlays.renderScale, CAPTURE_SCALE / overlays.renderScale);
 
-  // Multiplied over the page like a highlighter, so the text stays readable.
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = HIGHLIGHT_COLOR;
-  for (const box of overlays.highlights) ctx.fillRect(box.x, box.y, box.width, box.height);
+  // Highlights are multiplied over the page like a highlighter, so the text stays readable.
+  for (const m of overlays.markups) {
+    ctx.globalCompositeOperation = m.multiply ? 'multiply' : 'source-over';
+    ctx.fillStyle = m.color;
+    ctx.fillRect(m.x, m.y, m.width, m.height);
+  }
   ctx.globalCompositeOperation = 'source-over';
 
   for (const field of overlays.fields) drawField(ctx, field);

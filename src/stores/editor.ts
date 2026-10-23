@@ -73,15 +73,22 @@ export interface PlacedComment {
   text: string;
 }
 
+export type MarkupKind = 'highlight' | 'underline' | 'strikeout';
+
 /**
- * One rectangle of a text highlight, in canvas pixel coordinates. A highlight
- * spanning several lines is several of these sharing a `groupId`, so each
- * stays a plain box that zoom, rotation, and page edits already know how to move.
+ * One rectangle of a text markup (highlight, underline, or strikethrough), in
+ * canvas pixel coordinates — the box around the marked text, whatever the
+ * kind. Markup spanning several lines is several of these sharing a
+ * `groupId`, so each stays a plain box that zoom, rotation, and page edits
+ * already know how to move.
  */
 export interface PlacedHighlight {
   id: string;
-  /** Shared by every rectangle made from the same selection — removed together. */
+  /** Shared by every rectangle made from the same selection — removed and recolored together. */
   groupId: string;
+  kind: MarkupKind;
+  /** CSS hex color. */
+  color: string;
   x: number;
   y: number;
   width: number;
@@ -750,15 +757,30 @@ function createEditorStore() {
     }));
   }
 
-  /** Highlights a text selection on the active document — one rectangle per line, removed together. */
-  function addHighlight(page: number, rects: Geometry[]) {
+  /** Marks up a text selection on the active document — one rectangle per line, removed together. */
+  function addHighlight(page: number, rects: Geometry[], kind: MarkupKind, color: string) {
     if (rects.length === 0) return;
     const groupId = crypto.randomUUID();
     recordActiveHistory(`add-highlight-${groupId}`);
     update((state) =>
       updateActiveDocument(state, (doc) => ({
         ...doc,
-        highlights: [...doc.highlights, ...rects.map((r) => ({ ...r, page, groupId, id: crypto.randomUUID() }))],
+        highlights: [
+          ...doc.highlights,
+          ...rects.map((r) => ({ ...r, page, groupId, kind, color, id: crypto.randomUUID() })),
+        ],
+        exported: false,
+      })),
+    );
+  }
+
+  /** Changes the color of every rectangle of one markup. */
+  function recolorHighlight(groupId: string, color: string) {
+    recordActiveHistory(`recolor-highlight-${groupId}-${Date.now()}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        highlights: doc.highlights.map((h) => (h.groupId === groupId ? { ...h, color } : h)),
         exported: false,
       })),
     );
@@ -1128,6 +1150,7 @@ function createEditorStore() {
     removeComment,
     setCommentsForDocument,
     addHighlight,
+    recolorHighlight,
     removeHighlight,
     setFormValue,
     markDocumentExported,
