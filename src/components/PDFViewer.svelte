@@ -8,6 +8,8 @@
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
   import { HIGHLIGHT_COLOR, selectionToBoxes, type Box } from '../lib/pdf/highlight';
+  import { MENU_ICONS } from '../lib/utils/menuIcons';
+  import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
@@ -186,6 +188,10 @@
   function applyPendingHighlight(e: Event) {
     e.preventDefault();
     e.stopPropagation();
+    highlightSelection();
+  }
+
+  function highlightSelection() {
     const doc = $activeDocument;
     if (!doc || !pendingHighlight) return;
     editorStore.addHighlight(doc.pageNumber, pendingHighlight.boxes);
@@ -641,7 +647,8 @@
       return;
     }
 
-    if ($redactMode) return;
+    // Right-click opens the context menu rather than using the tool.
+    if ($redactMode || e.button !== 0) return;
 
     if ($textToolMode) {
       // preventDefault stops the browser's own default action for this
@@ -680,7 +687,13 @@
     }
 
     if (!$clickToPlaceMode) return;
+    placeSignatureAt(e);
+  }
 
+  type ClientPoint = { clientX: number; clientY: number };
+
+  /** Places the saved signature centered on a point of the page. */
+  function placeSignatureAt(e: ClientPoint) {
     const doc = $activeDocument;
     if (!doc) return;
 
@@ -869,6 +882,7 @@
   }
 
   function onWrapperPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
     if ($redactMode && e.target === canvasEl) {
       const rect = canvasEl.getBoundingClientRect();
       const x = clamp(e.clientX - rect.left, 0, rect.width);
@@ -974,8 +988,7 @@
   function onShotPointerUp(e: PointerEvent) {
     const box = shotBox;
     shotBox = null;
-    const doc = $activeDocument;
-    if (!box || !doc || !pdfDoc) return;
+    if (!box) return;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
 
     const rect = canvasEl.getBoundingClientRect();
@@ -983,13 +996,20 @@
     const area = isArea
       ? { x: box.x / rect.width, y: box.y / rect.height, width: box.width / rect.width, height: box.height / rect.height }
       : null;
+    captureToClipboard(area);
+  }
+
+  /** Captures the page (or an area of it, as fractions) to the clipboard, reporting through the screenshot toast. */
+  function captureToClipboard(area: Parameters<typeof capturePage>[3]) {
+    const doc = $activeDocument;
+    if (!doc || !pdfDoc || capturing) return;
 
     const baseName = doc.file.name.replace(/\.pdf$/i, '');
-    const fileName = `${baseName}_page${doc.pageNumber}${isArea ? '_area' : ''}.png`;
+    const fileName = `${baseName}_page${doc.pageNumber}${area ? '_area' : ''}.png`;
 
     capturing = true;
     const png = captureWithEdits(pdfDoc, doc, area);
-    // Started synchronously, while this pointerup still counts as a user gesture.
+    // Started synchronously, while the click still counts as a user gesture.
     const copied = copyImageToClipboard(png);
     Promise.all([png, copied])
       .then(([blob, ok]) => screenshotResult.set({ ok: true, blob, fileName, copied: ok }))
@@ -1178,7 +1198,7 @@
     else editorStore.updateText(id, { text: value });
   }
 
-  function addTextAt(e: PointerEvent) {
+  function addTextAt(e: ClientPoint) {
     const doc = $activeDocument;
     if (!doc) return;
 
@@ -1357,7 +1377,7 @@
     }
   }
 
-  function addCommentAt(e: PointerEvent) {
+  function addCommentAt(e: ClientPoint) {
     const doc = $activeDocument;
     if (!doc) return;
 
@@ -1437,6 +1457,187 @@
     editorStore.removeComment(id);
     if (selectedCommentId === id) selectedCommentId = null;
   }
+
+  // Right-click menu on the document. What's under the pointer decides the
+  // items: a placed object gets its own actions, selected text gets Copy and
+  // Highlight, and the page itself gets placement, zoom, rotate, and capture.
+  let menu: { x: number; y: number; items: ContextMenuItem[] } | null = $state(null);
+
+  function onDocumentContextMenu(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    // Text fields keep the browser's own menu (spelling, paste, …).
+    if (target.closest('input, textarea, select')) return;
+    e.preventDefault();
+    // The Zoom tool's right-click zooms out; Screenshot owns every click on the page.
+    if ($zoomToolMode || $screenshotToolMode) return;
+    const doc = $activeDocument;
+    if (!doc) return;
+    const items = menuItemsFor(e, target, doc);
+    if (items.length > 0) menu = { x: e.clientX, y: e.clientY, items };
+  }
+
+  function highlightAt(point: ClientPoint) {
+    const rect = canvasEl.getBoundingClientRect();
+    const x = point.clientX - rect.left;
+    const y = point.clientY - rect.top;
+    return highlightsOnCurrentPage.find((h) => x >= h.x && x <= h.x + h.width && y >= h.y && y <= h.y + h.height);
+  }
+
+  function menuItemsFor(
+    e: MouseEvent,
+    target: HTMLElement,
+    doc: NonNullable<typeof $activeDocument>,
+  ): ContextMenuItem[] {
+    const idOf = (attr: string) => target.closest(`[${attr}]`)?.getAttribute(attr) ?? null;
+    const deleteItem = (label: string, remove: () => void): ContextMenuItem => ({
+      label,
+      icon: MENU_ICONS.delete,
+      hint: 'Del',
+      danger: true,
+      onSelect: remove,
+    });
+
+    const signatureId = idOf('data-placed-signature');
+    if (signatureId) {
+      selectedSignatureId = signatureId;
+      return [
+        deleteItem('Delete signature', () => {
+          editorStore.removeSignature(signatureId);
+          selectedSignatureId = null;
+        }),
+      ];
+    }
+
+    const redactionId = idOf('data-redaction');
+    if (redactionId) {
+      selectedRedactionId = redactionId;
+      return [
+        deleteItem('Delete redaction', () => {
+          editorStore.removeRedaction(redactionId);
+          selectedRedactionId = null;
+        }),
+      ];
+    }
+
+    const textId = idOf('data-placed-text');
+    const text = textId ? doc.texts.find((t) => t.id === textId) : undefined;
+    if (text) {
+      selectedTextId = text.id;
+      return [
+        {
+          label: 'Edit text',
+          icon: MENU_ICONS.edit,
+          onSelect: () => {
+            selectedTextId = text.id;
+            startEditingText(text.id, text.text);
+          },
+        },
+        deleteItem('Delete text', () => {
+          editorStore.removeText(text.id);
+          selectedTextId = null;
+        }),
+      ];
+    }
+
+    const commentId = idOf('data-placed-comment');
+    const comment = commentId ? doc.comments.find((c) => c.id === commentId) : undefined;
+    if (comment) {
+      selectedCommentId = comment.id;
+      return [
+        {
+          label: 'Edit comment',
+          icon: MENU_ICONS.edit,
+          onSelect: () => {
+            selectedCommentId = comment.id;
+            startEditingComment(comment.id, comment.text);
+          },
+        },
+        deleteItem('Delete comment', () => {
+          editorStore.removeComment(comment.id);
+          selectedCommentId = null;
+        }),
+      ];
+    }
+
+    // Read now: clicking a menu item clears the page's text selection.
+    const selectedText = hasTextSelection ? (window.getSelection()?.toString() ?? '') : '';
+    if (selectedText.trim()) {
+      updatePendingHighlight();
+      const boxes = pendingHighlight?.boxes ?? [];
+      return [
+        {
+          label: 'Copy',
+          icon: MENU_ICONS.copy,
+          hint: 'Ctrl+C',
+          onSelect: () => navigator.clipboard.writeText(selectedText).catch(() => {}),
+        },
+        {
+          label: 'Highlight',
+          icon: MENU_ICONS.highlight,
+          disabled: boxes.length === 0,
+          onSelect: () => {
+            editorStore.addHighlight(doc.pageNumber, boxes);
+            pendingHighlight = null;
+            window.getSelection()?.removeAllRanges();
+          },
+        },
+      ];
+    }
+
+    const point: ClientPoint = { clientX: e.clientX, clientY: e.clientY };
+
+    const groupId = idOf('data-highlight-group') ?? highlightAt(point)?.groupId;
+    if (groupId) {
+      selectedHighlightGroup = groupId;
+      return [deleteItem('Remove highlight', () => removeHighlight(groupId))];
+    }
+
+    const page = doc.pageNumber;
+    return [
+      {
+        label: 'Place signature here',
+        icon: MENU_ICONS.signature,
+        disabled: !$signatureStore.signature,
+        onSelect: () => placeSignatureAt(point),
+      },
+      {
+        label: 'Add text here',
+        icon: MENU_ICONS.text,
+        onSelect: () => {
+          if (editingTextId) commitTextEdit();
+          addTextAt(point);
+        },
+      },
+      {
+        label: 'Add comment here',
+        icon: MENU_ICONS.comment,
+        onSelect: () => {
+          if (editingCommentId) commitCommentEdit();
+          addCommentAt(point);
+        },
+      },
+      { label: 'Zoom in', icon: MENU_ICONS.zoomIn, separatorBefore: true, onSelect: editorStore.zoomIn },
+      { label: 'Zoom out', icon: MENU_ICONS.zoomOut, onSelect: editorStore.zoomOut },
+      {
+        label: 'Rotate page left',
+        icon: MENU_ICONS.rotateLeft,
+        separatorBefore: true,
+        onSelect: () => editorStore.rotatePage(page, -90).catch(() => {}),
+      },
+      {
+        label: 'Rotate page right',
+        icon: MENU_ICONS.rotateRight,
+        onSelect: () => editorStore.rotatePage(page, 90).catch(() => {}),
+      },
+      {
+        label: 'Copy page as image',
+        icon: MENU_ICONS.camera,
+        separatorBefore: true,
+        disabled: capturing,
+        onSelect: () => captureToClipboard(null),
+      },
+    ];
+  }
 </script>
 
 <svelte:window onpointerdown={onWindowPointerDown} />
@@ -1455,6 +1656,7 @@
   onpointermove={onWrapperPointerMove}
   onpointerup={onWrapperPointerUp}
   onpointerleave={onWrapperPointerLeave}
+  oncontextmenu={onDocumentContextMenu}
 >
   <canvas
     bind:this={canvasEl}
@@ -2157,3 +2359,7 @@
     </div>
   {/if}
 </div>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}

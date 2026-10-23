@@ -233,7 +233,7 @@ components/
 - ExportButton, MergeOrderDialog, StartOverButton
 - VerifyPage
 - ThemeToggle, FullscreenToggle, UpdateToast
-- ContextMenu (reusable right-click menu; used by PageSidebar)
+- ContextMenu (reusable right-click menu; used by PageSidebar and PDFViewer, icons in `lib/utils/menuIcons.ts`)
 
 lib/
 

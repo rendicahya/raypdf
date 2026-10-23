@@ -11,19 +11,19 @@
     isSelected: boolean;
     /** Width / height to reserve before the page has been rendered. */
     placeholderAspect: number;
+    /** pdf.js render scale — grows with the sidebar's width so wide thumbnails stay sharp. */
+    scale: number;
     /** Gets the click, so Ctrl/Shift can extend the selection instead of just navigating. */
     onSelect: (e: MouseEvent) => void;
   }
 
-  let { pdfDoc, pageNumber, rotation, isActive, isSelected, placeholderAspect, onSelect }: Props = $props();
+  let { pdfDoc, pageNumber, rotation, isActive, isSelected, placeholderAspect, scale, onSelect }: Props = $props();
 
   let buttonEl: HTMLButtonElement;
   let canvasEl: HTMLCanvasElement;
   let error = $state(false);
   let rendered = $state(false);
   let nearView = $state(false);
-
-  const THUMB_SCALE = 0.22;
 
   // Thumbnails render only once they're scrolled near the sidebar's visible
   // area, so a 300-page PDF doesn't render 300 pages up front. The margin
@@ -42,16 +42,17 @@
 
   // What's currently drawn, so scrolling a thumbnail back into view doesn't
   // render it again unless the page itself changed.
-  let drawn: { doc: PdfDocument; page: number; rotation: number } | null = null;
+  let drawn: { doc: PdfDocument; page: number; rotation: number; scale: number } | null = null;
 
   $effect(() => {
     const doc = pdfDoc;
     const page = pageNumber;
     const rot = rotation;
+    const s = scale;
     if (!canvasEl || !nearView) return;
-    if (drawn && drawn.doc === doc && drawn.page === page && drawn.rotation === rot) return;
-    drawn = { doc, page, rotation: rot };
-    renderPageToCanvas(doc, page, canvasEl, THUMB_SCALE, rot)
+    if (drawn && drawn.doc === doc && drawn.page === page && drawn.rotation === rot && drawn.scale === s) return;
+    drawn = { doc, page, rotation: rot, scale: s };
+    renderPageToCanvas(doc, page, canvasEl, s, rot)
       .then(() => {
         rendered = true;
         error = false;

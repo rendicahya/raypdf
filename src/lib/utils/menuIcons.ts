@@ -1,0 +1,22 @@
+/** SVG path data (24×24, stroked) for ContextMenu items. */
+export const MENU_ICONS = {
+  rotateLeft: 'M3 12a9 9 0 1 0 3-6.7L3 8 M3 3v5h5',
+  rotateRight: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
+  duplicate:
+    'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
+  insert: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z M12 11v6 M9 14h6',
+  save: 'M12 4v11m0 0-4-4m4 4 4-4 M5 20h14',
+  select: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z m2 8 3 3 5-6',
+  clear: 'M6 6l12 12 M18 6L6 18',
+  delete: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12 M9 7V4h6v3',
+  copy: 'M9 9h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
+  highlight: 'm9 11-6 6v3h9l3-3 M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4',
+  signature: 'M3 17c3-1 5-9 7-9s-1 9 1 9 3-4 4-4 1 3 2 3 2-1 4-1 M3 21h18',
+  text: 'M4 7V5h16v2 M12 5v14 M9 19h6',
+  comment: 'M4 5h16v11H8l-4 4V5Z',
+  edit: 'M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
+  zoomIn: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3 M11 8v6 M8 11h6',
+  zoomOut: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3 M8 11h6',
+  fit: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
+  camera: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z M12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+};

@@ -1,6 +1,12 @@
 <script lang="ts">
   import { editorStore, activeDocument } from '../stores/editor';
-  import { pageSidebarOpen } from '../stores/layout';
+  import {
+    pageSidebarOpen,
+    pageSidebarWidth,
+    PAGE_SIDEBAR_MIN_WIDTH,
+    PAGE_SIDEBAR_MAX_WIDTH,
+    PAGE_SIDEBAR_DEFAULT_WIDTH,
+  } from '../stores/layout';
   import { signatureStore } from '../stores/signature';
   import { currentWatermarkOptions } from '../stores/watermark';
   import { stripEmbeddedScripts, securePdf } from '../stores/exportOptions';
@@ -11,6 +17,7 @@
   import { tooltip } from '../lib/utils/tooltip';
   import PageThumbnail from './PageThumbnail.svelte';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
+  import { MENU_ICONS } from '../lib/utils/menuIcons';
 
   let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
@@ -198,22 +205,51 @@
     }
   }
 
+  // Thumbnail render scale for the current width: enough for a letter-size
+  // page (612pt) to fill the column, in steps so a drag doesn't re-render
+  // on every pixel, and never below the original 0.22.
+  const THUMB_SCALE_STEP = 0.11;
+  const thumbScale = $derived(
+    Math.max(0.22, Math.ceil(($pageSidebarWidth - 34) / 612 / THUMB_SCALE_STEP) * THUMB_SCALE_STEP),
+  );
+
+  // Resizing by dragging the sidebar's right edge (or arrow keys on it).
+  let resizing = $state(false);
+  let resizeStart = { pointerX: 0, width: 0 };
+
+  function setWidth(width: number) {
+    pageSidebarWidth.set(Math.round(Math.min(Math.max(width, PAGE_SIDEBAR_MIN_WIDTH), PAGE_SIDEBAR_MAX_WIDTH)));
+  }
+
+  function onResizePointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    resizing = true;
+    resizeStart = { pointerX: e.clientX, width: $pageSidebarWidth };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizePointerMove(e: PointerEvent) {
+    if (resizing) setWidth(resizeStart.width + e.clientX - resizeStart.pointerX);
+  }
+
+  function onResizePointerUp() {
+    resizing = false;
+  }
+
+  function onResizeKeydown(e: KeyboardEvent) {
+    const step = e.shiftKey ? 48 : 16;
+    if (e.key === 'ArrowLeft') setWidth($pageSidebarWidth - step);
+    else if (e.key === 'ArrowRight') setWidth($pageSidebarWidth + step);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   // Right-click menu on a thumbnail. Right-clicking a page that's part of the
   // selection acts on the whole selection; any other page becomes the only
   // one selected first, like a file manager.
   let menu: { x: number; y: number; items: ContextMenuItem[] } | null = $state(null);
-
-  const ICONS = {
-    open: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
-    rotateLeft: 'M3 12a9 9 0 1 0 3-6.7L3 8 M3 3v5h5',
-    rotateRight: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
-    duplicate: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
-    insert: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z M12 11v6 M9 14h6',
-    save: 'M12 4v11m0 0-4-4m4 4 4-4 M5 20h14',
-    select: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z m2 8 3 3 5-6',
-    clear: 'M6 6l12 12 M18 6L6 18',
-    delete: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12 M9 7V4h6v3',
-  };
 
   function onThumbnailContextMenu(e: MouseEvent, pageNumber: number) {
     if (busy) return;
@@ -225,18 +261,14 @@
     const canDelete = pages.length < pageNumbers.length;
 
     const items: ContextMenuItem[] = [
-      ...(many
-        ? []
-        : [{ label: 'Go to page', icon: ICONS.open, onSelect: () => editorStore.goToPage(pageNumber) }]),
       {
         label: many ? `Rotate ${count} left` : 'Rotate left',
-        icon: ICONS.rotateLeft,
-        separatorBefore: !many,
+        icon: MENU_ICONS.rotateLeft,
         onSelect: () => runPageEdit(() => editorStore.rotatePages(pages, -90), 'Failed to rotate'),
       },
       {
         label: many ? `Rotate ${count} right` : 'Rotate right',
-        icon: ICONS.rotateRight,
+        icon: MENU_ICONS.rotateRight,
         onSelect: () => runPageEdit(() => editorStore.rotatePages(pages, 90), 'Failed to rotate'),
       },
       ...(many
@@ -244,7 +276,7 @@
         : [
             {
               label: 'Duplicate',
-              icon: ICONS.duplicate,
+              icon: MENU_ICONS.duplicate,
               onSelect: () => {
                 clearSelection();
                 runPageEdit(() => editorStore.duplicatePage(pageNumber), 'Failed to duplicate the page');
@@ -252,7 +284,7 @@
             },
             {
               label: 'Insert blank page after',
-              icon: ICONS.insert,
+              icon: MENU_ICONS.insert,
               onSelect: () => {
                 clearSelection();
                 runPageEdit(() => editorStore.insertBlankPage(pageNumber), 'Failed to insert a page');
@@ -261,28 +293,28 @@
           ]),
       {
         label: many ? `Save ${count} as PDF` : 'Save page as PDF',
-        icon: ICONS.save,
+        icon: MENU_ICONS.save,
         separatorBefore: true,
         onSelect: () => exportPages(pages),
       },
       many
-        ? { label: 'Clear selection', icon: ICONS.clear, hint: 'Esc', separatorBefore: true, onSelect: clearSelection }
+        ? { label: 'Clear selection', icon: MENU_ICONS.clear, hint: 'Esc', separatorBefore: true, onSelect: clearSelection }
         : {
             label: 'Select page',
-            icon: ICONS.select,
+            icon: MENU_ICONS.select,
             separatorBefore: true,
             onSelect: () => togglePage(pageNumber),
           },
       {
         label: 'Select all pages',
-        icon: ICONS.select,
+        icon: MENU_ICONS.select,
         hint: 'Ctrl+A',
         disabled: selected.length === pageNumbers.length,
         onSelect: selectAll,
       },
       {
         label: many ? `Delete ${count}` : 'Delete page',
-        icon: ICONS.delete,
+        icon: MENU_ICONS.delete,
         hint: 'Del',
         danger: true,
         separatorBefore: true,
@@ -365,12 +397,13 @@
 </script>
 
 {#if $pageSidebarOpen}
+  <div class="relative flex shrink-0" style:width="{$pageSidebarWidth}px">
   <!-- Keyboard shortcuts for the selection (Ctrl+A, Delete, Escape) arrive
        from whichever thumbnail or checkbox has focus. -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <aside
     data-thumbnail-scroll
-    class="flex w-44 shrink-0 select-none flex-col gap-2 overflow-y-auto border-r border-neutral-200 bg-neutral-50
+    class="flex w-full select-none flex-col gap-2 overflow-y-auto border-r border-neutral-200 bg-neutral-50
       p-3 dark:border-neutral-800 dark:bg-neutral-900"
     class:opacity-60={busy}
     aria-busy={busy}
@@ -493,6 +526,7 @@
             {isActive}
             isSelected={selectedSet.has(pageNumber)}
             {placeholderAspect}
+            scale={thumbScale}
             onSelect={(e) => onThumbnailClick(e, pageNumber)}
           />
 
@@ -611,6 +645,30 @@
       {/each}
     {/if}
   </aside>
+
+  <!-- Drag the edge to resize; double-click resets. Outside the scrolling
+       aside so it stays put while the thumbnails scroll. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    role="separator"
+    tabindex="0"
+    aria-orientation="vertical"
+    aria-label="Resize page sidebar"
+    aria-valuenow={$pageSidebarWidth}
+    aria-valuemin={PAGE_SIDEBAR_MIN_WIDTH}
+    aria-valuemax={PAGE_SIDEBAR_MAX_WIDTH}
+    use:tooltip={'Drag to resize · double-click to reset'}
+    class="absolute -right-1 bottom-0 top-0 z-20 w-2 cursor-col-resize touch-none transition-colors
+      hover:bg-blue-400/40 focus:bg-blue-400/40 focus:outline-none {resizing ? 'bg-blue-400/60' : ''}"
+    onpointerdown={onResizePointerDown}
+    onpointermove={onResizePointerMove}
+    onpointerup={onResizePointerUp}
+    onpointercancel={onResizePointerUp}
+    ondblclick={() => pageSidebarWidth.set(PAGE_SIDEBAR_DEFAULT_WIDTH)}
+    onkeydown={onResizeKeydown}
+  ></div>
+  </div>
 {/if}
 
 {#if menu}
