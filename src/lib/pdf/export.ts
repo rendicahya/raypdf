@@ -2,7 +2,6 @@ import { PDFDocument, PDFString, degrees } from '@cantoo/pdf-lib';
 import JSZip from 'jszip';
 import { loadPdf, getTotalRotation, type PdfDocument } from './loader';
 import { fillFormFields, type FormValues } from './forms';
-import { placementFromRatioForDocument } from './placement';
 import { stripEmbeddedScripts } from './sanitize';
 import { applyRedactions } from './redact';
 import { applyVisibleWatermark, type WatermarkOptions } from '../watermark/visible';
@@ -17,7 +16,6 @@ import type {
   PlacedText,
   RedactionBox,
 } from '../../stores/editor';
-import type { PlacementRatio } from '../../stores/placement';
 
 export interface ExportParams {
   pdfFile: File;
@@ -395,28 +393,6 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
   );
 }
 
-/**
- * Resolves what placements to use for a document: its own manual placements if
- * the user positioned any, otherwise the last-used ratio applied to page 1 —
- * matching the "Use last position" shortcut in the editor. Returns an empty
- * array if neither is available, meaning no signatures will be drawn.
- */
-export async function resolvePlacements(
-  doc: PdfDocumentState,
-  renderScale: number,
-  lastPlacementRatio: PlacementRatio | null,
-): Promise<PlacedSignature[]> {
-  if (doc.placedSignatures.length > 0) return doc.placedSignatures;
-  if (!lastPlacementRatio) return [];
-
-  const pdfjsDoc = await loadPdf(doc.file);
-  try {
-    const placement = await placementFromRatioForDocument(pdfjsDoc, 1, renderScale, doc.rotation, lastPlacementRatio);
-    return [placement];
-  } finally {
-    pdfjsDoc.destroy();
-  }
-}
 
 /**
  * Splits one document into one PDF per page — each with the same
@@ -464,20 +440,19 @@ export async function exportPagesAsZip(
 export interface BulkExportResult {
   zipBlob: Blob;
   exportedCount: number;
-  /** File names of documents skipped because they had neither a resolvable signature placement nor a redaction. */
+  /** File names of documents skipped because they had neither a placed signature nor any other edit. */
   skipped: string[];
 }
 
 /**
- * Exports every document that has a resolvable signature placement and/or a
- * redaction into a single ZIP. Documents with neither are skipped and
+ * Exports every document that has a placed signature and/or another edit
+ * into a single ZIP. Signatures are only drawn where the user placed them. Documents with neither are skipped and
  * reported back so the caller can tell the user.
  */
 export async function exportAllAsZip(
   documents: PdfDocumentState[],
   signatureBlob: Blob | null,
   renderScale: number,
-  lastPlacementRatio: PlacementRatio | null,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
   securePdf?: boolean,
@@ -487,7 +462,7 @@ export async function exportAllAsZip(
   const usedNames = new Set<string>();
 
   for (const doc of documents) {
-    const placements = signatureBlob ? await resolvePlacements(doc, renderScale, lastPlacementRatio) : [];
+    const placements = signatureBlob ? doc.placedSignatures : [];
     if (placements.length === 0 && !hasDocumentEdits(doc)) {
       skipped.push(doc.file.name);
       continue;
@@ -538,7 +513,6 @@ export async function exportMergedPdf(
   orderedIds: string[],
   signatureBlob: Blob | null,
   renderScale: number,
-  lastPlacementRatio: PlacementRatio | null,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
   securePdf?: boolean,
@@ -550,7 +524,7 @@ export async function exportMergedPdf(
     const doc = byId.get(id);
     if (!doc) continue;
 
-    const placements = signatureBlob ? await resolvePlacements(doc, renderScale, lastPlacementRatio) : [];
+    const placements = signatureBlob ? doc.placedSignatures : [];
     const bytes = await exportSignedPdf({
       pdfFile: doc.file,
       documentId: doc.id,

@@ -2,7 +2,6 @@
   import { editorStore, activeDocument, type PdfDocumentState } from '../stores/editor';
   import { signatureStore } from '../stores/signature';
   import { currentWatermarkOptions } from '../stores/watermark';
-  import { lastPlacement } from '../stores/placement';
   import { stripEmbeddedScripts, securePdf } from '../stores/exportOptions';
   import {
     exportSignedPdf,
@@ -14,7 +13,6 @@
     downloadZip,
     exportMergedPdf,
     downloadMergedPdf,
-    resolvePlacements,
     hasDocumentEdits,
     printPdfBytes,
   } from '../lib/pdf/export';
@@ -40,7 +38,8 @@
   // this document actually has, and only errors if it has neither.
   async function resolveExportInputs(doc: PdfDocumentState) {
     const sig = $signatureStore;
-    const placements = sig.signature ? await resolvePlacements(doc, $editorStore.renderScale, $lastPlacement) : [];
+    // Only signatures the user actually placed — never an implied position.
+    const placements = sig.signature ? doc.placedSignatures : [];
 
     if (placements.length === 0 && !hasDocumentEdits(doc)) {
       throw new Error(
@@ -201,7 +200,6 @@
         documents,
         sig.signature?.blob ?? null,
         $editorStore.renderScale,
-        $lastPlacement,
         currentWatermark(),
         $stripEmbeddedScripts,
         $securePdf,
@@ -249,7 +247,6 @@
         orderedIds,
         sig.signature?.blob ?? null,
         $editorStore.renderScale,
-        $lastPlacement,
         currentWatermark(),
         $stripEmbeddedScripts,
         $securePdf,
