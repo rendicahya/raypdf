@@ -9,7 +9,7 @@
   import ExportButton from './components/ExportButton.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
   import UpdateToast from './components/UpdateToast.svelte';
-  import VerifyPage from './components/VerifyPage.svelte';
+  import VerifyResults from './components/VerifyResults.svelte';
   import SearchBar from './components/SearchBar.svelte';
   import { search, openSearch, closeSearch } from './stores/search';
   import { editorStore, activeDocument } from './stores/editor';
@@ -31,31 +31,16 @@
   let isPageDragging = $state(false);
   let pageDragDepth = 0;
 
-  // The Verify page is a separate, stateless screen reachable via a plain
-  // URL hash — no router dependency needed for one extra page on a static,
-  // GitHub-Pages-hosted SPA, and a hash link stays shareable/bookmarkable.
-  let hash = $state(window.location.hash);
-  window.addEventListener('hashchange', () => {
-    hash = window.location.hash;
-    // The Verify page has its own isolated UploadCard whose drop handler
-    // stops propagation, so a drag started there never reaches onPageDrop
-    // below to clear these — reset on every navigation as a safety net.
-    pageDragDepth = 0;
-    isPageDragging = false;
-  });
-  const showVerifyPage = $derived(hash === '#/verify');
-
   const editor = $derived($editorStore);
   const active = $derived($activeDocument);
 
-  // Requires an explicit "Continue" on step 2 rather than jumping straight
-  // into the editor the moment a PDF is added, so the user gets a chance to
-  // review the batch (remove one, add more) first. Signing/redacting are
-  // both optional and handled entirely inside the editor now.
-  let continuedToEditor = $state(false);
+  // Step 2 asks what to do with the added PDFs rather than jumping straight
+  // into the editor, so the user can review the batch (remove one, add more)
+  // and pick between signing (the editor) and verifying (checked in place).
+  let choice: 'sign' | 'verify' | null = $state(null);
 
   $effect(() => {
-    if (editor.documents.length === 0) continuedToEditor = false;
+    if (editor.documents.length === 0) choice = null;
   });
 
   // Clear the drag overlay when PDFs are added (including via drop on UploadCard).
@@ -65,7 +50,7 @@
     isPageDragging = false;
   });
 
-  const readyForEditor = $derived(editor.documents.length > 0 && continuedToEditor);
+  const readyForEditor = $derived(editor.documents.length > 0 && choice === 'sign');
 
   function onPdfFiles(files: File[]) {
     const { unique } = dedupeFiles(files);
@@ -112,11 +97,7 @@
   // depth counter is needed to know when the pointer has actually left the
   // page rather than just crossed into a child element.
   function isFileDrag(e: DragEvent): boolean {
-    // Excludes the Verify page — its own UploadCard handles drags in
-    // isolation (and stops propagation on drop), so counting them here would
-    // leave pageDragDepth/isPageDragging stuck with no matching drop to
-    // reset them.
-    return !readyForEditor && !showVerifyPage && !!e.dataTransfer?.types.includes('Files');
+    return !readyForEditor && !!e.dataTransfer?.types.includes('Files');
   }
 
   function onPageDragEnter(e: DragEvent) {
@@ -273,9 +254,9 @@
 
 <main
   class="min-h-screen"
-  class:flex={readyForEditor && !showVerifyPage}
-  class:h-screen={readyForEditor && !showVerifyPage}
-  class:flex-col={readyForEditor && !showVerifyPage}
+  class:flex={readyForEditor}
+  class:h-screen={readyForEditor}
+  class:flex-col={readyForEditor}
   ondragenter={onPageDragEnter}
   ondragover={onPageDragOver}
   ondragleave={onPageDragLeave}
@@ -283,9 +264,6 @@
 >
   <UpdateToast />
 
-  {#if showVerifyPage}
-    <VerifyPage />
-  {:else}
   {#if isPageDragging}
     <div class="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-3xl border-4
       border-dashed border-blue-500 bg-blue-50/80 backdrop-blur-sm dark:bg-blue-950/80">
@@ -315,7 +293,7 @@
         </div>
         <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">Signy</h1>
         <p class="mx-auto mt-3 max-w-sm text-neutral-500 dark:text-neutral-400">
-          Sign PDFs with a protected handwritten signature, and redact sensitive content, entirely in your browser.
+          Add a PDF, then sign it or verify it, entirely in your browser.
         </p>
         <div class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50
           px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950
@@ -341,9 +319,32 @@
             onFiles={onPdfFiles}
           />
         </div>
+      {:else if choice === 'verify'}
+        <!-- Verify: every added PDF is checked in place, no editor needed. -->
+        <div class="flex w-full max-w-md flex-col gap-4">
+          <VerifyResults documents={editor.documents} />
+          <div class="flex items-center justify-between text-sm font-medium">
+            <button
+              type="button"
+              class="text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400
+                dark:hover:text-neutral-200"
+              onclick={() => (choice = null)}
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              class="text-blue-600 hover:underline dark:text-blue-400"
+              onclick={() => (choice = 'sign')}
+            >
+              Sign instead →
+            </button>
+          </div>
+        </div>
       {:else}
-        <!-- Step 2: PDFs are in — review the batch, then continue. Signing
-             and redacting are both optional and handled inside the editor. -->
+        <!-- Step 2: PDFs are in. Review the batch, then choose to sign
+             (the editor, where signing, redacting, etc. are all optional)
+             or to verify. -->
         <div class="flex w-full max-w-md flex-col gap-6">
           <div class="flex max-h-[60vh] w-full flex-col gap-2 rounded-2xl border border-neutral-200 bg-neutral-50
             p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -391,25 +392,39 @@
             </ul>
           </div>
 
-          <button
-            type="button"
-            class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm
-              font-medium text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
-            onclick={() => (continuedToEditor = true)}
-          >
-            Continue to Editor
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </button>
+          <div class="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              class="flex flex-col items-center gap-1 rounded-2xl bg-blue-600 px-4 py-4 text-white shadow-sm
+                shadow-blue-600/20 transition-colors hover:bg-blue-700"
+              onclick={() => (choice = 'sign')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
+              </svg>
+              <span class="font-semibold">Sign</span>
+              <span class="text-xs text-blue-100">Sign, fill, mark up, or redact</span>
+            </button>
+            <button
+              type="button"
+              class="flex flex-col items-center gap-1 rounded-2xl border border-neutral-200 bg-white px-4 py-4
+                shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-neutral-800
+                dark:bg-neutral-900 dark:hover:border-blue-800 dark:hover:bg-blue-950/40"
+              onclick={() => (choice = 'verify')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                class="h-6 w-6 text-emerald-600 dark:text-emerald-400">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6l8-3z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 12l2.5 2.5 4.5-5" />
+              </svg>
+              <span class="font-semibold">Verify</span>
+              <span class="text-xs text-neutral-500 dark:text-neutral-400">Check for a Signy record</span>
+            </button>
+          </div>
         </div>
       {/if}
-
-      <p class="text-xs">
-        <a href="#/verify" class="text-neutral-400 hover:text-neutral-600 hover:underline dark:hover:text-neutral-200">
-          Have a signed PDF? Verify it →
-        </a>
-      </p>
     </div>
   {:else if active}
     <Toolbar />
@@ -456,6 +471,5 @@
         </div>
       </aside>
     </div>
-  {/if}
   {/if}
 </main>

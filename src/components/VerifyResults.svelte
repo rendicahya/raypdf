@@ -1,25 +1,33 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { PDFDocument } from '@cantoo/pdf-lib';
-  import UploadCard from './UploadCard.svelte';
-  import ThemeToggle from './ThemeToggle.svelte';
   import { extractVerificationRecord, type VerificationRecord } from '../lib/pdf/verification';
 
-  const PDF_ACCEPT = 'application/pdf,.pdf';
+  interface Props {
+    documents: { id: string; file: File }[];
+  }
+
+  let { documents }: Props = $props();
 
   type Result =
-    | { status: 'idle' }
-    | { status: 'checking'; fileName: string }
-    | { status: 'found'; fileName: string; record: VerificationRecord }
-    | { status: 'not-found'; fileName: string }
-    | { status: 'error'; fileName: string; message: string };
+    | { status: 'checking' }
+    | { status: 'found'; record: VerificationRecord }
+    | { status: 'not-found' }
+    | { status: 'error'; message: string };
 
-  let result: Result = $state({ status: 'idle' });
+  // Keyed by document id, so PDFs added while this view is open (e.g. dropped
+  // onto the page) get checked too, and each file is only read once.
+  let results: Record<string, Result> = $state({});
 
-  async function onFile(files: File[]) {
-    const file = files[0];
-    if (!file) return;
+  $effect(() => {
+    for (const doc of documents) {
+      if (untrack(() => results[doc.id])) continue;
+      results[doc.id] = { status: 'checking' };
+      check(doc.id, doc.file);
+    }
+  });
 
-    result = { status: 'checking', fileName: file.name };
+  async function check(id: string, file: File) {
     try {
       const bytes = await file.arrayBuffer();
       // updateMetadata: false — this is a read-only check, no reason to let
@@ -29,11 +37,10 @@
       // them (and is simply ignored for a file that isn't encrypted at all).
       const pdfDoc = await PDFDocument.load(bytes, { updateMetadata: false, password: '' });
       const record = extractVerificationRecord(pdfDoc);
-      result = record ? { status: 'found', fileName: file.name, record } : { status: 'not-found', fileName: file.name };
+      results[id] = record ? { status: 'found', record } : { status: 'not-found' };
     } catch (e) {
-      result = {
+      results[id] = {
         status: 'error',
-        fileName: file.name,
         message: e instanceof Error ? e.message : 'Could not read this file as a PDF.',
       };
     }
@@ -46,51 +53,29 @@
     const timePart = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
     return `${datePart}, ${timePart}`;
   }
-
-  function checkAnother() {
-    result = { status: 'idle' };
-  }
 </script>
 
-<div class="fixed right-4 top-4 z-10">
-  <ThemeToggle />
-</div>
+<div class="flex w-full flex-col gap-3">
+  <p class="text-center text-xs text-neutral-400 dark:text-neutral-500">
+    Checks for the Signy export record (document id, name, and export time) embedded when a PDF is saved from
+    Signy. This confirms the file passed through Signy; it isn't a cryptographic guarantee the pages weren't edited
+    afterward.
+  </p>
 
-<div class="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-8 px-6 py-16">
-  <div class="text-center">
-    <h1 class="text-3xl font-semibold">Verify a PDF</h1>
-    <p class="mt-2 text-neutral-500 dark:text-neutral-400">
-      Check whether a PDF carries a Signy export record: the document id, name, and export time embedded when it
-      was last saved from Signy.
-    </p>
-    <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">
-      This confirms the file passed through Signy; it isn't a cryptographic guarantee the pages weren't edited
-      afterward. Nothing here leaves your browser.
-    </p>
-  </div>
-
-  {#if result.status === 'idle' || result.status === 'checking'}
-    <div class="w-full max-w-md">
-      <UploadCard
-        title="Check a PDF"
-        subtitle="Drag & drop or click to browse"
-        accept={PDF_ACCEPT}
-        errorMessage="Please choose a PDF file."
-        onFiles={onFile}
-      />
-      {#if result.status === 'checking'}
-        <p class="mt-3 text-center text-sm text-neutral-500 dark:text-neutral-400">Checking {result.fileName}…</p>
-      {/if}
-    </div>
-  {:else}
-    <div class="w-full max-w-md rounded-2xl border p-5
+  {#each documents as doc (doc.id)}
+    {@const result = results[doc.id] ?? { status: 'checking' }}
+    <div class="w-full rounded-2xl border p-5
       {result.status === 'found'
         ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40'
         : result.status === 'not-found'
           ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40'
-          : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40'}"
+          : result.status === 'error'
+            ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40'
+            : 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900'}"
     >
-      {#if result.status === 'found'}
+      {#if result.status === 'checking'}
+        <p class="truncate text-sm text-neutral-500 dark:text-neutral-400">Checking {doc.file.name}…</p>
+      {:else if result.status === 'found'}
         <div class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-5 w-5 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -100,7 +85,7 @@
         <dl class="mt-4 space-y-2 text-sm">
           <div class="flex justify-between gap-4">
             <dt class="text-neutral-500 dark:text-neutral-400">File</dt>
-            <dd class="min-w-0 truncate text-right font-medium">{result.fileName}</dd>
+            <dd class="min-w-0 truncate text-right font-medium">{doc.file.name}</dd>
           </div>
           <div class="flex justify-between gap-4">
             <dt class="text-neutral-500 dark:text-neutral-400">Document name</dt>
@@ -130,7 +115,7 @@
           <span class="font-medium">No Signy record found</span>
         </div>
         <p class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-          "{result.fileName}" doesn't carry a Signy export record. It may never have gone through Signy, or the
+          "{doc.file.name}" doesn't carry a Signy export record. It may never have gone through Signy, or the
           metadata was stripped or overwritten by another tool since.
         </p>
       {:else}
@@ -138,22 +123,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-5 w-5 shrink-0">
             <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
           </svg>
-          <span class="font-medium">Couldn't read this file</span>
+          <span class="min-w-0 truncate font-medium">Couldn't read {doc.file.name}</span>
         </div>
         <p class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{result.message}</p>
       {/if}
     </div>
-
-    <button
-      type="button"
-      class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-      onclick={checkAnother}
-    >
-      Check another PDF
-    </button>
-  {/if}
-
-  <a href="#/" class="text-sm text-neutral-400 hover:text-neutral-600 hover:underline dark:hover:text-neutral-200">
-    ← Back to Signy
-  </a>
+  {/each}
 </div>

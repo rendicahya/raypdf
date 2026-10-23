@@ -235,7 +235,7 @@ components/
 - FloatingControls (the bottom toolbar)
 - SignaturePanel
 - ExportButton, MergeOrderDialog, StartOverButton
-- VerifyPage
+- VerifyResults (the Verify choice on the front page; checks every added PDF in place)
 - ThemeToggle, FullscreenToggle, UpdateToast
 - ContextMenu (reusable right-click menu; used by PageSidebar and PDFViewer, icons in `lib/utils/menuIcons.ts`)
 

@@ -27,6 +27,7 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Getting started
 
 - Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
+- Then choose what to do with them: **Sign** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a Signy record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
 - **Keep several signatures**, say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.
 
@@ -83,7 +84,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Verify
 
-- The **Verify** page reads a PDF's Signy record back, showing whether and when it was exported by Signy. This confirms provenance, not that the pages are unchanged since. That's what the planned invisible watermark is for.
+- Add one or more PDFs and choose **Verify** to read each one's Signy record back, showing whether and when it was exported by Signy. You can switch to signing the same files from there. This confirms provenance, not that the pages are unchanged since. That's what the planned invisible watermark is for.
 
 ### Offline (PWA)
 
@@ -114,7 +115,7 @@ Project guidelines (product vision, principles, UX rules, code structure, and wo
 
 ### Layout
 
-- `src/components/`: UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyPage`, …)
+- `src/components/`: UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyResults`, …)
 - `src/stores/`: app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
 - `src/lib/pdf/`: loading, rendering, export, redaction, page operations, form filling, screenshots, verification
 - `src/lib/watermark/`: visible watermark layout and rendering
