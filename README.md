@@ -26,8 +26,9 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Getting started
 
-- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse), then upload a signature image. Files are type- and size-checked (50 MB per PDF, 10 MB per signature).
-- The signature is saved in IndexedDB, so returning users only need to upload a new PDF. It can be replaced or deleted at any time.
+- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
+- **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
+- **Keep several signatures** — say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.
 
 ### Editor
 
@@ -37,7 +38,8 @@ It is **not** a replacement for PKI-based digital signatures.
 - **Select several pages** with Ctrl/⌘-click, Shift-click for a range, the checkbox on each thumbnail, or Ctrl+A. A bar at the top of the sidebar then rotates, saves (as one PDF with just those pages), or deletes them all at once; `Delete` and `Esc` work too.
 - **Right-click a thumbnail** for a menu with the same actions — on the whole selection if the page is part of it, otherwise on just that page (rotate, duplicate, insert a blank page after, save as PDF, select, delete).
 - **Resize the sidebar** by dragging its right edge (or focusing it and using the arrow keys); double-click the edge to reset. The width is remembered, and thumbnails render sharper as it grows.
-- **Right-click the document** for a menu that fits what's under the pointer: on the page, place the signature, add text or a comment right there, zoom, rotate the page, or copy it as an image; on selected text, copy or highlight it; on a placed signature, redaction, text box, comment, or highlight, edit or delete it.
+- **Right-click the document** for a menu that fits what's under the pointer: on the page, place the signature, add text or a comment right there, zoom, rotate the page, or copy it as an image; on selected text, copy, highlight, underline, or strike it through; on a markup, change its color or remove it; on a placed signature, redaction, text box, or comment, edit or delete it.
+- **Find in the document** with Ctrl+F (⌘F) or the search button: matches on every page are counted, highlighted on the page, and stepped through with Enter / Shift+Enter. Matching ignores case and treats line breaks as spaces.
 - **Fill in PDF forms**: a PDF's own text fields, checkboxes, radio buttons, and dropdowns can be filled in directly on the page. The values are written into the real fields on export, so the result is still a normal fillable form.
 - **Floating toolbar** (icon-only, with instant tooltips):
   - Undo / Redo (`Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y`)
@@ -50,14 +52,14 @@ It is **not** a replacement for PKI-based digital signatures.
     - **Add Text** — click to place a text box (font, size, style, color, spacing, alignment).
     - **Comment** — click to leave a sticky note, exported as a real PDF annotation.
     - **Zoom** — click to zoom in at that spot, right-click to zoom out.
-    - **Select** — select and copy the PDF's real text. After selecting, a **Highlight** button appears below the selection to highlight it permanently; the highlight is exported as a real PDF Highlight annotation. Click a highlight to select it, then remove it with its × button or `Delete`.
+    - **Select** — select and copy the PDF's real text. After selecting, a small toolbar appears below the selection to **highlight, underline, or strike through** the text permanently, in one of five colors. Each is exported as a real PDF markup annotation (Highlight, Underline, StrikeOut). Click a markup to recolor it or remove it (also `Delete`).
     - **Screenshot** — click a page to capture all of it, or drag a rectangle to capture an area. The image is copied to the clipboard, with a **Save PNG** option. Captures include placed signatures (with their watermark), text, highlights, redactions, and form values — everything except comments, which are notes rather than page content.
   - **Apply redaction to all documents** (when several PDFs are open).
 - Dark mode (follows the OS by default) and fullscreen.
 
 ### Placing the signature
 
-- Drag the signature from the right sidebar onto the page, or click it to place it. Click-to-place mode follows the cursor.
+- Drag a signature from the right sidebar onto the page, or click the large preview to place the active one. Click-to-place mode follows the cursor.
 - Move and resize (aspect ratio locked); several signatures per document are supported. Selected items can be nudged with the arrow keys and removed with `Delete`.
 - **Find Signature Spot** scans the page text for signature lines or labels ("Signature", "Tanda Tangan", "TTD") and suggests a spot — it never places anything without confirmation.
 - **Use last position** re-applies the last placement (as a ratio of the page) to the current page.

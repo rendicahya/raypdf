@@ -132,7 +132,11 @@ Supported interactions:
 
 Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot.
 
-Selecting text shows a Highlight button; highlights are stored per document (one box per line, grouped by `groupId`) and exported as PDF Highlight annotations (`lib/pdf/highlight.ts`).
+Selecting text shows a markup toolbar (highlight / underline / strikethrough, five colors); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`).
+
+Ctrl+F opens SearchBar (`stores/search.ts`, `lib/pdf/search.ts`): matches are counted from pdf.js text content and boxed on screen from the text layer.
+
+Several signatures can be saved (drawn, typed, or uploaded — `SignatureCreator`, `lib/signature/create.ts`); every `PlacedSignature` has a `signatureId`, and export takes a `signatureFor` lookup rather than one image.
 
 Tools are mutually exclusive: turning one on turns the others off, and Escape or Move returns to the default. A new tool must be added to every place that resets the others (FloatingControls, SignaturePanel's click-to-place, App's Escape handler, PDFViewer's hover/pan checks).
 
@@ -225,7 +229,7 @@ Users should never need to upload their signature every time they use Signy.
 
 components/
 
-- UploadCard, SignatureUploader
+- UploadCard, SignatureCreator, SearchBar
 - PDFViewer, PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
@@ -237,9 +241,9 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, forms, highlight, pageOps, redact, sanitize, placement, screenshot, signatureDetect, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, signatureDetect, textLayer, textRender, verification
 - watermark/ — visible watermark
-- signature/ — IndexedDB storage, sizing
+- signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange
 
 stores/

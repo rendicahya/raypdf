@@ -4,9 +4,11 @@
   import StartOverButton from './StartOverButton.svelte';
   import DocumentTabs from './DocumentTabs.svelte';
   import { editorStore } from '../stores/editor';
+  import { openSearch } from '../stores/search';
   import { isFileAccepted, dedupeFiles, formatFileSize, MAX_PDF_SIZE_BYTES } from '../lib/utils/fileValidation';
 
   const PDF_ACCEPT = 'application/pdf,.pdf';
+  const findShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘F' : 'Ctrl+F';
 
   let addPdfsError: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -70,6 +72,19 @@
     </div>
 
     <div class="ml-auto flex shrink-0 items-center gap-1 pb-2">
+      <button
+        type="button"
+        aria-label="Find in document"
+        title="Find in document ({findShortcut})"
+        class="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors
+          hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800
+          dark:hover:text-neutral-100"
+        onclick={openSearch}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3" />
+        </svg>
+      </button>
       <FullscreenToggle />
       <ThemeToggle />
     </div>

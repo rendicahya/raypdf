@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { getCachedPdf } from '../lib/pdf/docCache';
@@ -15,6 +15,8 @@
     type Box,
   } from '../lib/pdf/highlight';
   import { markupColor } from '../stores/markup';
+  import { search } from '../stores/search';
+  import { findInTextLayer } from '../lib/pdf/search';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
   import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
@@ -269,11 +271,48 @@
       return;
     }
 
-    renderTextLayer(pdfDoc, doc.pageNumber, textLayerEl, scale, doc.rotation).catch((e) => {
-      error = e instanceof Error ? e.message : 'Failed to render selectable text';
-    });
+    renderTextLayer(pdfDoc, doc.pageNumber, textLayerEl, scale, doc.rotation)
+      .then((handle) => {
+        if (handle) textLayerVersion++;
+      })
+      .catch((e) => {
+        error = e instanceof Error ? e.message : 'Failed to render selectable text';
+      });
 
     return () => cancelTextLayer(textLayerEl);
+  });
+
+  // Find-in-document (SearchBar): every match on this page, boxed from the
+  // rendered text layer once it's ready, with the current one stronger and
+  // scrolled into view. Bumped each time the text layer finishes rendering.
+  let textLayerVersion = $state(0);
+  let searchHits: { boxes: Box[]; current: boolean }[] = $state([]);
+
+  $effect(() => {
+    void textLayerVersion;
+    const { open, query, matches, current } = $search;
+    const page = viewPage;
+    if (!open || !textLayerEl || !canvasEl || matches.length === 0) {
+      searchHits = [];
+      return;
+    }
+    const currentMatch = matches[current];
+    const canvasRect = canvasEl.getBoundingClientRect();
+    searchHits = findInTextLayer(textLayerEl, query).map((range, index) => {
+      const rects = Array.from(range.getClientRects(), (r) => ({
+        x: r.left - canvasRect.left,
+        y: r.top - canvasRect.top,
+        width: r.width,
+        height: r.height,
+      }));
+      return {
+        boxes: selectionToBoxes(rects, pageVertical),
+        current: currentMatch?.page === page && currentMatch.index === index,
+      };
+    });
+    tick().then(() =>
+      wrapperEl?.querySelector('[data-search-current]')?.scrollIntoView({ block: 'center', inline: 'nearest' }),
+    );
   });
 
   // The PDF's own form fields on this page (lib/pdf/forms.ts), positioned in
@@ -1720,6 +1759,22 @@
        never steals clicks/drags meant for the canvas or the other overlays
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
+
+  <!-- Search matches: drawn under everything else and never take clicks. -->
+  {#each searchHits as hit}
+    {#each hit.boxes as box, i}
+      <div
+        data-search-current={hit.current && i === 0 ? '' : undefined}
+        class="pointer-events-none absolute rounded-sm mix-blend-multiply {hit.current
+          ? 'bg-orange-400/80 outline outline-2 outline-orange-500'
+          : 'bg-amber-300/50'}"
+        style:left="{box.x - 1}px"
+        style:top="{box.y - 1}px"
+        style:width="{box.width + 2}px"
+        style:height="{box.height + 2}px"
+      ></div>
+    {/each}
+  {/each}
 
   <!-- Markups sit above the text layer so they can be clicked (then
        recolored or removed) in Move mode; in every other mode they let clicks

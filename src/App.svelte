@@ -10,6 +10,8 @@
   import ThemeToggle from './components/ThemeToggle.svelte';
   import UpdateToast from './components/UpdateToast.svelte';
   import VerifyPage from './components/VerifyPage.svelte';
+  import SearchBar from './components/SearchBar.svelte';
+  import { search, openSearch, closeSearch } from './stores/search';
   import { editorStore, activeDocument } from './stores/editor';
   import { theme } from './stores/theme';
   import { pageSidebarOpen, pageSidebarWidth, togglePageSidebar } from './stores/layout';
@@ -184,6 +186,14 @@
   function onGlobalKeydown(e: KeyboardEvent) {
     if (!readyForEditor) return;
 
+    // Ctrl/Cmd+F: find in the document instead of the browser's own find,
+    // which can't see text drawn on the PDF canvas. Works from any field.
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      openSearch();
+      return;
+    }
+
     const target = e.target as HTMLElement | null;
     if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
 
@@ -218,6 +228,11 @@
       if ($screenshotToolMode) {
         e.preventDefault();
         screenshotToolMode.set(false);
+        return;
+      }
+      if ($search.open) {
+        e.preventDefault();
+        closeSearch();
         return;
       }
     }
@@ -455,6 +470,7 @@
         </svg>
       </button>
       <div class="relative flex flex-1 flex-col overflow-hidden">
+        <SearchBar />
         <div class="flex-1 overflow-auto px-6 py-8" data-pdf-scroll-container>
           {#key active.id}
             <PDFViewer />
