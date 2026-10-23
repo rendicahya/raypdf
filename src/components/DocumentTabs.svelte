@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { editorStore, activeDocument } from '../stores/editor';
   import { clearCachedPdf } from '../lib/pdf/docCache';
@@ -40,17 +40,43 @@
   let draggingId: string | null = $state(null);
   let dragStartX = 0;
   let pressedId: string | null = null;
+  // Where on the tab it was grabbed, so it stays under the pointer at the same spot.
+  let grabOffset = 0;
+  let lastPointerX = 0;
+  // How far the dragged tab is shifted from its slot so it follows the pointer.
+  let dragShift = $state(0);
+
+  function tabEl(id: string) {
+    return tablistEl.querySelector<HTMLElement>(`[data-tab-id="${id}"]`);
+  }
 
   function onTabPointerDown(e: PointerEvent, id: string) {
     if (e.button !== 0 || (e.target as Element).closest('button')) return;
     pressedId = id;
     dragStartX = e.clientX;
+    grabOffset = e.clientX - (e.currentTarget as HTMLElement).getBoundingClientRect().left;
     window.addEventListener('pointermove', onDragMove);
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', endDrag);
   }
 
-  function onDragMove(e: PointerEvent) {
+  // Positions are layout ones (offsetLeft, relative to the tab strip), not
+  // on-screen ones: the slide animation shifts tabs with transforms, which
+  // would make both the target slot and the shift flicker.
+  function stripX(clientX: number) {
+    return clientX - tablistEl.getBoundingClientRect().left + tablistEl.scrollLeft;
+  }
+
+  /** Shifts the dragged tab from its slot to under the pointer, kept within the strip. */
+  function updateDragShift() {
+    const el = draggingId ? tabEl(draggingId) : null;
+    if (!el) return;
+    const maxLeft = tablistEl.scrollWidth - el.offsetWidth;
+    const left = Math.min(Math.max(stripX(lastPointerX) - grabOffset, 0), Math.max(maxLeft, 0));
+    dragShift = left - el.offsetLeft;
+  }
+
+  async function onDragMove(e: PointerEvent) {
     if (!pressedId) return;
     if (!draggingId) {
       if (Math.abs(e.clientX - dragStartX) < DRAG_THRESHOLD) return;
@@ -58,20 +84,28 @@
       selectDocument(pressedId);
     }
     e.preventDefault();
+    lastPointerX = e.clientX;
 
-    // Layout positions (offsetLeft), not on-screen ones: the slide animation
-    // shifts tabs with transforms, which would make the target flicker.
-    const pointerX = e.clientX - tablistEl.getBoundingClientRect().left + tablistEl.scrollLeft;
+    const dragged = tabEl(draggingId);
+    if (!dragged) return;
+    // The tab takes a new slot once its center passes another tab's center.
+    const center = stripX(e.clientX) - grabOffset + dragged.offsetWidth / 2;
     const others = Array.from(tablistEl.querySelectorAll<HTMLElement>('[data-tab-id]')).filter(
-      (el) => el.dataset.tabId !== draggingId,
+      (el) => el !== dragged,
     );
-    const target = others.filter((el) => el.offsetLeft + el.offsetWidth / 2 < pointerX).length;
-    if (target !== indexOf(draggingId)) editorStore.moveDocument(draggingId, target);
+    const target = others.filter((el) => el.offsetLeft + el.offsetWidth / 2 < center).length;
+    if (target !== indexOf(draggingId)) {
+      editorStore.moveDocument(draggingId, target);
+      // Wait for the tab to land in its new slot before measuring it.
+      await tick();
+    }
+    updateDragShift();
   }
 
   function endDrag() {
     pressedId = null;
     draggingId = null;
+    dragShift = 0;
     window.removeEventListener('pointermove', onDragMove);
     window.removeEventListener('pointerup', endDrag);
     window.removeEventListener('pointercancel', endDrag);
@@ -228,7 +262,8 @@
       title={$editorStore.documents.length > 1 ? `${doc.file.name} — drag to reorder` : doc.file.name}
       class="group flex min-w-0 max-w-[10rem] shrink-0 cursor-pointer touch-none select-none items-center gap-1.5
         rounded-t-lg border border-b-0 px-3 py-1.5 text-xs transition-colors
-        {isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS} {isDragging ? 'z-10 cursor-grabbing shadow-md' : ''}"
+        {isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS} {isDragging ? 'relative z-10 cursor-grabbing shadow-md' : ''}"
+      style:transform={isDragging ? `translateX(${dragShift}px)` : null}
       onpointerdown={(e) => onTabPointerDown(e, doc.id)}
       onclick={() => selectDocument(doc.id)}
       onkeydown={(e) => onTabKeydown(e, doc.id)}
