@@ -329,38 +329,6 @@
       </div>
 
       {#if editor.documents.length === 0}
-        <!-- Value-prop strip — shown only before the first PDF is added, so
-             it doesn't compete with the file review list in step 2. -->
-        <div class="grid w-full max-w-md grid-cols-3 gap-3">
-          <div class="flex flex-col items-center gap-1.5 rounded-xl border border-neutral-200 bg-white/70 px-2 py-3
-            text-center backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/60">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              class="h-5 w-5 text-blue-600 dark:text-blue-400">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M3 17c2-4 3 4 5 0s3-8 5-4 2 6 4 2 2-3 4-1" />
-            </svg>
-            <span class="text-xs font-medium text-neutral-600 dark:text-neutral-300">Sign</span>
-          </div>
-          <div class="flex flex-col items-center gap-1.5 rounded-xl border border-neutral-200 bg-white/70 px-2 py-3
-            text-center backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/60">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              class="h-5 w-5 text-blue-600 dark:text-blue-400">
-              <rect x="4" y="4" width="16" height="16" rx="2" />
-              <path stroke-linecap="round" d="M8 12h8" />
-            </svg>
-            <span class="text-xs font-medium text-neutral-600 dark:text-neutral-300">Redact</span>
-          </div>
-          <div class="flex flex-col items-center gap-1.5 rounded-xl border border-neutral-200 bg-white/70 px-2 py-3
-            text-center backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/60">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              class="h-5 w-5 text-blue-600 dark:text-blue-400">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z" />
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9.5 12l2 2 3.5-3.5" />
-            </svg>
-            <span class="text-xs font-medium text-neutral-600 dark:text-neutral-300">Protect</span>
-          </div>
-        </div>
-
         <!-- Step 1: add PDFs. -->
         <div class="w-full max-w-md">
           <UploadCard
