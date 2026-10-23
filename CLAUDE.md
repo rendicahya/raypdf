@@ -233,6 +233,7 @@ components/
 - ExportButton, MergeOrderDialog, StartOverButton
 - VerifyPage
 - ThemeToggle, FullscreenToggle, UpdateToast
+- ContextMenu (reusable right-click menu; used by PageSidebar)
 
 lib/
 

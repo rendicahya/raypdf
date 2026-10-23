@@ -10,6 +10,7 @@
   import { exportSignedPdf, downloadSelectedPagesPdf } from '../lib/pdf/export';
   import { tooltip } from '../lib/utils/tooltip';
   import PageThumbnail from './PageThumbnail.svelte';
+  import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
 
   let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
@@ -162,11 +163,10 @@
     runPageEdit(() => editorStore.rotatePages(pages, delta), 'Failed to rotate the pages');
   }
 
-  // Saves just the selected pages, with everything placed on them, as one PDF.
-  async function exportSelected() {
+  // Saves just the given pages, with everything placed on them, as one PDF.
+  async function exportPages(pages: number[]) {
     const doc = $activeDocument;
-    if (!doc || !selecting || busy) return;
-    const pages = selected;
+    if (!doc || pages.length === 0 || busy) return;
     const signatureBlob = $signatureStore.signature?.blob;
     const placements = signatureBlob ? doc.placedSignatures : [];
     busy = true;
@@ -196,6 +196,105 @@
     } finally {
       busy = false;
     }
+  }
+
+  // Right-click menu on a thumbnail. Right-clicking a page that's part of the
+  // selection acts on the whole selection; any other page becomes the only
+  // one selected first, like a file manager.
+  let menu: { x: number; y: number; items: ContextMenuItem[] } | null = $state(null);
+
+  const ICONS = {
+    open: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+    rotateLeft: 'M3 12a9 9 0 1 0 3-6.7L3 8 M3 3v5h5',
+    rotateRight: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
+    duplicate: 'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
+    insert: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z M12 11v6 M9 14h6',
+    save: 'M12 4v11m0 0-4-4m4 4 4-4 M5 20h14',
+    select: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z m2 8 3 3 5-6',
+    clear: 'M6 6l12 12 M18 6L6 18',
+    delete: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12 M9 7V4h6v3',
+  };
+
+  function onThumbnailContextMenu(e: MouseEvent, pageNumber: number) {
+    if (busy) return;
+    e.preventDefault();
+    if (!selectedSet.has(pageNumber)) clearSelection();
+    const pages = selectedSet.has(pageNumber) ? selected : [pageNumber];
+    const many = pages.length > 1;
+    const count = many ? `${pages.length} pages` : 'page';
+    const canDelete = pages.length < pageNumbers.length;
+
+    const items: ContextMenuItem[] = [
+      ...(many
+        ? []
+        : [{ label: 'Go to page', icon: ICONS.open, onSelect: () => editorStore.goToPage(pageNumber) }]),
+      {
+        label: many ? `Rotate ${count} left` : 'Rotate left',
+        icon: ICONS.rotateLeft,
+        separatorBefore: !many,
+        onSelect: () => runPageEdit(() => editorStore.rotatePages(pages, -90), 'Failed to rotate'),
+      },
+      {
+        label: many ? `Rotate ${count} right` : 'Rotate right',
+        icon: ICONS.rotateRight,
+        onSelect: () => runPageEdit(() => editorStore.rotatePages(pages, 90), 'Failed to rotate'),
+      },
+      ...(many
+        ? []
+        : [
+            {
+              label: 'Duplicate',
+              icon: ICONS.duplicate,
+              onSelect: () => {
+                clearSelection();
+                runPageEdit(() => editorStore.duplicatePage(pageNumber), 'Failed to duplicate the page');
+              },
+            },
+            {
+              label: 'Insert blank page after',
+              icon: ICONS.insert,
+              onSelect: () => {
+                clearSelection();
+                runPageEdit(() => editorStore.insertBlankPage(pageNumber), 'Failed to insert a page');
+              },
+            },
+          ]),
+      {
+        label: many ? `Save ${count} as PDF` : 'Save page as PDF',
+        icon: ICONS.save,
+        separatorBefore: true,
+        onSelect: () => exportPages(pages),
+      },
+      many
+        ? { label: 'Clear selection', icon: ICONS.clear, hint: 'Esc', separatorBefore: true, onSelect: clearSelection }
+        : {
+            label: 'Select page',
+            icon: ICONS.select,
+            separatorBefore: true,
+            onSelect: () => togglePage(pageNumber),
+          },
+      {
+        label: 'Select all pages',
+        icon: ICONS.select,
+        hint: 'Ctrl+A',
+        disabled: selected.length === pageNumbers.length,
+        onSelect: selectAll,
+      },
+      {
+        label: many ? `Delete ${count}` : 'Delete page',
+        icon: ICONS.delete,
+        hint: 'Del',
+        danger: true,
+        separatorBefore: true,
+        disabled: !canDelete,
+        onSelect: () => {
+          clearSelection();
+          runPageEdit(() => editorStore.deletePages(pages), 'Failed to delete');
+        },
+      },
+    ];
+
+    menu = { x: e.clientX, y: e.clientY, items };
   }
 
   function onSidebarKeydown(e: KeyboardEvent) {
@@ -347,7 +446,7 @@
               aria-label="Save selected pages as a PDF"
               use:tooltip={'Save selected pages as a PDF'}
               disabled={busy}
-              onclick={exportSelected}
+              onclick={() => exportPages(selected)}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />
@@ -382,6 +481,7 @@
           ondragover={(e) => onDragOver(e, pageNumber)}
           ondrop={onDrop}
           ondragend={resetDrag}
+          oncontextmenu={(e) => onThumbnailContextMenu(e, pageNumber)}
         >
           {#if showIndicator(pageNumber)}
             <div class="pointer-events-none absolute -top-1.5 left-0 right-0 h-0.5 rounded bg-blue-500"></div>
@@ -511,4 +611,8 @@
       {/each}
     {/if}
   </aside>
+{/if}
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
 {/if}
