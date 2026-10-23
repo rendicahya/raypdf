@@ -1,6 +1,6 @@
 # Signy
 
-Sign PDF documents with protected handwritten signatures, entirely in your browser.
+Sign PDF documents with protected handwritten signatures, or verify PDFs signed with Signy, entirely in your browser. Add a PDF, then choose **Sign** or **Verify**.
 
 No backend, no uploads, no accounts. Everything runs client-side and works fully offline once loaded. A "100% local" badge on the landing screen says so before any file is touched.
 
