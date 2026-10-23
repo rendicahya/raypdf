@@ -442,7 +442,7 @@
       type="button"
       aria-label="Move"
       aria-pressed={moveModeActive}
-      use:tooltip={'Move — drag existing signatures, text, or redactions around (default)'}
+      use:tooltip={'Move: drag existing signatures, text, or redactions around (default)'}
       class={toolButtonClass}
       class:border-neutral-200={!moveModeActive}
       class:text-neutral-600={!moveModeActive}
@@ -471,7 +471,7 @@
       type="button"
       aria-label="Redact"
       aria-pressed={$redactMode}
-      use:tooltip={'Redact — draw a box to permanently remove content from the exported PDF'}
+      use:tooltip={'Redact: draw a box to permanently remove content from the exported PDF'}
       class={toolButtonClass}
       class:border-neutral-200={!$redactMode}
       class:text-neutral-600={!$redactMode}
@@ -494,7 +494,7 @@
       type="button"
       aria-label="Add Text"
       aria-pressed={$textToolMode}
-      use:tooltip={'Add Text — click on the document to place a text box'}
+      use:tooltip={'Add Text: click on the document to place a text box'}
       class={toolButtonClass}
       class:border-neutral-200={!$textToolMode}
       class:text-neutral-600={!$textToolMode}
@@ -516,7 +516,7 @@
       type="button"
       aria-label="Comment"
       aria-pressed={$commentToolMode}
-      use:tooltip={'Comment — click on the document to leave a sticky note'}
+      use:tooltip={'Comment: click on the document to leave a sticky note'}
       class={toolButtonClass}
       class:border-neutral-200={!$commentToolMode}
       class:text-neutral-600={!$commentToolMode}
@@ -538,7 +538,7 @@
       type="button"
       aria-label="Zoom"
       aria-pressed={$zoomToolMode}
-      use:tooltip={'Zoom — click to zoom in, right-click to zoom out'}
+      use:tooltip={'Zoom: click to zoom in, right-click to zoom out'}
       class={toolButtonClass}
       class:border-neutral-200={!$zoomToolMode}
       class:text-neutral-600={!$zoomToolMode}
@@ -562,7 +562,7 @@
       type="button"
       aria-label="Select"
       aria-pressed={$textSelectMode}
-      use:tooltip={'Select — drag over the document to select and copy its real text'}
+      use:tooltip={'Select: drag over the document to select and copy its real text'}
       class={toolButtonClass}
       class:border-neutral-200={!$textSelectMode}
       class:text-neutral-600={!$textSelectMode}
@@ -584,7 +584,7 @@
       type="button"
       aria-label="Screenshot"
       aria-pressed={$screenshotToolMode}
-      use:tooltip={'Screenshot — click a page to capture all of it, or drag to capture an area'}
+      use:tooltip={'Screenshot: click a page to capture all of it, or drag to capture an area'}
       class={toolButtonClass}
       class:border-neutral-200={!$screenshotToolMode}
       class:text-neutral-600={!$screenshotToolMode}
@@ -609,7 +609,7 @@
         aria-label="Apply redaction to all {$editorStore.documents.length} documents"
         use:tooltip={applyingRedactionToAll
           ? 'Applying…'
-          : `Apply redaction to all ${$editorStore.documents.length} documents — makes every other open document's redactions match this one exactly`}
+          : `Apply redaction to all ${$editorStore.documents.length} documents. Makes every other open document's redactions match this one exactly`}
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-200
           text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
           dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"

@@ -60,7 +60,7 @@
   <div class="text-center">
     <h1 class="text-3xl font-semibold">Verify a PDF</h1>
     <p class="mt-2 text-neutral-500 dark:text-neutral-400">
-      Check whether a PDF carries a Signy export record — the document id, name, and export time embedded when it
+      Check whether a PDF carries a Signy export record: the document id, name, and export time embedded when it
       was last saved from Signy.
     </p>
     <p class="mt-3 text-xs text-neutral-400 dark:text-neutral-500">

@@ -259,7 +259,7 @@
       role="tab"
       tabindex="0"
       aria-selected={isActive}
-      title={$editorStore.documents.length > 1 ? `${doc.file.name} — drag to reorder` : doc.file.name}
+      title={$editorStore.documents.length > 1 ? `${doc.file.name} (drag to reorder)` : doc.file.name}
       class="group flex min-w-0 max-w-[10rem] shrink-0 cursor-pointer touch-none select-none items-center gap-1.5
         rounded-t-lg border border-b-0 px-3 py-1.5 text-xs transition-colors
         {isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS} {isDragging ? 'relative z-10 cursor-grabbing shadow-md' : ''}"

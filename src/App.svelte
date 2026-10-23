@@ -315,7 +315,7 @@
         </div>
         <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">Signy</h1>
         <p class="mx-auto mt-3 max-w-sm text-neutral-500 dark:text-neutral-400">
-          Sign PDFs with a protected handwritten signature, and redact sensitive content — entirely in your browser.
+          Sign PDFs with a protected handwritten signature, and redact sensitive content, entirely in your browser.
         </p>
         <div class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50
           px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950
@@ -324,7 +324,7 @@
             <rect x="5" y="11" width="14" height="9" rx="2" />
             <path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>
-          100% local — your files never leave this device
+          100% local: your files never leave this device
         </div>
       </div>
 
@@ -333,7 +333,7 @@
         <div class="w-full max-w-md">
           <UploadCard
             title="Add PDF"
-            subtitle="Drag & drop or click to browse — you can select multiple"
+            subtitle="Drag & drop or click to browse. You can select multiple."
             accept={PDF_ACCEPT}
             multiple
             errorMessage="Please choose PDF files."

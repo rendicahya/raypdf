@@ -48,7 +48,7 @@
     const sized = typeAccepted.filter((file) => file.size <= maxSizeBytes);
 
     if (sized.length === 0) {
-      error = `File${tooLarge.length > 1 ? 's are' : ' is'} too large — the limit is ${formatFileSize(maxSizeBytes)}.`;
+      error = `File${tooLarge.length > 1 ? 's are' : ' is'} too large. The limit is ${formatFileSize(maxSizeBytes)}.`;
       return;
     }
 

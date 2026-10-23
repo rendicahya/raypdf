@@ -154,7 +154,7 @@
         sig.naturalHeight,
       );
       if (!spot) {
-        detectSpotError = "Couldn't find a likely spot — try placing it manually.";
+        detectSpotError = "Couldn't find a likely spot. Try placing it manually.";
         return;
       }
       if (spot.page !== doc.pageNumber) editorStore.goToPage(spot.page);
@@ -277,7 +277,7 @@
       const multiPage = documents.filter((_, i) => pdfDocs[i].numPages > 1).map((doc) => doc.file.name);
 
       if (multiPage.length > 0) {
-        applyToAllError = `Skipped — not single-page: ${multiPage.join(', ')}`;
+        applyToAllError = `Skipped (not single-page): ${multiPage.join(', ')}`;
         return;
       }
 
@@ -380,7 +380,7 @@
               type="button"
               role="option"
               aria-selected={isActive}
-              title="{entry.label} — click to use, or drag onto the page"
+              title="{entry.label}: click to use, or drag onto the page"
               class="flex h-12 w-full items-center justify-center rounded-lg border bg-white p-1 transition-colors
                 {isActive
                 ? 'border-blue-500 ring-2 ring-blue-400/40'
@@ -458,7 +458,7 @@
 
       <button
         type="button"
-        title="Best-effort scan of the document's text for a likely signature spot — always asks before placing anything"
+        title="Best-effort scan of the document's text for a likely signature spot. Always asks before placing anything."
         class="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700
           transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
           dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
@@ -669,7 +669,7 @@
       <span class="text-xs text-neutral-500 dark:text-neutral-400">Draw, type, or upload a scan</span>
     </button>
     <p class="mt-2 text-xs text-neutral-400">
-      Signing is optional — use Redact below the document if that's all you need.
+      Signing is optional. Use Redact below the document if that's all you need.
     </p>
   {/if}
 </div>

@@ -31,7 +31,7 @@
   <button
     type="button"
     aria-label="Start over"
-    title="Start over — discard everything and go back to the upload screen"
+    title="Start over: discard everything and go back to the upload screen"
     class="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors
       hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800
       dark:hover:text-neutral-100"

@@ -35,7 +35,7 @@ export function deletePdfPages(file: File, pages: number[]): Promise<File> {
   return editPdf(file, (pdfDoc) => {
     const unique = [...new Set(pages)];
     if (unique.length >= pdfDoc.getPageCount()) {
-      throw new Error("A PDF needs at least one page — these can't all be deleted.");
+      throw new Error("A PDF needs at least one page, so these can't all be deleted.");
     }
     // Highest first, so removing one doesn't shift the indexes still to go.
     for (const page of unique.sort((a, b) => b - a)) pdfDoc.removePage(page - 1);

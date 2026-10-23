@@ -1720,7 +1720,7 @@
 <div
   bind:this={wrapperEl}
   role="region"
-  aria-label="PDF page — drop the signature here"
+  aria-label="PDF page. Drop the signature here."
   class="relative mx-auto w-fit"
   class:ring-2={isDragOver}
   class:ring-blue-400={isDragOver}
@@ -1791,7 +1791,7 @@
       data-highlight-group={h.groupId}
       role="group"
       tabindex={isFirstOfGroup ? 0 : -1}
-      aria-label="{MARKUP_LABELS[h.kind]} — Delete to remove"
+      aria-label="{MARKUP_LABELS[h.kind]}. Press Delete to remove."
       class="absolute cursor-pointer {isSelected ? 'outline outline-2 outline-blue-400' : ''}"
       class:pointer-events-none={!formFieldsInteractive}
       style:left="{h.x}px"
@@ -1963,8 +1963,8 @@
       style:top="{suggestion.y}px"
       style:width="{suggestion.width}px"
       style:height="{suggestion.height}px"
-      title="Best guess — {suggestion.reason}. Click to place here."
-      aria-label="Suggested signature placement — {suggestion.reason}. Press Enter to place here."
+      title="Best guess: {suggestion.reason}. Click to place here."
+      aria-label="Suggested signature placement: {suggestion.reason}. Press Enter to place here."
       onclick={placeSuggestedSignature}
       onkeydown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -2019,7 +2019,7 @@
         data-placed-signature={sig.id}
         role="group"
         tabindex="0"
-        aria-label="Placed signature — use arrow keys to move, drag the corner handle to resize"
+        aria-label="Placed signature. Use arrow keys to move, drag the corner handle to resize."
         class="absolute cursor-move touch-none {isSelected ? 'ring-2 ring-blue-400/70 bg-blue-100/10' : ''}"
         style:left="{sig.x}px"
         style:top="{sig.y}px"
@@ -2095,7 +2095,7 @@
       data-redaction={box.id}
       role="group"
       tabindex="0"
-      aria-label="Redacted area — permanently removed on export. Use arrow keys to move, Delete to remove."
+      aria-label="Redacted area, permanently removed on export. Use arrow keys to move, Delete to remove."
       class="absolute cursor-move touch-none bg-black {isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : ''}"
       style:left="{box.x}px"
       style:top="{box.y}px"
@@ -2146,7 +2146,7 @@
       data-placed-text={t.id}
       role="group"
       tabindex="0"
-      aria-label="Text box — double-click to edit, drag to move, drag the corner handle to resize"
+      aria-label="Text box. Double-click to edit, drag to move, drag the corner handle to resize."
       class="absolute touch-none {isEditing ? '' : 'cursor-move'} {isSelected
         ? 'ring-2 ring-blue-400/70'
         : 'hover:ring-1 hover:ring-blue-300/50'}"
@@ -2362,8 +2362,8 @@
       data-placed-comment={c.id}
       role="group"
       tabindex="0"
-      aria-label="Comment marker — double-click to edit, drag to move, Delete to remove"
-      title={c.text || 'Empty note — double-click to edit'}
+      aria-label="Comment marker. Double-click to edit, drag to move, Delete to remove."
+      title={c.text || 'Empty note. Double-click to edit.'}
       class="absolute flex touch-none items-center justify-center rounded-full bg-amber-400 text-amber-950
         shadow-md cursor-move {isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : 'hover:bg-amber-300'}"
       style:left="{c.x}px"

@@ -43,7 +43,7 @@
 
     if (placements.length === 0 && !hasDocumentEdits(doc)) {
       throw new Error(
-        'Nothing to export yet — place a signature, fill in a form, edit the pages, or add a redaction, text, or comment first.',
+        'Nothing to export yet. Place a signature, fill in a form, edit the pages, or add a redaction, text, or comment first.',
       );
     }
 

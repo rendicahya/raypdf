@@ -172,7 +172,7 @@
       return;
     }
     if (file.size > MAX_SIGNATURE_SIZE_BYTES) {
-      error = `"${file.name}" is ${formatFileSize(file.size)} — the limit is ${formatFileSize(MAX_SIGNATURE_SIZE_BYTES)}.`;
+      error = `"${file.name}" is ${formatFileSize(file.size)}. The limit is ${formatFileSize(MAX_SIGNATURE_SIZE_BYTES)}.`;
       return;
     }
     saving = true;
@@ -360,7 +360,7 @@
       >
         <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Upload a scan or photo</span>
         <span class="text-xs text-neutral-500 dark:text-neutral-400">
-          Drag & drop or click to browse — PNG or JPEG, up to {formatFileSize(MAX_SIGNATURE_SIZE_BYTES)}
+          Drag & drop or click to browse. PNG or JPEG, up to {formatFileSize(MAX_SIGNATURE_SIZE_BYTES)}
         </span>
       </button>
       <input
