@@ -41,7 +41,7 @@ It is **not** a replacement for PKI-based digital signatures.
   - Zoom out / reset / in, fit width, fit page
   - Rotate left / right
   - Tools (`Esc` returns to Move):
-    - **Move** — drag placed items around; drag the page background to pan. Hovering over text briefly switches to selection.
+    - **Move** — drag placed items around; drag the page background to pan. Resting the pointer on text switches to text selection, which stays on while the pointer moves over text and turns back into the hand once it leaves.
     - **Redact** — draw boxes; the content underneath is permanently removed from the exported PDF.
     - **Add Text** — click to place a text box (font, size, style, color, spacing, alignment).
     - **Comment** — click to leave a sticky note, exported as a real PDF annotation.

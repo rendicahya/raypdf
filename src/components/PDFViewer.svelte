@@ -313,13 +313,16 @@
       !$screenshotToolMode,
   );
 
-  // Move mode auto-switches into text selection when the pointer hovers
-  // (not moves) over real text for HOVER_SELECT_DELAY, so the user doesn't
-  // have to click the toolbar's Select button first — moving the pointer
-  // again immediately reverts to Move, matching the requested "hover to
-  // select, move to go back" behavior. The manual Select toggle
+  // Move mode auto-switches into text selection when the pointer rests over
+  // real text for HOVER_SELECT_DELAY, so the user doesn't have to click the
+  // toolbar's Select button first. It then stays in text selection for as
+  // long as the pointer keeps moving over text, and reverts to Move (the
+  // hand) as soon as it leaves the text. The manual Select toggle
   // ($textSelectMode) is unaffected and stays sticky either way.
   const HOVER_SELECT_DELAY = 300;
+  // Slack around each span, so the small gaps between words and lines don't
+  // flicker back to the hand while moving across a paragraph.
+  const HOVER_TEXT_MARGIN = 6;
   let hoverTextSelect = $state(false);
   let hoverCheckTimer: ReturnType<typeof setTimeout> | undefined;
   const textSelectActive = $derived($textSelectMode || hoverTextSelect || hasTextSelection);
@@ -333,16 +336,29 @@
   // elementFromPoint/elementsFromPoint: those respect pointer-events, and the
   // text layer is deliberately pointer-events: none until textSelectActive is
   // already true — exactly the thing this check exists to decide.
-  function isPointOverText(clientX: number, clientY: number): boolean {
+  function isPointOverText(clientX: number, clientY: number, margin = 0): boolean {
     if (!textLayerEl) return false;
     const spans = textLayerEl.querySelectorAll('span');
     for (const span of spans) {
       const rect = span.getBoundingClientRect();
-      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+      if (
+        clientX >= rect.left - margin &&
+        clientX <= rect.right + margin &&
+        clientY >= rect.top - margin &&
+        clientY <= rect.bottom + margin
+      ) {
         return true;
       }
     }
     return false;
+  }
+
+  // While the text layer takes pointer events, landing directly on one of
+  // its spans answers the question without measuring every span.
+  function isPointerOverText(e: PointerEvent, margin: number): boolean {
+    const target = e.target as Element | null;
+    if (target?.tagName === 'SPAN' && textLayerEl?.contains(target)) return true;
+    return isPointOverText(e.clientX, e.clientY, margin);
   }
 
   function updateHoverTextSelect(e: PointerEvent) {
@@ -375,6 +391,9 @@
     // extending a text selection they just entered — that's forward
     // progress, not "moved away," so leave the mode alone until they let go.
     if (hoverTextSelect && e.buttons !== 0) return;
+
+    // Already selecting and still over text — stay put.
+    if (hoverTextSelect && isPointerOverText(e, HOVER_TEXT_MARGIN)) return;
 
     clearHoverTimer();
     hoverTextSelect = false;
