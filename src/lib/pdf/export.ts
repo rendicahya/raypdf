@@ -39,8 +39,8 @@ export interface ExportParams {
   comments?: PlacedComment[];
   /** Text highlights to embed as PDF Highlight annotations. */
   highlights?: PlacedHighlight[];
-  /** If set, the exported PDF contains only this 1-indexed page (with any placements/redactions/text still applied) instead of every page. */
-  onlyPage?: number;
+  /** If set, the exported PDF contains only these 1-indexed pages, in this order (with any placements/redactions/text still applied), instead of every page. */
+  onlyPages?: number[];
   /** Lock the exported PDF's copy/extract permission — see `applyCopyProtection`. */
   securePdf?: boolean;
   /** Values the user entered into the PDF's own form fields, by field name — see `lib/pdf/forms.ts`. */
@@ -149,7 +149,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     texts = [],
     comments = [],
     highlights = [],
-    onlyPage,
+    onlyPages,
     securePdf = false,
     formValues = {},
   } = params;
@@ -269,18 +269,21 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
   };
   embedVerificationRecord(pdfDoc, verificationRecord);
 
-  // Extracting a single page happens last, after every placement/redaction/
+  // Extracting a subset of pages happens last, after every placement/redaction/
   // text/rotation has already been drawn onto the full document — copyPages
   // carries a page's finished content over as-is, so this is just a trim,
   // not a separate render pass. copyPages doesn't carry over the source
   // document's Info dict, so the record needs re-embedding on the new doc.
-  if (onlyPage !== undefined) {
-    const singlePageDoc = await PDFDocument.create();
-    const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [onlyPage - 1]);
-    singlePageDoc.addPage(copiedPage);
-    embedVerificationRecord(singlePageDoc, verificationRecord);
-    if (securePdf) applyCopyProtection(singlePageDoc);
-    return singlePageDoc.save(SAVE_OPTIONS);
+  if (onlyPages !== undefined) {
+    const subsetDoc = await PDFDocument.create();
+    const copiedPages = await subsetDoc.copyPages(
+      pdfDoc,
+      onlyPages.map((p) => p - 1),
+    );
+    copiedPages.forEach((page) => subsetDoc.addPage(page));
+    embedVerificationRecord(subsetDoc, verificationRecord);
+    if (securePdf) applyCopyProtection(subsetDoc);
+    return subsetDoc.save(SAVE_OPTIONS);
   }
 
   if (securePdf) applyCopyProtection(pdfDoc);
@@ -321,6 +324,26 @@ export function downloadPageOnlyPdf(bytes: Uint8Array, originalFileName: string,
   downloadBlob(
     new Blob([bytes as BlobPart], { type: 'application/pdf' }),
     pageOnlyFileName(originalFileName, pageNumber),
+  );
+}
+
+/** e.g. "report_pages1-3_5.pdf" for pages 1, 2, 3 and 5. */
+export function selectedPagesFileName(originalFileName: string, pages: number[]): string {
+  const base = originalFileName.replace(/\.pdf$/i, '');
+  const sorted = [...new Set(pages)].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const start = sorted[i];
+    while (sorted[i + 1] === sorted[i] + 1) i++;
+    ranges.push(start === sorted[i] ? `${start}` : `${start}-${sorted[i]}`);
+  }
+  return `${base}_pages${ranges.join('_')}.pdf`;
+}
+
+export function downloadSelectedPagesPdf(bytes: Uint8Array, originalFileName: string, pages: number[]): void {
+  downloadBlob(
+    new Blob([bytes as BlobPart], { type: 'application/pdf' }),
+    selectedPagesFileName(originalFileName, pages),
   );
 }
 
@@ -397,7 +420,7 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
 /**
  * Splits one document into one PDF per page — each with the same
  * signature/redaction/text already applied — and bundles them into a single
- * ZIP. Complements `exportSignedPdf`'s `onlyPage`, which does the same for
+ * ZIP. Complements `exportSignedPdf`'s `onlyPages`, which does the same for
  * just one page; `signatureBlob`/`placements` are pre-resolved by the caller
  * exactly as for a normal single-document export.
  */
@@ -428,7 +451,7 @@ export async function exportPagesAsZip(
       comments: doc.comments,
       highlights: doc.highlights,
       formValues: doc.formValues,
-      onlyPage: page,
+      onlyPages: [page],
       securePdf,
     });
     zip.file(pageOnlyFileName(doc.file.name, page), bytes);

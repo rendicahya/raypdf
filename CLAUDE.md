@@ -117,7 +117,7 @@ Users should only need to upload a new PDF.
 
 Display the PDF using pdf.js, with one tab per open document.
 
-Left sidebar: page thumbnails, rendered lazily as they scroll into view. Click to jump, drag and drop to reorder pages; per-page actions rotate, duplicate, insert a blank page after, or delete. Page edits rewrite the file (`lib/pdf/pageOps.ts`) and go through `editPages` in `stores/editor.ts`, which renumbers everything placed on the pages and keeps the old file for undo.
+Left sidebar: page thumbnails, rendered lazily as they scroll into view. Click to jump, drag and drop to reorder pages; per-page actions rotate, duplicate, insert a blank page after, or delete. Several pages can be selected (Ctrl/Shift-click, checkboxes) to rotate, save, or delete together. Page edits rewrite the file (`lib/pdf/pageOps.ts`) and go through `editPages` in `stores/editor.ts`, which renumbers everything placed on the pages and keeps the old file for undo.
 
 The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 

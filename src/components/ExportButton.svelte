@@ -110,7 +110,7 @@
         comments: doc.comments,
         highlights: doc.highlights,
         formValues: doc.formValues,
-        onlyPage: doc.pageNumber,
+        onlyPages: [doc.pageNumber],
         securePdf: $securePdf,
       });
       downloadPageOnlyPdf(bytes, doc.file.name, doc.pageNumber);

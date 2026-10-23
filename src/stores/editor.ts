@@ -3,10 +3,10 @@ import { getCachedPdf } from '../lib/pdf/docCache';
 import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
 import {
   movePdfPage,
-  deletePdfPage,
+  deletePdfPages,
   duplicatePdfPage,
   insertBlankPdfPage,
-  rotatePdfPage,
+  rotatePdfPages,
 } from '../lib/pdf/pageOps';
 import type { FormValues } from '../lib/pdf/forms';
 
@@ -300,8 +300,8 @@ interface PageEdit {
   mapCurrent: (page: number, newCount: number) => number;
   /** Old page whose items are copied onto its duplicate (the page right after it). */
   copiesPage?: number;
-  /** Old page whose shape changes (rotation) — its items are re-derived to stay over the same content. */
-  reshapesPage?: number;
+  /** Old pages whose shape changes (rotation) — their items are re-derived to stay over the same content. */
+  reshapesPages?: number[];
 }
 
 interface DocHistory {
@@ -875,7 +875,8 @@ function createEditorStore() {
     if (!doc) return;
     const { renderScale } = currentState();
 
-    const oldPdf = edit.reshapesPage !== undefined ? await getCachedPdf(doc.id, doc.file) : null;
+    const reshaped = new Set(edit.reshapesPages ?? []);
+    const oldPdf = reshaped.size > 0 ? await getCachedPdf(doc.id, doc.file) : null;
     const file = await edit.rewrite(doc.file);
     // Parsed up front (and cached for the viewer), so the new page count is
     // known the moment the file is swapped in.
@@ -888,7 +889,7 @@ function createEditorStore() {
         const page = edit.mapPage(item.page);
         if (page === null) continue;
         let moved: T = { ...item, page };
-        if (oldPdf && item.page === edit.reshapesPage) {
+        if (oldPdf && reshaped.has(item.page)) {
           moved = await convertGeometry(
             { pdfjsDoc: oldPdf, pageNumber: item.page, rotation: doc.rotation },
             { pdfjsDoc: newPdf, pageNumber: page, rotation: doc.rotation },
@@ -976,13 +977,20 @@ function createEditorStore() {
     return editPages({ rewrite: (file) => movePdfPage(file, from, to), mapPage, mapCurrent: mapPage });
   }
 
-  /** Deletes a page (1-indexed) along with everything placed on it. */
-  function deletePage(page: number) {
+  /** Deletes pages (1-indexed) along with everything placed on them, as one undo step. */
+  function deletePages(pages: number[]) {
+    const removed = new Set(pages);
+    const removedBefore = (p: number) => pages.filter((d) => d < p).length;
     return editPages({
-      rewrite: (file) => deletePdfPage(file, page),
-      mapPage: (p) => (p === page ? null : p > page ? p - 1 : p),
-      mapCurrent: (p) => (p > page ? p - 1 : p),
+      rewrite: (file) => deletePdfPages(file, pages),
+      mapPage: (p) => (removed.has(p) ? null : p - removedBefore(p)),
+      // A deleted current page gives way to the nearest page before it (or the first one left).
+      mapCurrent: (p) => p - removedBefore(p) - (removed.has(p) ? 1 : 0),
     });
+  }
+
+  function deletePage(page: number) {
+    return deletePages([page]);
   }
 
   /** Inserts a copy of a page (1-indexed), with everything placed on it, right after it — and shows the copy. */
@@ -1005,16 +1013,20 @@ function createEditorStore() {
   }
 
   /**
-   * Rotates one page (1-indexed) by `delta` degrees, saved into the file —
+   * Rotates pages (1-indexed) by `delta` degrees, saved into the file —
    * unlike rotateLeft/rotateRight, which turn the whole document.
    */
-  function rotatePage(page: number, delta: number) {
+  function rotatePages(pages: number[], delta: number) {
     return editPages({
-      rewrite: (file) => rotatePdfPage(file, page, delta),
+      rewrite: (file) => rotatePdfPages(file, pages, delta),
       mapPage: (p) => p,
       mapCurrent: (p) => p,
-      reshapesPage: page,
+      reshapesPages: pages,
     });
+  }
+
+  function rotatePage(page: number, delta: number) {
+    return rotatePages([page], delta);
   }
 
   function rotateLeft() {
@@ -1111,9 +1123,11 @@ function createEditorStore() {
     rotateRight,
     movePage,
     deletePage,
+    deletePages,
     duplicatePage,
     insertBlankPage,
     rotatePage,
+    rotatePages,
     markExported,
     undo,
     redo,

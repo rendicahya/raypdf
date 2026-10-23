@@ -30,11 +30,15 @@ export function movePdfPage(file: File, from: number, to: number): Promise<File>
   });
 }
 
-/** Removes page `page` (1-indexed). The caller must keep at least one page. */
-export function deletePdfPage(file: File, page: number): Promise<File> {
+/** Removes the given pages (1-indexed). At least one page must be left. */
+export function deletePdfPages(file: File, pages: number[]): Promise<File> {
   return editPdf(file, (pdfDoc) => {
-    if (pdfDoc.getPageCount() <= 1) throw new Error("A PDF needs at least one page — this one can't be deleted.");
-    pdfDoc.removePage(page - 1);
+    const unique = [...new Set(pages)];
+    if (unique.length >= pdfDoc.getPageCount()) {
+      throw new Error("A PDF needs at least one page — these can't all be deleted.");
+    }
+    // Highest first, so removing one doesn't shift the indexes still to go.
+    for (const page of unique.sort((a, b) => b - a)) pdfDoc.removePage(page - 1);
   });
 }
 
@@ -58,11 +62,13 @@ export function insertBlankPdfPage(file: File, after: number): Promise<File> {
   });
 }
 
-/** Rotates page `page` (1-indexed) by `delta` degrees (a multiple of 90), saved into the file itself. */
-export function rotatePdfPage(file: File, page: number, delta: number): Promise<File> {
+/** Rotates the given pages (1-indexed) by `delta` degrees (a multiple of 90), saved into the file itself. */
+export function rotatePdfPages(file: File, pages: number[], delta: number): Promise<File> {
   return editPdf(file, (pdfDoc) => {
-    const target = pdfDoc.getPage(page - 1);
-    const angle = (((target.getRotation().angle + delta) % 360) + 360) % 360;
-    target.setRotation(degrees(angle));
+    for (const page of new Set(pages)) {
+      const target = pdfDoc.getPage(page - 1);
+      const angle = (((target.getRotation().angle + delta) % 360) + 360) % 360;
+      target.setRotation(degrees(angle));
+    }
   });
 }

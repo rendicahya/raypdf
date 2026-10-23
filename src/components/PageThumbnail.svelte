@@ -7,12 +7,15 @@
     pageNumber: number;
     rotation: number;
     isActive: boolean;
+    /** Part of the sidebar's multi-page selection. */
+    isSelected: boolean;
     /** Width / height to reserve before the page has been rendered. */
     placeholderAspect: number;
-    onSelect: () => void;
+    /** Gets the click, so Ctrl/Shift can extend the selection instead of just navigating. */
+    onSelect: (e: MouseEvent) => void;
   }
 
-  let { pdfDoc, pageNumber, rotation, isActive, placeholderAspect, onSelect }: Props = $props();
+  let { pdfDoc, pageNumber, rotation, isActive, isSelected, placeholderAspect, onSelect }: Props = $props();
 
   let buttonEl: HTMLButtonElement;
   let canvasEl: HTMLCanvasElement;
@@ -73,6 +76,9 @@
   class:border-transparent={!isActive}
   class:hover:border-neutral-300={!isActive}
   class:dark:hover:border-neutral-600={!isActive}
+  class:bg-blue-100={isSelected}
+  class:dark:bg-blue-950={isSelected}
+  aria-pressed={isSelected}
   onclick={onSelect}
 >
   <canvas

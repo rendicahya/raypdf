@@ -1,9 +1,13 @@
 <script lang="ts">
   import { editorStore, activeDocument } from '../stores/editor';
   import { pageSidebarOpen } from '../stores/layout';
+  import { signatureStore } from '../stores/signature';
+  import { currentWatermarkOptions } from '../stores/watermark';
+  import { stripEmbeddedScripts, securePdf } from '../stores/exportOptions';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
+  import { exportSignedPdf, downloadSelectedPagesPdf } from '../lib/pdf/export';
   import { tooltip } from '../lib/utils/tooltip';
   import PageThumbnail from './PageThumbnail.svelte';
 
@@ -85,6 +89,129 @@
     }
   }
 
+  // Multi-page selection: Ctrl/⌘-click toggles a page, Shift-click selects a
+  // range, and each thumbnail's checkbox toggles it too. A plain click just
+  // navigates and clears the selection. Kept sorted.
+  let selected: number[] = $state([]);
+  let anchor: number | null = null;
+  const selectedSet = $derived(new Set(selected));
+  const selecting = $derived(selected.length > 0);
+
+  function clearSelection() {
+    selected = [];
+    anchor = null;
+  }
+
+  // A different document has different pages.
+  $effect(() => {
+    void docId;
+    clearSelection();
+  });
+
+  // Undo or a page edit can shorten the document under the selection.
+  $effect(() => {
+    const count = pageNumbers.length;
+    if (count > 0 && selected.some((p) => p > count)) selected = selected.filter((p) => p <= count);
+  });
+
+  function range(from: number, to: number): number[] {
+    const [lo, hi] = from < to ? [from, to] : [to, from];
+    return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+  }
+
+  function togglePage(pageNumber: number) {
+    selected = selectedSet.has(pageNumber)
+      ? selected.filter((p) => p !== pageNumber)
+      : [...selected, pageNumber].sort((a, b) => a - b);
+    anchor = pageNumber;
+  }
+
+  function onThumbnailClick(e: MouseEvent, pageNumber: number) {
+    if (e.shiftKey) {
+      const from = anchor ?? activePageNumber;
+      const extra = e.ctrlKey || e.metaKey ? selected : [];
+      selected = [...new Set([...extra, ...range(from, pageNumber)])].sort((a, b) => a - b);
+    } else if (e.ctrlKey || e.metaKey) {
+      // Starting a selection includes the page being viewed, like a file list.
+      if (!selecting && pageNumber !== activePageNumber) selected = [activePageNumber];
+      togglePage(pageNumber);
+    } else {
+      clearSelection();
+      anchor = pageNumber;
+    }
+    editorStore.goToPage(pageNumber);
+  }
+
+  function selectAll() {
+    selected = [...pageNumbers];
+  }
+
+  const canDeleteSelected = $derived(selecting && selected.length < pageNumbers.length);
+
+  function deleteSelected() {
+    if (!canDeleteSelected) return;
+    const pages = selected;
+    runPageEdit(async () => {
+      await editorStore.deletePages(pages);
+      clearSelection();
+    }, 'Failed to delete the pages');
+  }
+
+  function rotateSelected(delta: number) {
+    const pages = selected;
+    runPageEdit(() => editorStore.rotatePages(pages, delta), 'Failed to rotate the pages');
+  }
+
+  // Saves just the selected pages, with everything placed on them, as one PDF.
+  async function exportSelected() {
+    const doc = $activeDocument;
+    if (!doc || !selecting || busy) return;
+    const pages = selected;
+    const signatureBlob = $signatureStore.signature?.blob;
+    const placements = signatureBlob ? doc.placedSignatures : [];
+    busy = true;
+    pageError = null;
+    try {
+      const bytes = await exportSignedPdf({
+        pdfFile: doc.file,
+        documentId: doc.id,
+        signatureBlob: placements.length > 0 ? signatureBlob : undefined,
+        placements: placements.length > 0 ? placements : undefined,
+        renderScale: $editorStore.renderScale,
+        rotation: doc.rotation,
+        watermark: currentWatermarkOptions(),
+        stripScripts: $stripEmbeddedScripts,
+        redactions: doc.redactions,
+        texts: doc.texts,
+        comments: doc.comments,
+        highlights: doc.highlights,
+        formValues: doc.formValues,
+        onlyPages: pages,
+        securePdf: $securePdf,
+      });
+      downloadSelectedPagesPdf(bytes, doc.file.name, pages);
+      editorStore.markExported();
+    } catch (err) {
+      pageError = err instanceof Error ? err.message : 'Failed to export the pages';
+    } finally {
+      busy = false;
+    }
+  }
+
+  function onSidebarKeydown(e: KeyboardEvent) {
+    if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      selectAll();
+    } else if (selecting && (e.key === 'Delete' || e.key === 'Backspace')) {
+      e.preventDefault();
+      deleteSelected();
+    } else if (selecting && e.key === 'Escape') {
+      e.stopPropagation();
+      clearSelection();
+    }
+  }
+
   // Drag-and-drop reordering. `dropBefore` is the slot the dragged page would
   // land in: the page number it would be inserted before, or pageCount + 1
   // for the very end.
@@ -122,6 +249,7 @@
     const to = before > from ? before - 1 : before;
     if (to === from) return;
 
+    clearSelection();
     runPageEdit(() => editorStore.movePage(from, to), 'Failed to move the page');
   }
 
@@ -138,16 +266,108 @@
 </script>
 
 {#if $pageSidebarOpen}
+  <!-- Keyboard shortcuts for the selection (Ctrl+A, Delete, Escape) arrive
+       from whichever thumbnail or checkbox has focus. -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <aside
     data-thumbnail-scroll
-    class="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto border-r border-neutral-200 bg-neutral-50 p-3
-      dark:border-neutral-800 dark:bg-neutral-900"
+    class="flex w-44 shrink-0 select-none flex-col gap-2 overflow-y-auto border-r border-neutral-200 bg-neutral-50
+      p-3 dark:border-neutral-800 dark:bg-neutral-900"
     class:opacity-60={busy}
     aria-busy={busy}
+    onkeydown={onSidebarKeydown}
   >
     {#if error}
       <p class="text-xs text-red-600">{error}</p>
     {:else if pdfDoc}
+      {#if selecting}
+        <div
+          class="sticky -top-3 z-10 -mx-3 -mt-3 flex flex-col gap-1.5 border-b border-neutral-200 bg-neutral-50/95 px-3
+            py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/95"
+        >
+          <div class="flex items-center justify-between text-[11px] text-neutral-600 dark:text-neutral-300">
+            <span class="font-medium">
+              {selected.length} {selected.length === 1 ? 'page' : 'pages'} selected
+            </span>
+            <button
+              type="button"
+              class={actionButtonClass}
+              aria-label="Clear selection"
+              use:tooltip={'Clear selection (Esc)'}
+              onclick={clearSelection}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="flex items-center justify-between">
+            <button
+              type="button"
+              class={actionButtonClass}
+              aria-label="Select all pages"
+              use:tooltip={'Select all pages (Ctrl+A)'}
+              disabled={busy || selected.length === pageNumbers.length}
+              onclick={selectAll}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="m8 12 3 3 5-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class={actionButtonClass}
+              aria-label="Rotate selected pages left"
+              use:tooltip={'Rotate selected pages left'}
+              disabled={busy}
+              onclick={() => rotateSelected(-90)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v5h5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class={actionButtonClass}
+              aria-label="Rotate selected pages right"
+              use:tooltip={'Rotate selected pages right'}
+              disabled={busy}
+              onclick={() => rotateSelected(90)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 3v5h-5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class={actionButtonClass}
+              aria-label="Save selected pages as a PDF"
+              use:tooltip={'Save selected pages as a PDF'}
+              disabled={busy}
+              onclick={exportSelected}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="{actionButtonClass} hover:!bg-red-50 hover:!text-red-600 dark:hover:!bg-red-950"
+              aria-label="Delete selected pages"
+              use:tooltip={canDeleteSelected ? 'Delete selected pages (Delete)' : "Every page can't be deleted"}
+              disabled={busy || !canDeleteSelected}
+              onclick={deleteSelected}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      {/if}
       {#if pageError}
         <p class="text-xs text-red-600 dark:text-red-400">{pageError}</p>
       {/if}
@@ -171,8 +391,33 @@
             {pageNumber}
             rotation={activeRotation}
             {isActive}
+            isSelected={selectedSet.has(pageNumber)}
             {placeholderAspect}
-            onSelect={() => editorStore.goToPage(pageNumber)}
+            onSelect={(e) => onThumbnailClick(e, pageNumber)}
+          />
+
+          <!-- Selection checkbox: on hover, and on every page once a selection exists. -->
+          <input
+            type="checkbox"
+            aria-label="Select page {pageNumber}"
+            use:tooltip={'Select this page (or Ctrl/Shift-click pages)'}
+            class="absolute bottom-1.5 left-2 h-3.5 w-3.5 cursor-pointer rounded border-neutral-300 text-blue-600
+              transition-opacity focus:ring-blue-500 dark:border-neutral-600 {selecting
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}"
+            checked={selectedSet.has(pageNumber)}
+            disabled={busy}
+            onclick={(e) => {
+              e.stopPropagation();
+              if (e.shiftKey && anchor !== null) {
+                selected = [...new Set([...selected, ...range(anchor, pageNumber)])].sort((a, b) => a - b);
+              } else {
+                togglePage(pageNumber);
+              }
+              // A range can leave an already-selected box ticked, which the
+              // browser just unticked — put it back in line with the state.
+              e.currentTarget.checked = selected.includes(pageNumber);
+            }}
           />
 
           <!-- Page actions: shown on hover, and always on the current page so
@@ -216,7 +461,10 @@
               aria-label="Duplicate page {pageNumber}"
               use:tooltip={'Duplicate this page'}
               disabled={busy}
-              onclick={() => runPageEdit(() => editorStore.duplicatePage(pageNumber), 'Failed to duplicate the page')}
+              onclick={() => {
+                clearSelection();
+                runPageEdit(() => editorStore.duplicatePage(pageNumber), 'Failed to duplicate the page');
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
                 <rect x="8" y="8" width="12" height="12" rx="2" />
@@ -229,7 +477,10 @@
               aria-label="Insert a blank page after page {pageNumber}"
               use:tooltip={'Insert a blank page after this one'}
               disabled={busy}
-              onclick={() => runPageEdit(() => editorStore.insertBlankPage(pageNumber), 'Failed to insert a page')}
+              onclick={() => {
+                clearSelection();
+                runPageEdit(() => editorStore.insertBlankPage(pageNumber), 'Failed to insert a page');
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" />
@@ -242,7 +493,10 @@
               aria-label="Delete page {pageNumber}"
               use:tooltip={pageNumbers.length > 1 ? 'Delete this page' : "The only page can't be deleted"}
               disabled={busy || pageNumbers.length <= 1}
-              onclick={() => runPageEdit(() => editorStore.deletePage(pageNumber), 'Failed to delete the page')}
+              onclick={() => {
+                clearSelection();
+                runPageEdit(() => editorStore.deletePage(pageNumber), 'Failed to delete the page');
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
