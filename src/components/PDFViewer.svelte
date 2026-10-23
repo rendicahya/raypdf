@@ -7,6 +7,7 @@
   import { capturePage, copyImageToClipboard, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
+  import { HIGHLIGHT_COLOR, selectionToBoxes, type Box } from '../lib/pdf/highlight';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { editorStore, activeDocument, type PlacedSignature, type PlacedText, type RedactionBox, type PlacedComment } from '../stores/editor';
@@ -107,14 +108,95 @@
   // of the layer going pointer-events: none and silently losing the
   // selection to whatever's underneath. See textSelectActive below.
   let hasTextSelection = $state(false);
+  // Whether a mouse button is held, so the Highlight button only appears once
+  // a selection drag has finished rather than chasing the pointer.
+  let pointerHeld = false;
   onMount(() => {
     function updateHasTextSelection() {
       const sel = window.getSelection();
       hasTextSelection = !!sel && !sel.isCollapsed && !!textLayerEl && !!sel.anchorNode && textLayerEl.contains(sel.anchorNode);
+      if (pointerHeld || !hasTextSelection) pendingHighlight = null;
+      else updatePendingHighlight();
+    }
+    function onPointerDown() {
+      pointerHeld = true;
+    }
+    function onPointerUp() {
+      pointerHeld = false;
+      // The selection settles after the browser handles the release.
+      setTimeout(() => {
+        if (hasTextSelection) updatePendingHighlight();
+      });
     }
     document.addEventListener('selectionchange', updateHasTextSelection);
-    return () => document.removeEventListener('selectionchange', updateHasTextSelection);
+    // Capture phase: overlays stop pointerdown from bubbling to the window.
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    return () => {
+      document.removeEventListener('selectionchange', updateHasTextSelection);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+    };
   });
+
+  // Highlighting: once text is selected, a Highlight button appears below it
+  // (like Foxit's selection popup) and turns the selection into a permanent
+  // highlight — one box per line, saved as a PDF Highlight annotation on export.
+  let pendingHighlight: { boxes: Box[]; anchor: { x: number; y: number } } | null = $state(null);
+  let selectedHighlightGroup: string | null = $state(null);
+  // Whether text on this page runs top to bottom (a page turned 90°/270°),
+  // which changes how selected spans join into lines.
+  let pageVertical = $state(false);
+
+  function updatePendingHighlight() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !canvasEl) {
+      pendingHighlight = null;
+      return;
+    }
+    const canvasRect = canvasEl.getBoundingClientRect();
+    const rects: Box[] = [];
+    for (let i = 0; i < sel.rangeCount; i++) {
+      for (const r of sel.getRangeAt(i).getClientRects()) {
+        const left = clamp(r.left - canvasRect.left, 0, canvasRect.width);
+        const top = clamp(r.top - canvasRect.top, 0, canvasRect.height);
+        const right = clamp(r.right - canvasRect.left, 0, canvasRect.width);
+        const bottom = clamp(r.bottom - canvasRect.top, 0, canvasRect.height);
+        rects.push({ x: left, y: top, width: right - left, height: bottom - top });
+      }
+    }
+    const boxes = selectionToBoxes(rects, pageVertical);
+    if (boxes.length === 0) {
+      pendingHighlight = null;
+      return;
+    }
+    // Below the end of the selection, or above its start if there's no room.
+    const last = boxes[boxes.length - 1];
+    const first = boxes[0];
+    const below = last.y + last.height + 40 < canvasRect.height;
+    pendingHighlight = {
+      boxes,
+      anchor: {
+        x: clamp(last.x + last.width, 50, canvasRect.width - 50),
+        y: below ? last.y + last.height + 6 : Math.max(0, first.y - 38),
+      },
+    };
+  }
+
+  function applyPendingHighlight(e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    const doc = $activeDocument;
+    if (!doc || !pendingHighlight) return;
+    editorStore.addHighlight(doc.pageNumber, pendingHighlight.boxes);
+    pendingHighlight = null;
+    window.getSelection()?.removeAllRanges();
+  }
+
+  function removeHighlight(groupId: string) {
+    editorStore.removeHighlight(groupId);
+    if (selectedHighlightGroup === groupId) selectedHighlightGroup = null;
+  }
 
   // After a page edit or undo swaps the file, the page number can briefly point
   // past the end of the previous parse until the new one has loaded.
@@ -197,6 +279,23 @@
       .catch(() => {
         if (!cancelled) formBoxes = [];
       });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
+    const loaded = pdfDoc;
+    const pageNumber = viewPage;
+    const rotation = viewRotation;
+    if (!loaded || pageNumber > loaded.numPages) return;
+    let cancelled = false;
+    loaded
+      .getPage(pageNumber)
+      .then((page) => {
+        if (!cancelled) pageVertical = getTotalRotation(page, rotation) % 180 !== 0;
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -316,6 +415,12 @@
     return doc.comments.filter((c) => c.page === doc.pageNumber);
   });
 
+  const highlightsOnCurrentPage = $derived.by(() => {
+    const doc = $activeDocument;
+    if (!doc) return [];
+    return doc.highlights.filter((h) => h.page === doc.pageNumber);
+  });
+
   // The "Find Signature Spot" suggestion — only shown while it's scoped to
   // the document/page currently on screen, so navigating away (or the
   // document changing) doesn't leave a stale box floating in the wrong place.
@@ -357,6 +462,8 @@
     selectedTextId = null;
     if (editingCommentId) commitCommentEdit();
     selectedCommentId = null;
+    selectedHighlightGroup = null;
+    pendingHighlight = null;
   });
 
   function onWindowPointerDown(e: PointerEvent) {
@@ -369,6 +476,10 @@
       ? wrapperEl?.querySelector(`[data-redaction="${selectedRedactionId}"]`)
       : null;
     if (!currentRedaction?.contains(e.target as Node)) selectedRedactionId = null;
+
+    if ((e.target as Element | null)?.closest?.('[data-highlight-group]')?.getAttribute('data-highlight-group') !== selectedHighlightGroup) {
+      selectedHighlightGroup = null;
+    }
 
     // Deliberately doesn't touch editingTextId/commitTextEdit here: this
     // handler fires on the same pointerdown that creates a brand-new text
@@ -903,6 +1014,7 @@
           height: f.boxHeight,
         };
       }),
+      highlights: highlightsOnCurrentPage,
       redactions: redactionsOnCurrentPage,
       signatures,
       signatureImage:
@@ -1351,6 +1463,63 @@
        never steals clicks/drags meant for the canvas or the other overlays
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
+
+  <!-- Highlights sit above the text layer so they can be clicked (then
+       removed) in Move mode; in every other mode they let clicks through, so
+       the Select tool can still select highlighted text. -->
+  {#each highlightsOnCurrentPage as h, i (h.id)}
+    {@const isSelected = selectedHighlightGroup === h.groupId}
+    {@const isFirstOfGroup = highlightsOnCurrentPage.findIndex((x) => x.groupId === h.groupId) === i}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      data-highlight-group={h.groupId}
+      role="group"
+      tabindex={isFirstOfGroup ? 0 : -1}
+      aria-label="Highlighted text — Delete to remove"
+      class="absolute cursor-pointer mix-blend-multiply {isSelected ? 'outline outline-2 outline-blue-400' : ''}"
+      class:pointer-events-none={!formFieldsInteractive}
+      style:left="{h.x}px"
+      style:top="{h.y}px"
+      style:width="{h.width}px"
+      style:height="{h.height}px"
+      style:background-color={HIGHLIGHT_COLOR}
+      onpointerdown={(e) => {
+        e.stopPropagation();
+        selectedHighlightGroup = h.groupId;
+      }}
+      onfocus={() => (selectedHighlightGroup = h.groupId)}
+      onkeydown={(e) => {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        e.preventDefault();
+        removeHighlight(h.groupId);
+      }}
+    ></div>
+  {/each}
+
+  <!-- Outside the highlight boxes, which are multiplied onto the page and
+       would tint anything inside them. -->
+  {#each highlightsOnCurrentPage.filter((h) => h.groupId === selectedHighlightGroup).slice(0, 1) as h (h.id)}
+    <button
+      type="button"
+      data-highlight-group={h.groupId}
+      aria-label="Remove highlight"
+      title="Remove highlight"
+      class="absolute flex h-5 w-5 -translate-y-1.5 translate-x-[-0.875rem] touch-none items-center justify-center
+        rounded-full border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
+      style:left="{h.x + h.width}px"
+      style:top="{h.y}px"
+      onpointerdown={(e) => e.stopPropagation()}
+      onclick={(e) => {
+        e.stopPropagation();
+        removeHighlight(h.groupId);
+      }}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
+        <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </button>
+  {/each}
 
   <!-- The PDF's own form fields. The layer itself never takes clicks, only
        the inputs do, and only in Move mode (see formFieldsInteractive). -->
@@ -1915,6 +2084,23 @@
       {/if}
     </div>
   {/each}
+
+  {#if pendingHighlight}
+    <button
+      type="button"
+      class="absolute z-50 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border
+        border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-lg transition-colors
+        hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200
+        dark:hover:bg-neutral-800"
+      style:left="{pendingHighlight.anchor.x}px"
+      style:top="{pendingHighlight.anchor.y}px"
+      onpointerdown={applyPendingHighlight}
+      onclick={applyPendingHighlight}
+    >
+      <span class="h-3 w-3 rounded-sm border border-amber-400" style:background-color={HIGHLIGHT_COLOR}></span>
+      Highlight
+    </button>
+  {/if}
 
   {#if drawingBox}
     <div

@@ -1,5 +1,6 @@
 import { renderPageToCanvas, type PdfDocument } from './loader';
 import type { FormWidgetKind } from './forms';
+import { HIGHLIGHT_COLOR } from './highlight';
 import type { PlacedText } from '../../stores/editor';
 import { FONT_FAMILY_CSS } from '../../stores/textTool';
 
@@ -41,6 +42,7 @@ export interface CaptureField extends Box {
 export interface CaptureOverlays {
   renderScale: number;
   fields: CaptureField[];
+  highlights: Box[];
   redactions: Box[];
   signatures: Box[];
   /** The signature image with its visible watermark already applied (see lib/watermark/visible.ts). */
@@ -93,6 +95,12 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
   ctx.save();
   // Everything below is drawn in the editor's own on-screen pixel units.
   ctx.scale(CAPTURE_SCALE / overlays.renderScale, CAPTURE_SCALE / overlays.renderScale);
+
+  // Multiplied over the page like a highlighter, so the text stays readable.
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = HIGHLIGHT_COLOR;
+  for (const box of overlays.highlights) ctx.fillRect(box.x, box.y, box.width, box.height);
+  ctx.globalCompositeOperation = 'source-over';
 
   for (const field of overlays.fields) drawField(ctx, field);
 

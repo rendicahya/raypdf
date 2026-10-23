@@ -8,7 +8,15 @@ import { applyRedactions } from './redact';
 import { applyVisibleWatermark, type WatermarkOptions } from '../watermark/visible';
 import { drawTextBox, embedTextFont, hexToRgb } from './textRender';
 import { embedVerificationRecord } from './verification';
-import type { PdfDocumentState, PlacedComment, PlacedSignature, PlacedText, RedactionBox } from '../../stores/editor';
+import { embedHighlightAnnotations } from './highlight';
+import type {
+  PdfDocumentState,
+  PlacedComment,
+  PlacedHighlight,
+  PlacedSignature,
+  PlacedText,
+  RedactionBox,
+} from '../../stores/editor';
 import type { PlacementRatio } from '../../stores/placement';
 
 export interface ExportParams {
@@ -31,6 +39,8 @@ export interface ExportParams {
   texts?: PlacedText[];
   /** Sticky-note comments to embed as real PDF annotations (not drawn onto the page content). */
   comments?: PlacedComment[];
+  /** Text highlights to embed as PDF Highlight annotations. */
+  highlights?: PlacedHighlight[];
   /** If set, the exported PDF contains only this 1-indexed page (with any placements/redactions/text still applied) instead of every page. */
   onlyPage?: number;
   /** Lock the exported PDF's copy/extract permission — see `applyCopyProtection`. */
@@ -140,6 +150,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     redactions = [],
     texts = [],
     comments = [],
+    highlights = [],
     onlyPage,
     securePdf = false,
     formValues = {},
@@ -229,6 +240,10 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
 
   if (comments.length > 0) {
     await embedCommentAnnotations(pdfDoc, pdfjsDoc, comments, renderScale, rotation);
+  }
+
+  if (highlights.length > 0) {
+    await embedHighlightAnnotations(pdfDoc, pdfjsDoc, highlights, renderScale, rotation);
   }
 
   fillFormFields(pdfDoc, formValues);
@@ -373,6 +388,7 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
     doc.redactions.length > 0 ||
     doc.texts.length > 0 ||
     doc.comments.length > 0 ||
+    doc.highlights.length > 0 ||
     Object.keys(doc.formValues).length > 0 ||
     doc.file !== doc.originalFile ||
     doc.rotation !== 0
@@ -434,6 +450,7 @@ export async function exportPagesAsZip(
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      highlights: doc.highlights,
       formValues: doc.formValues,
       onlyPage: page,
       securePdf,
@@ -488,6 +505,7 @@ export async function exportAllAsZip(
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      highlights: doc.highlights,
       formValues: doc.formValues,
       securePdf,
     });
@@ -545,6 +563,7 @@ export async function exportMergedPdf(
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      highlights: doc.highlights,
       formValues: doc.formValues,
     });
 

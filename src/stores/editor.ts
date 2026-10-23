@@ -71,6 +71,23 @@ export interface PlacedComment {
   text: string;
 }
 
+/**
+ * One rectangle of a text highlight, in canvas pixel coordinates. A highlight
+ * spanning several lines is several of these sharing a `groupId`, so each
+ * stays a plain box that zoom, rotation, and page edits already know how to move.
+ */
+export interface PlacedHighlight {
+  id: string;
+  /** Shared by every rectangle made from the same selection — removed together. */
+  groupId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 1-indexed page this highlight belongs to. */
+  page: number;
+}
+
 /** Per-document editing state — one entry per uploaded PDF. */
 export interface PdfDocumentState {
   id: string;
@@ -84,6 +101,7 @@ export interface PdfDocumentState {
   redactions: RedactionBox[];
   texts: PlacedText[];
   comments: PlacedComment[];
+  highlights: PlacedHighlight[];
   /** Values entered into the PDF's own form fields, by field name — only fields the user changed. */
   formValues: FormValues;
   /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
@@ -121,6 +139,7 @@ function createDocumentState(file: File): PdfDocumentState {
     redactions: [],
     texts: [],
     comments: [],
+    highlights: [],
     formValues: {},
     rotation: 0,
     exported: false,
@@ -180,6 +199,13 @@ function rescale(state: EditorState, nextScale: number): EditorState {
       y: c.y * factor,
       width: c.width * factor,
       height: c.height * factor,
+    })),
+    highlights: doc.highlights.map((h) => ({
+      ...h,
+      x: h.x * factor,
+      y: h.y * factor,
+      width: h.width * factor,
+      height: h.height * factor,
     })),
   }));
   return { ...state, renderScale, documents };
@@ -257,6 +283,7 @@ interface DocSnapshot {
   redactions: RedactionBox[];
   texts: PlacedText[];
   comments: PlacedComment[];
+  highlights: PlacedHighlight[];
   formValues: FormValues;
   rotation: number;
 }
@@ -322,6 +349,7 @@ function createEditorStore() {
       redactions: doc.redactions,
       texts: doc.texts,
       comments: doc.comments,
+      highlights: doc.highlights,
       formValues: doc.formValues,
       rotation: doc.rotation,
     };
@@ -707,6 +735,31 @@ function createEditorStore() {
     }));
   }
 
+  /** Highlights a text selection on the active document — one rectangle per line, removed together. */
+  function addHighlight(page: number, rects: Geometry[]) {
+    if (rects.length === 0) return;
+    const groupId = crypto.randomUUID();
+    recordActiveHistory(`add-highlight-${groupId}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        highlights: [...doc.highlights, ...rects.map((r) => ({ ...r, page, groupId, id: crypto.randomUUID() }))],
+        exported: false,
+      })),
+    );
+  }
+
+  function removeHighlight(groupId: string) {
+    recordActiveHistory(`remove-highlight-${groupId}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        highlights: doc.highlights.filter((h) => h.groupId !== groupId),
+        exported: false,
+      })),
+    );
+  }
+
   /** Records a value typed or picked into one of the PDF's own form fields. */
   function setFormValue(fieldName: string, value: string | boolean) {
     recordActiveHistory(`form-${fieldName}`);
@@ -749,7 +802,7 @@ function createEditorStore() {
     const doc = getActiveDocument(state);
     if (!doc) return;
 
-    const { id, file, rotation: oldRotation, placedSignatures, redactions, texts, comments } = doc;
+    const { id, file, rotation: oldRotation, placedSignatures, redactions, texts, comments, highlights } = doc;
     const { renderScale } = state;
     const newRotation = (((oldRotation + delta) % 360) + 360) % 360;
 
@@ -760,6 +813,7 @@ function createEditorStore() {
       boxes: RedactionBox[],
       newTexts: PlacedText[],
       newComments: PlacedComment[],
+      newHighlights: PlacedHighlight[],
     ) => {
       update((state) => ({
         ...state,
@@ -775,6 +829,7 @@ function createEditorStore() {
                 redactions: boxes,
                 texts: newTexts,
                 comments: newComments,
+                highlights: newHighlights,
                 exported: false,
               }
             : d,
@@ -798,11 +853,14 @@ function createEditorStore() {
       const newComments = await Promise.all(
         comments.map((c) => rotateGeometry(pdfjsDoc, c.page, renderScale, oldRotation, newRotation, c)),
       );
-      applyRotation(newPlacements, newRedactions, newTexts, newComments);
+      const newHighlights = await Promise.all(
+        highlights.map((h) => rotateGeometry(pdfjsDoc, h.page, renderScale, oldRotation, newRotation, h)),
+      );
+      applyRotation(newPlacements, newRedactions, newTexts, newComments, newHighlights);
     } catch {
       // Couldn't re-derive the geometry (e.g. the PDF failed to load) — fall
       // back to clearing rather than leaving stale, now-misaligned positions.
-      applyRotation([], [], [], []);
+      applyRotation([], [], [], [], []);
     }
   }
 
@@ -844,6 +902,24 @@ function createEditorStore() {
       return result;
     };
 
+    // A duplicated page's highlights get their own group, so removing one
+    // copy's highlight leaves the other's alone.
+    const regroupCopies = (items: PlacedHighlight[]): PlacedHighlight[] => {
+      if (edit.copiesPage === undefined) return items;
+      const copyPage = edit.mapPage(edit.copiesPage);
+      if (copyPage === null) return items;
+      const newGroups = new Map<string, string>();
+      return items.map((h) => {
+        if (h.page !== copyPage + 1) return h;
+        let groupId = newGroups.get(h.groupId);
+        if (!groupId) {
+          groupId = crypto.randomUUID();
+          newGroups.set(h.groupId, groupId);
+        }
+        return { ...h, groupId };
+      });
+    };
+
     // The rewrite is async — work from the document as it is now (the user
     // may have moved something meanwhile), and bail if another page edit (or
     // undo) already replaced the file.
@@ -851,11 +927,12 @@ function createEditorStore() {
     const current = findLatest();
     if (!current || current.file !== doc.file) return;
 
-    const [placedSignatures, redactions, texts, comments] = await Promise.all([
+    const [placedSignatures, redactions, texts, comments, highlights] = await Promise.all([
       remap(current.placedSignatures),
       remap(current.redactions),
       remap(current.texts),
       remap(current.comments),
+      remap(current.highlights).then(regroupCopies),
     ]);
 
     const latest = findLatest();
@@ -875,6 +952,7 @@ function createEditorStore() {
               redactions,
               texts,
               comments,
+              highlights,
               exported: false,
             }
           : d,
@@ -1021,6 +1099,8 @@ function createEditorStore() {
     updateComment,
     removeComment,
     setCommentsForDocument,
+    addHighlight,
+    removeHighlight,
     setFormValue,
     markDocumentExported,
     setRenderScale,

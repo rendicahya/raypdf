@@ -75,6 +75,7 @@
         redactions: doc.redactions,
         texts: doc.texts,
         comments: doc.comments,
+        highlights: doc.highlights,
         formValues: doc.formValues,
         securePdf: $securePdf,
       });
@@ -108,6 +109,7 @@
         redactions: doc.redactions,
         texts: doc.texts,
         comments: doc.comments,
+        highlights: doc.highlights,
         formValues: doc.formValues,
         onlyPage: doc.pageNumber,
         securePdf: $securePdf,
@@ -170,6 +172,7 @@
         redactions: doc.redactions,
         texts: doc.texts,
         comments: doc.comments,
+        highlights: doc.highlights,
         formValues: doc.formValues,
         securePdf: $securePdf,
       });

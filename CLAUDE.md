@@ -132,6 +132,8 @@ Supported interactions:
 
 Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot.
 
+Selecting text shows a Highlight button; highlights are stored per document (one box per line, grouped by `groupId`) and exported as PDF Highlight annotations (`lib/pdf/highlight.ts`).
+
 Tools are mutually exclusive: turning one on turns the others off, and Escape or Move returns to the default. A new tool must be added to every place that resets the others (FloatingControls, SignaturePanel's click-to-place, App's Escape handler, PDFViewer's hover/pan checks).
 
 Future:
@@ -234,7 +236,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, forms, pageOps, redact, sanitize, placement, screenshot, signatureDetect, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, forms, highlight, pageOps, redact, sanitize, placement, screenshot, signatureDetect, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage, sizing
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange
