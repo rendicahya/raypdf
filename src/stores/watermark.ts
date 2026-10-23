@@ -12,6 +12,24 @@ import type { WatermarkOptions } from '../lib/watermark/visible';
 /** Custom text (multi-line) the user wants overlaid onto the signature at export time. */
 export const watermarkText = persistedWritable<string>('watermarkText', '');
 
+/** Watermark texts the user saved for reuse, newest first. Picking one fills watermarkText. */
+export const savedWatermarkTexts = persistedWritable<string[]>('savedWatermarkTexts', []);
+
+export const MAX_SAVED_WATERMARK_TEXTS = 20;
+
+/** Saves the text (trimmed) to the top of the list; saving one that already exists moves it up. */
+export function saveWatermarkText(text: string): void {
+  const value = text.trim();
+  if (!value) return;
+  savedWatermarkTexts.update((list) =>
+    [value, ...list.filter((t) => t !== value)].slice(0, MAX_SAVED_WATERMARK_TEXTS),
+  );
+}
+
+export function removeSavedWatermarkText(text: string): void {
+  savedWatermarkTexts.update((list) => list.filter((t) => t !== text));
+}
+
 /** Whether to stamp the current date/time onto the signature at export time. */
 export const includeTimestamp = persistedWritable<boolean>('includeTimestamp', false);
 

@@ -69,6 +69,7 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Visible watermark
 
 - Multi-line custom text, plus an optional date & time stamp.
+- **Save watermark texts** with the bookmark button and reuse them with one click from the chips under the text box (hover a chip to remove it). Up to 20 are kept, most recent first.
 - 9-position picker, color, size, and opacity. Scroll the mouse wheel over the size and opacity sliders to adjust them.
 - Live preview on the signature in both the sidebar and the page.
 - Flattened into the signature image at export. Preferences persist across sessions.

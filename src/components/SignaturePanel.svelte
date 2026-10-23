@@ -21,7 +21,11 @@
     WATERMARK_OPACITY_MAX,
     WATERMARK_OPACITY_STEP,
     type WatermarkPosition,
+    savedWatermarkTexts,
+    saveWatermarkText,
+    removeSavedWatermarkText,
   } from '../stores/watermark';
+  import { tooltip } from '../lib/utils/tooltip';
   import { buildWatermarkLines, parsePosition } from '../lib/watermark/visible';
   import { fitWithinBox } from '../lib/signature/layout';
   import { getCachedPdf } from '../lib/pdf/docCache';
@@ -44,6 +48,10 @@
   const watermarkPreviewFontSize = $derived(Math.max(10, Math.round(sigImgHeight * $watermarkFontScale)));
   const watermarkPreviewLineHeight = $derived(watermarkPreviewFontSize * 1.2);
   const watermarkPreviewPadding = $derived(Math.round(sigImgHeight * 0.06));
+
+  // Saved watermark texts: chips under the text box fill it with one click.
+  const trimmedWatermarkText = $derived($watermarkText.trim());
+  const watermarkTextSaved = $derived($savedWatermarkTexts.includes(trimmedWatermarkText));
 
   // Saved signatures: draw, type, or upload new ones (SignatureCreator), pick
   // which one new placements use, drag any of them onto the page.
@@ -518,7 +526,31 @@
     {/if}
 
     <div class="mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-      <h4 class="mb-2 text-sm font-semibold text-neutral-600 dark:text-neutral-300">Watermark</h4>
+      <div class="mb-2 flex items-center justify-between">
+        <h4 class="text-sm font-semibold text-neutral-600 dark:text-neutral-300">Watermark</h4>
+        <button
+          type="button"
+          aria-label={watermarkTextSaved ? 'Watermark text saved' : 'Save watermark text'}
+          use:tooltip={watermarkTextSaved ? 'Saved' : 'Save this text for later'}
+          disabled={!trimmedWatermarkText || watermarkTextSaved}
+          class="flex h-6 w-6 items-center justify-center rounded-md transition-colors disabled:pointer-events-none
+            hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100
+            {watermarkTextSaved
+            ? 'text-blue-500 dark:text-blue-400'
+            : 'text-neutral-500 disabled:opacity-40 dark:text-neutral-400'}"
+          onclick={() => saveWatermarkText($watermarkText)}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill={watermarkTextSaved ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            stroke-width="2"
+            class="h-3.5 w-3.5"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 3h12v18l-6-4-6 4V3Z" />
+          </svg>
+        </button>
+      </div>
 
       <textarea
         id="watermark-text"
@@ -530,6 +562,40 @@
           dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
         bind:value={$watermarkText}
       ></textarea>
+
+      {#if $savedWatermarkTexts.length > 0}
+        <div class="mt-1.5 flex flex-wrap gap-1" aria-label="Saved watermark texts">
+          {#each $savedWatermarkTexts as text (text)}
+            {@const active = text === trimmedWatermarkText}
+            <span
+              class="group flex max-w-full items-center rounded-full border text-xs transition-colors {active
+                ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-300'
+                : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'}"
+            >
+              <button
+                type="button"
+                class="min-w-0 truncate py-0.5 pl-2 pr-1"
+                use:tooltip={text}
+                onclick={() => watermarkText.set(text)}
+              >
+                {text.split('\n')[0]}{text.includes('\n') ? ' …' : ''}
+              </button>
+              <button
+                type="button"
+                aria-label="Remove saved text"
+                class="mr-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-neutral-400
+                  opacity-0 transition-opacity hover:bg-neutral-200 hover:text-neutral-700 focus:opacity-100
+                  group-hover:opacity-100 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+                onclick={() => removeSavedWatermarkText(text)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-2.5 w-2.5">
+                  <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </span>
+          {/each}
+        </div>
+      {/if}
 
       <label class="mt-2 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <input type="checkbox" bind:checked={$includeTimestamp} class="rounded" />
