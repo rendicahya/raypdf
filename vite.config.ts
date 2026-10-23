@@ -31,7 +31,8 @@ export default defineConfig(({ mode }) => ({
         // Default globPatterns omit `.mjs`, which silently drops the pdf.js
         // worker (built as `pdf.worker.min-*.mjs`) from the precache — it
         // has to be listed explicitly alongside the usual extensions.
-        globPatterns: ['**/*.{js,mjs,css,html,svg,webmanifest}'],
+        // woff2 covers the bundled handwriting fonts for typed signatures.
+        globPatterns: ['**/*.{js,mjs,css,html,svg,webmanifest,woff2}'],
         // The pdf.js worker and main bundle are a few MB together; precaching
         // them is exactly the point (instant, offline-capable loads), so the
         // default 2 MB per-file limit needs raising rather than excluding them.

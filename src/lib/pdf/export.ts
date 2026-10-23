@@ -17,12 +17,15 @@ import type {
   RedactionBox,
 } from '../../stores/editor';
 
+/** The image for a placement's saved signature (PlacedSignature.signatureId), or undefined to skip it. */
+export type SignatureLookup = (signatureId: string) => Blob | undefined;
+
 export interface ExportParams {
   pdfFile: File;
   /** Stable per-document id (PdfDocumentState.id) — embedded so the Verify page can identify this export later. */
   documentId: string;
   /** Present only if signatures should be drawn onto the pages — signing is optional now that redaction can stand alone. */
-  signatureBlob?: Blob;
+  signatureFor?: SignatureLookup;
   placements?: PlacedSignature[];
   /** Canvas render scale used by PDFViewer, needed to map pixels back to PDF points. */
   renderScale: number;
@@ -139,7 +142,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
   const {
     pdfFile,
     documentId,
-    signatureBlob,
+    signatureFor,
     placements = [],
     renderScale,
     rotation = 0,
@@ -162,12 +165,21 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
   // the flattened page rather than being wiped out by it.
   await applyRedactions(pdfDoc, pdfjsDoc, redactions, renderScale, rotation);
 
-  if (signatureBlob && placements.length > 0) {
-    const watermarkedBlob = await applyVisibleWatermark(signatureBlob, watermark);
-    const pngBytes = await blobToBytes(watermarkedBlob);
-    const pngImage = await pdfDoc.embedPng(pngBytes);
+  if (signatureFor && placements.length > 0) {
+    // Each distinct signature image is watermarked and embedded once, then
+    // reused by every placement that shows it.
+    const embedded = new Map<Blob, Awaited<ReturnType<typeof pdfDoc.embedPng>>>();
 
     for (const placement of placements) {
+      const signatureBlob = signatureFor(placement.signatureId);
+      if (!signatureBlob) continue;
+      let pngImage = embedded.get(signatureBlob);
+      if (!pngImage) {
+        const watermarkedBlob = await applyVisibleWatermark(signatureBlob, watermark);
+        pngImage = await pdfDoc.embedPng(await blobToBytes(watermarkedBlob));
+        embedded.set(signatureBlob, pngImage);
+      }
+
       // Each `placement` is in canvas pixel coordinates for whatever page/scale/rotation
       // PDFViewer was displaying. Re-derive the exact same pdf.js viewport for that
       // page here and use its built-in point conversion — far less error-prone
@@ -421,12 +433,12 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
  * Splits one document into one PDF per page — each with the same
  * signature/redaction/text already applied — and bundles them into a single
  * ZIP. Complements `exportSignedPdf`'s `onlyPages`, which does the same for
- * just one page; `signatureBlob`/`placements` are pre-resolved by the caller
+ * just one page; `signatureFor`/`placements` are pre-resolved by the caller
  * exactly as for a normal single-document export.
  */
 export async function exportPagesAsZip(
   doc: PdfDocumentState,
-  signatureBlob: Blob | undefined,
+  signatureFor: SignatureLookup | undefined,
   placements: PlacedSignature[] | undefined,
   renderScale: number,
   rotation: number,
@@ -440,7 +452,7 @@ export async function exportPagesAsZip(
     const bytes = await exportSignedPdf({
       pdfFile: doc.file,
       documentId: doc.id,
-      signatureBlob,
+      signatureFor,
       placements,
       renderScale,
       rotation,
@@ -474,7 +486,7 @@ export interface BulkExportResult {
  */
 export async function exportAllAsZip(
   documents: PdfDocumentState[],
-  signatureBlob: Blob | null,
+  signatureFor: SignatureLookup | null,
   renderScale: number,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
@@ -485,7 +497,7 @@ export async function exportAllAsZip(
   const usedNames = new Set<string>();
 
   for (const doc of documents) {
-    const placements = signatureBlob ? doc.placedSignatures : [];
+    const placements = signatureFor ? doc.placedSignatures : [];
     if (placements.length === 0 && !hasDocumentEdits(doc)) {
       skipped.push(doc.file.name);
       continue;
@@ -494,7 +506,7 @@ export async function exportAllAsZip(
     const bytes = await exportSignedPdf({
       pdfFile: doc.file,
       documentId: doc.id,
-      signatureBlob: placements.length > 0 ? (signatureBlob ?? undefined) : undefined,
+      signatureFor: placements.length > 0 ? (signatureFor ?? undefined) : undefined,
       placements: placements.length > 0 ? placements : undefined,
       renderScale,
       rotation: doc.rotation,
@@ -534,7 +546,7 @@ export async function exportAllAsZip(
 export async function exportMergedPdf(
   documents: PdfDocumentState[],
   orderedIds: string[],
-  signatureBlob: Blob | null,
+  signatureFor: SignatureLookup | null,
   renderScale: number,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
@@ -547,11 +559,11 @@ export async function exportMergedPdf(
     const doc = byId.get(id);
     if (!doc) continue;
 
-    const placements = signatureBlob ? doc.placedSignatures : [];
+    const placements = signatureFor ? doc.placedSignatures : [];
     const bytes = await exportSignedPdf({
       pdfFile: doc.file,
       documentId: doc.id,
-      signatureBlob: placements.length > 0 ? (signatureBlob ?? undefined) : undefined,
+      signatureFor: placements.length > 0 ? (signatureFor ?? undefined) : undefined,
       placements: placements.length > 0 ? placements : undefined,
       renderScale,
       rotation: doc.rotation,

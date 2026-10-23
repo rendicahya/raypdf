@@ -8,7 +8,7 @@
   import { textSelectMode } from '../stores/textSelect';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation } from '../lib/pdf/loader';
-  import { boxToRatio, placementFromRatioForDocument } from '../lib/pdf/placement';
+  import { boxToRatio, boxFromRatioForDocument } from '../lib/pdf/placement';
   import { tooltip } from '../lib/utils/tooltip';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { downloadBlob } from '../lib/pdf/screenshot';
@@ -215,7 +215,7 @@
         const pdfjsDoc = await getCachedPdf(doc.id, doc.file);
         const newBoxes = await Promise.all(
           applicable.map((r) =>
-            placementFromRatioForDocument(pdfjsDoc, r.page, $editorStore.renderScale, doc.rotation, r.ratio),
+            boxFromRatioForDocument(pdfjsDoc, r.page, $editorStore.renderScale, doc.rotation, r.ratio),
           ),
         );
         editorStore.setRedactionsForDocument(doc.id, newBoxes);

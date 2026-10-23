@@ -49,7 +49,7 @@
 
     return {
       placements: placements.length > 0 ? placements : undefined,
-      signatureBlob: placements.length > 0 ? sig.signature?.blob : undefined,
+      signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
     };
   }
 
@@ -60,12 +60,12 @@
     exportingOne = true;
     error = null;
     try {
-      const { placements, signatureBlob } = await resolveExportInputs(doc);
+      const { placements, signatureFor } = await resolveExportInputs(doc);
 
       const bytes = await exportSignedPdf({
         pdfFile: doc.file,
         documentId: doc.id,
-        signatureBlob,
+        signatureFor,
         placements,
         renderScale: $editorStore.renderScale,
         rotation: doc.rotation,
@@ -94,12 +94,12 @@
     exportingPageOnly = true;
     error = null;
     try {
-      const { placements, signatureBlob } = await resolveExportInputs(doc);
+      const { placements, signatureFor } = await resolveExportInputs(doc);
 
       const bytes = await exportSignedPdf({
         pdfFile: doc.file,
         documentId: doc.id,
-        signatureBlob,
+        signatureFor,
         placements,
         renderScale: $editorStore.renderScale,
         rotation: doc.rotation,
@@ -129,11 +129,11 @@
     exportingPagesZip = true;
     error = null;
     try {
-      const { placements, signatureBlob } = await resolveExportInputs(doc);
+      const { placements, signatureFor } = await resolveExportInputs(doc);
 
       const blob = await exportPagesAsZip(
         doc,
-        signatureBlob,
+        signatureFor,
         placements,
         $editorStore.renderScale,
         doc.rotation,
@@ -157,12 +157,12 @@
     printing = true;
     error = null;
     try {
-      const { placements, signatureBlob } = await resolveExportInputs(doc);
+      const { placements, signatureFor } = await resolveExportInputs(doc);
 
       const bytes = await exportSignedPdf({
         pdfFile: doc.file,
         documentId: doc.id,
-        signatureBlob,
+        signatureFor,
         placements,
         renderScale: $editorStore.renderScale,
         rotation: doc.rotation,
@@ -186,7 +186,6 @@
 
   async function onExportAll() {
     const documents = $editorStore.documents;
-    const sig = $signatureStore;
 
     if (documents.length === 0) {
       error = 'Add a PDF first.';
@@ -198,7 +197,7 @@
     try {
       const result = await exportAllAsZip(
         documents,
-        sig.signature?.blob ?? null,
+        signatureStore.lookup(),
         $editorStore.renderScale,
         currentWatermark(),
         $stripEmbeddedScripts,
@@ -237,7 +236,6 @@
 
   async function onConfirmMerge(orderedIds: string[]) {
     const documents = $editorStore.documents;
-    const sig = $signatureStore;
 
     merging = true;
     error = null;
@@ -245,7 +243,7 @@
       const bytes = await exportMergedPdf(
         documents,
         orderedIds,
-        sig.signature?.blob ?? null,
+        signatureStore.lookup(),
         $editorStore.renderScale,
         currentWatermark(),
         $stripEmbeddedScripts,

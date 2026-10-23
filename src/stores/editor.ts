@@ -13,6 +13,8 @@ import type { FormValues } from '../lib/pdf/forms';
 /** Signature instance placed on the page, in canvas pixel coordinates. */
 export interface PlacedSignature {
   id: string;
+  /** Which saved signature this shows (see stores/signature.ts). */
+  signatureId: string;
   x: number;
   y: number;
   width: number;

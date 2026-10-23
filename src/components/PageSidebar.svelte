@@ -174,15 +174,15 @@
   async function exportPages(pages: number[]) {
     const doc = $activeDocument;
     if (!doc || pages.length === 0 || busy) return;
-    const signatureBlob = $signatureStore.signature?.blob;
-    const placements = signatureBlob ? doc.placedSignatures : [];
+    const signatureFor = signatureStore.lookup();
+    const placements = signatureFor ? doc.placedSignatures : [];
     busy = true;
     pageError = null;
     try {
       const bytes = await exportSignedPdf({
         pdfFile: doc.file,
         documentId: doc.id,
-        signatureBlob: placements.length > 0 ? signatureBlob : undefined,
+        signatureFor: placements.length > 0 ? (signatureFor ?? undefined) : undefined,
         placements: placements.length > 0 ? placements : undefined,
         renderScale: $editorStore.renderScale,
         rotation: doc.rotation,

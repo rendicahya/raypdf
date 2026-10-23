@@ -1,20 +1,28 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 /**
- * Local persistence for the user's handwritten signature image.
- * Everything stays in IndexedDB — nothing ever leaves the browser.
+ * Local persistence for the user's signature images — uploaded scans, drawn,
+ * or typed. Everything stays in IndexedDB — nothing ever leaves the browser.
  */
 
 const DB_NAME = 'signy';
-const DB_VERSION = 1;
-const STORE_NAME = 'signature';
-const RECORD_KEY = 'current';
+const DB_VERSION = 2;
+const STORE_NAME = 'signatures';
+/** Version 1 kept a single signature under this store/key; it's moved into STORE_NAME on upgrade. */
+const LEGACY_STORE_NAME = 'signature';
+const LEGACY_RECORD_KEY = 'current';
+
+export type SignatureKind = 'upload' | 'drawn' | 'typed';
 
 export interface StoredSignature {
-  /** Raw image bytes (PNG/JPEG) as uploaded by the user. */
+  id: string;
+  /** Image bytes (PNG/JPEG) — as uploaded, or rendered from a drawn/typed signature. */
   blob: Blob;
   fileName: string;
   mimeType: string;
+  kind: SignatureKind;
+  /** Short name shown in the signature list. */
+  label: string;
   savedAt: number;
 }
 
@@ -23,9 +31,25 @@ let dbPromise: Promise<IDBPDatabase> | null = null;
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      async upgrade(db, oldVersion, _newVersion, tx) {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
+          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+        if (oldVersion >= 1 && db.objectStoreNames.contains(LEGACY_STORE_NAME)) {
+          const legacy = await tx.objectStore(LEGACY_STORE_NAME).get(LEGACY_RECORD_KEY);
+          if (legacy) {
+            const migrated: StoredSignature = {
+              id: crypto.randomUUID(),
+              blob: legacy.blob,
+              fileName: legacy.fileName,
+              mimeType: legacy.mimeType,
+              kind: 'upload',
+              label: labelFromFileName(legacy.fileName),
+              savedAt: legacy.savedAt,
+            };
+            await tx.objectStore(STORE_NAME).put(migrated);
+          }
+          db.deleteObjectStore(LEGACY_STORE_NAME);
         }
       },
     });
@@ -33,24 +57,36 @@ function getDb(): Promise<IDBPDatabase> {
   return dbPromise;
 }
 
-export async function saveSignature(file: File): Promise<StoredSignature> {
+export function labelFromFileName(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '') || 'Signature';
+}
+
+export async function saveSignature(
+  blob: Blob,
+  meta: { fileName: string; kind: SignatureKind; label: string },
+): Promise<StoredSignature> {
   const record: StoredSignature = {
-    blob: file,
-    fileName: file.name,
-    mimeType: file.type,
+    id: crypto.randomUUID(),
+    blob,
+    fileName: meta.fileName,
+    mimeType: blob.type,
+    kind: meta.kind,
+    label: meta.label,
     savedAt: Date.now(),
   };
   const db = await getDb();
-  await db.put(STORE_NAME, record, RECORD_KEY);
+  await db.put(STORE_NAME, record);
   return record;
 }
 
-export async function loadSignature(): Promise<StoredSignature | undefined> {
+/** Every saved signature, oldest first. */
+export async function loadSignatures(): Promise<StoredSignature[]> {
   const db = await getDb();
-  return db.get(STORE_NAME, RECORD_KEY);
+  const all: StoredSignature[] = await db.getAll(STORE_NAME);
+  return all.sort((a, b) => a.savedAt - b.savedAt);
 }
 
-export async function deleteSignature(): Promise<void> {
+export async function deleteSignature(id: string): Promise<void> {
   const db = await getDb();
-  await db.delete(STORE_NAME, RECORD_KEY);
+  await db.delete(STORE_NAME, id);
 }

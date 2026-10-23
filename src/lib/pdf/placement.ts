@@ -13,13 +13,13 @@ function clamp(value: number, min: number, max: number): number {
  * hasn't manually positioned yet (e.g. bulk export), mirroring what
  * PDFViewer's "Use last position" does for the page that's actually visible.
  */
-export async function placementFromRatioForDocument(
+export async function boxFromRatioForDocument(
   pdfjsDoc: PdfDocument,
   pageNumber: number,
   renderScale: number,
   rotation: number,
   ratio: PlacementRatio,
-): Promise<PlacedSignature> {
+): Promise<{ x: number; y: number; width: number; height: number; page: number }> {
   const page = await pdfjsDoc.getPage(pageNumber);
   const totalRotation = getTotalRotation(page, rotation);
   const viewport = page.getViewport({ scale: renderScale, rotation: totalRotation });
@@ -28,13 +28,25 @@ export async function placementFromRatioForDocument(
   const height = ratio.heightRatio * viewport.height;
 
   return {
-    id: crypto.randomUUID(),
     width,
     height,
     x: clamp(ratio.xRatio * viewport.width, 0, viewport.width - width),
     y: clamp(ratio.yRatio * viewport.height, 0, viewport.height - height),
     page: pageNumber,
   };
+}
+
+/** boxFromRatioForDocument, as a placement of the given saved signature. */
+export async function placementFromRatioForDocument(
+  pdfjsDoc: PdfDocument,
+  pageNumber: number,
+  renderScale: number,
+  rotation: number,
+  ratio: PlacementRatio,
+  signatureId: string,
+): Promise<PlacedSignature> {
+  const box = await boxFromRatioForDocument(pdfjsDoc, pageNumber, renderScale, rotation, ratio);
+  return { ...box, id: crypto.randomUUID(), signatureId };
 }
 
 /**

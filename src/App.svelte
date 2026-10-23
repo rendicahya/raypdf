@@ -12,7 +12,7 @@
   import VerifyPage from './components/VerifyPage.svelte';
   import { editorStore, activeDocument } from './stores/editor';
   import { theme } from './stores/theme';
-  import { pageSidebarOpen, togglePageSidebar } from './stores/layout';
+  import { pageSidebarOpen, pageSidebarWidth, togglePageSidebar } from './stores/layout';
   import { redactMode } from './stores/redact';
   import { textToolMode } from './stores/textTool';
   import { zoomToolMode } from './stores/zoomTool';
@@ -440,7 +440,7 @@
           border border-l-0 border-neutral-200 bg-white text-neutral-400 shadow-sm transition-[left]
           hover:bg-neutral-100 hover:text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900
           dark:text-neutral-500 dark:hover:bg-neutral-800"
-        style:left={$pageSidebarOpen ? '11rem' : '0'}
+        style:left={$pageSidebarOpen ? `${$pageSidebarWidth}px` : '0'}
         onclick={togglePageSidebar}
       >
         <svg

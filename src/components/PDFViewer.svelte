@@ -35,7 +35,8 @@
     TEXT_LETTER_SPACING_MIN,
     TEXT_LETTER_SPACING_MAX,
   } from '../stores/textTool';
-  import { signatureStore } from '../stores/signature';
+  import { signatureStore, resolveSignature } from '../stores/signature';
+  import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import {
     watermarkText,
     includeTimestamp,
@@ -459,7 +460,9 @@
   function placeSuggestedSignature() {
     const s = suggestion;
     if (!s) return;
-    const id = editorStore.addSignature({ x: s.x, y: s.y, width: s.width, height: s.height, page: s.page });
+    const signatureId = $signatureStore.activeId;
+    if (!signatureId) return;
+    const id = editorStore.addSignature({ x: s.x, y: s.y, width: s.width, height: s.height, page: s.page, signatureId });
     selectedSignatureId = id;
     signatureSuggestion.set(null);
   }
@@ -572,21 +575,8 @@
     if (isPageDrag(e)) return;
     e.preventDefault();
     isDragOver = false;
-
-    const doc = $activeDocument;
-    if (!doc) return;
-
-    const sig = $signatureStore;
-    const { width, height } = fitWithinBox(sig.naturalWidth, sig.naturalHeight);
-
-    const rect = canvasEl.getBoundingClientRect();
-    const x = clamp(e.clientX - rect.left - width / 2, 0, rect.width - width);
-    const y = clamp(e.clientY - rect.top - height / 2, 0, rect.height - height);
-
-    const placement = { x, y, width, height, page: doc.pageNumber };
-    const id = editorStore.addSignature(placement);
-    rememberPlacement({ ...placement, id });
-    selectedSignatureId = id;
+    // The signature panel tags each dragged signature with its id.
+    placeSignatureAt(e, e.dataTransfer?.getData(SIGNATURE_DRAG_TYPE) || undefined);
   }
 
   function onCanvasMouseMove(e: PointerEvent) {
@@ -692,20 +682,20 @@
 
   type ClientPoint = { clientX: number; clientY: number };
 
-  /** Places the saved signature centered on a point of the page. */
-  function placeSignatureAt(e: ClientPoint) {
+  /** Places a saved signature (the active one unless given) centered on a point of the page. */
+  function placeSignatureAt(e: ClientPoint, signatureId?: string) {
     const doc = $activeDocument;
     if (!doc) return;
 
-    const sig = $signatureStore;
-    if (!sig.signature) return;
+    const sig = resolveSignature($signatureStore, signatureId);
+    if (!sig) return;
 
     const { width, height } = fitWithinBox(sig.naturalWidth, sig.naturalHeight);
     const rect = canvasEl.getBoundingClientRect();
     const x = clamp(e.clientX - rect.left - width / 2, 0, rect.width - width);
     const y = clamp(e.clientY - rect.top - height / 2, 0, rect.height - height);
 
-    const placement = { x, y, width, height, page: doc.pageNumber };
+    const placement = { x, y, width, height, page: doc.pageNumber, signatureId: sig.id };
     const id = editorStore.addSignature(placement);
     rememberPlacement({ ...placement, id });
     selectedSignatureId = id;
@@ -1029,8 +1019,18 @@
     doc: NonNullable<typeof $activeDocument>,
     area: Parameters<typeof capturePage>[3],
   ): Promise<Blob> {
-    const signatures = signaturesOnCurrentPage;
-    const sigBlob = $signatureStore.signature?.blob;
+    // Each placement's own signature, watermarked once per distinct image.
+    const watermarked = new Map<Blob, Promise<Blob>>();
+    const signatures = (
+      await Promise.all(
+        signaturesOnCurrentPage.map(async (placement) => {
+          const blob = resolveSignature($signatureStore, placement.signatureId)?.blob;
+          if (!blob) return null;
+          if (!watermarked.has(blob)) watermarked.set(blob, applyVisibleWatermark(blob, currentWatermarkOptions()));
+          return { ...placement, image: await watermarked.get(blob)! };
+        }),
+      )
+    ).filter((s) => s !== null);
     const overlays: CaptureOverlays = {
       renderScale: $editorStore.renderScale,
       fields: formBoxes.map((f) => {
@@ -1056,8 +1056,6 @@
       highlights: highlightsOnCurrentPage,
       redactions: redactionsOnCurrentPage,
       signatures,
-      signatureImage:
-        sigBlob && signatures.length > 0 ? await applyVisibleWatermark(sigBlob, currentWatermarkOptions()) : null,
       texts: textsOnCurrentPage,
     };
     return capturePage(loaded, doc.pageNumber, doc.rotation, area, overlays);
@@ -1885,7 +1883,8 @@
 
   {#each signaturesOnCurrentPage as sig (sig.id)}
     {@const isSelected = selectedSignatureId === sig.id}
-    {#if $signatureStore.previewUrl}
+    {@const image = resolveSignature($signatureStore, sig.signatureId)}
+    {#if image}
       <!-- role="group" is the closest ARIA fit for a movable/resizable object
            (it groups the resize handle and remove button), but that role is
            classified as non-interactive by Svelte's a11y check even though
@@ -1909,7 +1908,7 @@
         onkeydown={(e) => onSignatureKeydown(e, sig.id)}
       >
         <img
-          src={$signatureStore.previewUrl}
+          src={image.previewUrl}
           alt="Placed signature"
           draggable="false"
           class="h-full w-full select-none object-contain"

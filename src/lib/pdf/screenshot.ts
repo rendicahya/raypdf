@@ -44,9 +44,8 @@ export interface CaptureOverlays {
   fields: CaptureField[];
   highlights: Box[];
   redactions: Box[];
-  signatures: Box[];
-  /** The signature image with its visible watermark already applied (see lib/watermark/visible.ts). */
-  signatureImage: Blob | null;
+  /** Each placed signature with its image, visible watermark already applied (see lib/watermark/visible.ts). */
+  signatures: (Box & { image: Blob })[];
   texts: PlacedText[];
 }
 
@@ -107,17 +106,20 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
   ctx.fillStyle = '#000';
   for (const box of overlays.redactions) ctx.fillRect(box.x, box.y, box.width, box.height);
 
-  if (overlays.signatureImage && overlays.signatures.length > 0) {
-    const bitmap = await createImageBitmap(overlays.signatureImage);
-    for (const box of overlays.signatures) {
-      // object-fit: contain, like the editor shows it.
-      const scale = Math.min(box.width / bitmap.width, box.height / bitmap.height);
-      const w = bitmap.width * scale;
-      const h = bitmap.height * scale;
-      ctx.drawImage(bitmap, box.x + (box.width - w) / 2, box.y + (box.height - h) / 2, w, h);
+  const bitmaps = new Map<Blob, ImageBitmap>();
+  for (const box of overlays.signatures) {
+    let bitmap = bitmaps.get(box.image);
+    if (!bitmap) {
+      bitmap = await createImageBitmap(box.image);
+      bitmaps.set(box.image, bitmap);
     }
-    bitmap.close();
+    // object-fit: contain, like the editor shows it.
+    const scale = Math.min(box.width / bitmap.width, box.height / bitmap.height);
+    const w = bitmap.width * scale;
+    const h = bitmap.height * scale;
+    ctx.drawImage(bitmap, box.x + (box.width - w) / 2, box.y + (box.height - h) / 2, w, h);
   }
+  bitmaps.forEach((b) => b.close());
 
   for (const t of overlays.texts) drawTextBox(ctx, t);
 
