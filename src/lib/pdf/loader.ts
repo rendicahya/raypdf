@@ -9,10 +9,20 @@ export type PdfDocument = pdfjsLib.PDFDocumentProxy;
  * Loads a PDF entirely in-memory. The file bytes never leave the browser —
  * pdf.js parses the array buffer locally.
  */
-export async function loadPdf(file: File): Promise<PdfDocument> {
+export async function loadPdf(file: File, password?: string): Promise<PdfDocument> {
   const buffer = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({ data: buffer });
+  const loadingTask = pdfjsLib.getDocument({ data: buffer, password });
   return loadingTask.promise;
+}
+
+/** Whether pdf.js refused a file because it needs a password to open (or the one given was wrong). */
+export function isPasswordError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'PasswordException';
+}
+
+/** Whether a password error means the password given was wrong, rather than missing. */
+export function isWrongPasswordError(e: unknown): boolean {
+  return isPasswordError(e) && (e as { code?: number }).code === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
 }
 
 /**

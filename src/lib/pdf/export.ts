@@ -9,6 +9,7 @@ import { drawTextBox, embedTextFont, hexToRgb } from './textRender';
 import { embedVerificationRecord } from './verification';
 import { embedHighlightAnnotations } from './highlight';
 import { drawPageNumbers, type PageNumberSettings } from './pageNumbers';
+import { applyProtection, loadEditablePdf, type SaveProtection } from './password';
 import type {
   PdfDocumentState,
   PlacedComment,
@@ -45,8 +46,8 @@ export interface ExportParams {
   highlights?: PlacedHighlight[];
   /** If set, the exported PDF contains only these 1-indexed pages, in this order (with any placements/redactions/text still applied), instead of every page. */
   onlyPages?: number[];
-  /** Lock the exported PDF's copy/extract permission — see `applyCopyProtection`. */
-  securePdf?: boolean;
+  /** A password to open the saved file and/or locked copying — see `applyProtection`. */
+  protection?: SaveProtection;
   /** Values the user entered into the PDF's own form fields, by field name — see `lib/pdf/forms.ts`. */
   formValues?: FormValues;
   /** Numbers to draw on the pages, if any — see `lib/pdf/pageNumbers.ts`. */
@@ -55,32 +56,6 @@ export interface ExportParams {
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
   return blob.arrayBuffer().then((buf) => new Uint8Array(buf));
-}
-
-/**
- * A random owner password, discarded immediately after use. pdf-lib requires
- * some password to set permission flags on a document, but the exported PDF
- * itself gets no user password — anyone can still open it, only the
- * restricted permissions (e.g. copying) are enforced by compliant readers.
- * Since the password is never stored, no one — including RayPDF — can later
- * remove the restriction from the exported file.
- */
-function randomOwnerPassword(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Locks down the copy/extract permission on a document. Applied as the very
- * last step before a document is saved — encrypting earlier would block any
- * further edits (drawing, page copying, etc.) pdf-lib needs to perform.
- */
-export function applyCopyProtection(pdfDoc: PDFDocument): void {
-  pdfDoc.encrypt({
-    ownerPassword: randomOwnerPassword(),
-    permissions: { copying: false },
-  });
 }
 
 /**
@@ -156,13 +131,13 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     comments = [],
     highlights = [],
     onlyPages,
-    securePdf = false,
+    protection = {},
     formValues = {},
     pageNumbers = null,
   } = params;
 
   const pdfBytes = await blobToBytes(pdfFile);
-  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const pdfDoc = await loadEditablePdf(pdfBytes);
 
   // Flatten any redacted pages — including pages with signatures — before
   // drawing signatures, so each signature ends up as a normal image on top of
@@ -308,11 +283,11 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     );
     copiedPages.forEach((page) => subsetDoc.addPage(page));
     embedVerificationRecord(subsetDoc, verificationRecord);
-    if (securePdf) applyCopyProtection(subsetDoc);
+    applyProtection(subsetDoc, protection);
     return subsetDoc.save(SAVE_OPTIONS);
   }
 
-  if (securePdf) applyCopyProtection(pdfDoc);
+  applyProtection(pdfDoc, protection);
   return pdfDoc.save(SAVE_OPTIONS);
 }
 
@@ -468,7 +443,7 @@ export async function exportPagesAsZip(
   rotation: number,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
-  securePdf?: boolean,
+  protection?: SaveProtection,
 ): Promise<Blob> {
   const zip = new JSZip();
 
@@ -489,7 +464,7 @@ export async function exportPagesAsZip(
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       onlyPages: [page],
-      securePdf,
+      protection,
     });
     zip.file(pageOnlyFileName(doc.file.name, page), bytes);
   }
@@ -515,7 +490,7 @@ export async function exportAllAsZip(
   renderScale: number,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
-  securePdf?: boolean,
+  protection?: SaveProtection,
 ): Promise<BulkExportResult> {
   const zip = new JSZip();
   const skipped: string[] = [];
@@ -543,7 +518,7 @@ export async function exportAllAsZip(
       highlights: doc.highlights,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
-      securePdf,
+      protection,
     });
 
     let name = signedFileName(doc.file.name);
@@ -576,7 +551,7 @@ export async function exportMergedPdf(
   renderScale: number,
   watermark?: WatermarkOptions,
   stripScripts?: boolean,
-  securePdf?: boolean,
+  protection: SaveProtection = {},
 ): Promise<Uint8Array> {
   const byId = new Map(documents.map((d) => [d.id, d]));
   const merged = await PDFDocument.create();
@@ -609,7 +584,7 @@ export async function exportMergedPdf(
   }
 
   // Applied to the merged document itself, not the per-source exports above —
-  // those still need to be copyable (unencrypted) for `copyPages` to read them.
-  if (securePdf) applyCopyProtection(merged);
+  // those still need to be readable (unencrypted) for `copyPages` to read them.
+  applyProtection(merged, protection);
   return merged.save();
 }

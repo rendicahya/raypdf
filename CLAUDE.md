@@ -162,7 +162,7 @@ When Export PDF is pressed:
 
 original_filename_signed.pdf
 
-Also available: save compressed (`lib/pdf/compress.ts`: re-encodes images as smaller JPEGs, deflates raw streams; runs on the exported bytes, with copy-locking applied after it), save the current page only, each page as a separate PDF (ZIP), all documents (ZIP), merge documents in a chosen order, and print. Optional: strip embedded JavaScript, lock copying.
+Also available: save compressed (`lib/pdf/compress.ts`: re-encodes images as smaller JPEGs, deflates raw streams; runs on the exported bytes, with copy-locking applied after it), save the current page only, each page as a separate PDF (ZIP), all documents (ZIP), merge documents in a chosen order, and print. Optional: strip embedded JavaScript, lock copying, require a password to open (`lib/pdf/password.ts`: `applyProtection`, the last step before saving; the password lives in `stores/exportOptions.ts`, memory only). Load PDFs for editing with `loadEditablePdf` (it decrypts permission-only encryption); a PDF that needs a password to open is unlocked by UnlockPdf (shown by PDFPages, the front-page file list, and VerifyResults), which swaps in a decrypted copy via `editorStore.unlockDocument`.
 
 Every export embeds a small verification record in the PDF metadata (`lib/pdf/verification.ts`).
 

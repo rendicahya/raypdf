@@ -2,7 +2,8 @@
   import { tick } from 'svelte';
   import PDFViewer from './PDFViewer.svelte';
   import { getCachedPdf } from '../lib/pdf/docCache';
-  import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
+  import { getTotalRotation, isPasswordError, type PdfDocument } from '../lib/pdf/loader';
+  import UnlockPdf from './UnlockPdf.svelte';
   import { editorStore, activeDocument } from '../stores/editor';
 
   // The document as one continuous column of pages. Every page gets a
@@ -22,6 +23,7 @@
 
   let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
+  let locked = $state(false);
   // Unscaled page sizes, rotated as shown.
   let sizes: { width: number; height: number }[] = $state([]);
 
@@ -48,6 +50,7 @@
         pdfDoc = loaded;
         sizes = loadedSizes;
         error = null;
+        locked = false;
         editorStore.setPageCount(loaded.numPages);
         // A new file can renumber pages; show the current one from its top.
         if (changedFile) {
@@ -56,7 +59,9 @@
         }
       })
       .catch((e) => {
-        if (!cancelled) error = e instanceof Error ? e.message : 'Failed to load PDF';
+        if (cancelled) return;
+        locked = isPasswordError(e);
+        error = locked ? null : e instanceof Error ? e.message : 'Failed to load PDF';
       });
     return () => {
       cancelled = true;
@@ -211,6 +216,14 @@
 
 {#if error}
   <div class="p-4 text-sm text-red-600">{error}</div>
+{:else if locked && docId && docFile}
+  <div class="flex justify-center p-8">
+    <div
+      class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+    >
+      <UnlockPdf id={docId} file={docFile} />
+    </div>
+  </div>
 {/if}
 
 <div bind:this={listEl} class="mx-auto flex w-fit flex-col items-center gap-6" onpointerdowncapture={onPointerDownCapture}>

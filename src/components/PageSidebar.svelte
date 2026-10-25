@@ -9,7 +9,7 @@
   } from '../stores/layout';
   import { signatureStore } from '../stores/signature';
   import { currentWatermarkOptions } from '../stores/watermark';
-  import { stripEmbeddedScripts, securePdf } from '../stores/exportOptions';
+  import { stripEmbeddedScripts, currentSaveProtection } from '../stores/exportOptions';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
@@ -207,7 +207,7 @@
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
         onlyPages: pages,
-        securePdf: format === 'pdf' && $securePdf,
+        protection: format === 'pdf' ? currentSaveProtection() : {},
       });
       if (format === 'pdf') downloadSelectedPagesPdf(bytes, doc.file.name, pages);
       else await downloadPagesAsImages(bytes, doc.file.name, pages, format);

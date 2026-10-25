@@ -2,7 +2,7 @@
   import { editorStore, activeDocument, type PdfDocumentState } from '../stores/editor';
   import { signatureStore } from '../stores/signature';
   import { currentWatermarkOptions } from '../stores/watermark';
-  import { stripEmbeddedScripts, securePdf } from '../stores/exportOptions';
+  import { stripEmbeddedScripts, securePdf, passwordProtect, savePassword, currentSaveProtection } from '../stores/exportOptions';
   import {
     exportSignedPdf,
     downloadSignedPdf,
@@ -15,10 +15,10 @@
     downloadMergedPdf,
     hasDocumentEdits,
     printPdfBytes,
-    applyCopyProtection,
     downloadCompressedPdf,
   } from '../lib/pdf/export';
   import { compressPdf } from '../lib/pdf/compress';
+import { applyProtection, hasProtection } from '../lib/pdf/password';
   import { formatFileSize } from '../lib/utils/fileValidation';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
   import { tooltip } from '../lib/utils/tooltip';
@@ -34,6 +34,7 @@
   let showMergeDialog = $state(false);
   let showSaveMenu = $state(false);
   let merging = $state(false);
+  let showPassword = $state(false);
   let error: string | null = $state(null);
 
   const currentWatermark = currentWatermarkOptions;
@@ -82,7 +83,7 @@
         highlights: doc.highlights,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
-        securePdf: $securePdf,
+        protection: currentSaveProtection(),
       });
       downloadSignedPdf(bytes, doc.file.name);
       editorStore.markDocumentExported(doc.id);
@@ -105,6 +106,7 @@
     compressNote = null;
     clearTimeout(compressNoteTimeout);
     try {
+      const protection = currentSaveProtection();
       const placements = $signatureStore.signature ? doc.placedSignatures : [];
       const bytes = await exportSignedPdf({
         pdfFile: doc.file,
@@ -121,10 +123,12 @@
         highlights: doc.highlights,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
-        // Locked after compressing: an encrypted file can't be rewritten.
-        securePdf: false,
       });
-      const result = await compressPdf(bytes, $securePdf ? applyCopyProtection : undefined);
+      // Protected after compressing: an encrypted file can't be rewritten.
+      const result = await compressPdf(
+        bytes,
+        hasProtection(protection) ? (d) => applyProtection(d, protection) : undefined,
+      );
       downloadCompressedPdf(result.bytes, doc.file.name);
       editorStore.markDocumentExported(doc.id);
 
@@ -167,7 +171,7 @@
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
         onlyPages: [doc.pageNumber],
-        securePdf: $securePdf,
+        protection: currentSaveProtection(),
       });
       downloadPageOnlyPdf(bytes, doc.file.name, doc.pageNumber);
       editorStore.markDocumentExported(doc.id);
@@ -195,7 +199,7 @@
         doc.rotation,
         currentWatermark(),
         $stripEmbeddedScripts,
-        $securePdf,
+        currentSaveProtection(),
       );
       downloadPagesZip(blob, doc.file.name);
       editorStore.markDocumentExported(doc.id);
@@ -231,7 +235,8 @@
         highlights: doc.highlights,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
-        securePdf: $securePdf,
+        // A password would make the print dialog ask for it, so printing only keeps the copy lock.
+        protection: { lockCopying: $securePdf },
       });
       printPdfBytes(bytes);
       editorStore.markDocumentExported(doc.id);
@@ -259,7 +264,7 @@
         $editorStore.renderScale,
         currentWatermark(),
         $stripEmbeddedScripts,
-        $securePdf,
+        currentSaveProtection(),
       );
 
       if (result.exportedCount === 0) {
@@ -305,7 +310,7 @@
         $editorStore.renderScale,
         currentWatermark(),
         $stripEmbeddedScripts,
-        $securePdf,
+        currentSaveProtection(),
       );
       downloadMergedPdf(bytes);
       documents.forEach((doc) => editorStore.markDocumentExported(doc.id));
@@ -328,12 +333,21 @@
       class="flex items-center gap-1.5 bg-blue-600 px-3 py-1 text-sm font-medium text-white transition-colors
         hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       disabled={exportingOne}
-      use:tooltip={'Save this PDF with everything you added'}
+      use:tooltip={$passwordProtect
+        ? 'Save this PDF with everything you added, protected with your password'
+        : 'Save this PDF with everything you added'}
       onclick={onExportOne}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />
-      </svg>
+      {#if $passwordProtect}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+          <rect x="5" y="11" width="14" height="9" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      {:else}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />
+        </svg>
+      {/if}
       {exportingOne ? 'Saving…' : 'Save'}
     </button>
     <button
@@ -488,6 +502,52 @@
           />
           <span>Secure PDF (disable text/content copying)</span>
         </label>
+
+        <label class="flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+          <input
+            type="checkbox"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-neutral-300 text-blue-600
+              focus:ring-blue-500 dark:border-neutral-600"
+            bind:checked={$passwordProtect}
+          />
+          <span>Require a password to open</span>
+        </label>
+        {#if $passwordProtect}
+          <div class="ml-5 flex flex-col gap-1">
+            <div class="flex items-center gap-1">
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
+                type={showPassword ? 'text' : 'password'}
+                autocomplete="new-password"
+                placeholder="Password"
+                aria-label="Password for the saved PDF"
+                autofocus
+                class="min-w-0 flex-1 rounded-md border border-neutral-200 bg-transparent px-2 py-1 text-xs
+                  focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-neutral-700 dark:bg-neutral-900"
+                bind:value={$savePassword}
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                use:tooltip={showPassword ? 'Hide password' : 'Show password'}
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-400
+                  hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                onclick={() => (showPassword = !showPassword)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                  {#if showPassword}
+                    <path stroke-linecap="round" d="M4 4l16 16" />
+                  {/if}
+                </svg>
+              </button>
+            </div>
+            <span class="text-[11px] leading-snug text-neutral-400">
+              Saved PDFs will ask for it. It isn't stored, and there is no way to recover it.
+            </span>
+          </div>
+        {/if}
       </div>
     </div>
   {/if}

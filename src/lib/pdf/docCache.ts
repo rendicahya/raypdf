@@ -1,4 +1,4 @@
-import { loadPdf, type PdfDocument } from './loader';
+import { loadPdf, isPasswordError, type PdfDocument } from './loader';
 
 const cache = new Map<string, { file: File; promise: Promise<PdfDocument> }>();
 
@@ -29,6 +29,14 @@ export function getCachedPdf(id: string, file: File): Promise<PdfDocument> {
   cache.set(id, { file, promise });
   if (entry) release(entry.promise, RELEASE_DELAY_MS);
   return promise;
+}
+
+/** Whether a document needs a password before it can be opened. */
+export function isLockedPdf(id: string, file: File): Promise<boolean> {
+  return getCachedPdf(id, file).then(
+    () => false,
+    (e) => isPasswordError(e),
+  );
 }
 
 export function clearCachedPdf(id: string): void {

@@ -113,6 +113,7 @@
         'Save the whole document, just the current page, or each page as its own PDF. Compress large scans, save several documents at once, merge them in the order you choose, or print.',
       points: [
         'Save pages as PNG or JPG images.',
+        'Protect the saved PDF with a password, or open a protected one and save it without.',
         'Optionally remove embedded JavaScript or lock copying.',
         'Compression never makes a file bigger.',
       ],

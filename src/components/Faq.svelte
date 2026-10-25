@@ -64,6 +64,13 @@
       ],
     },
     {
+      q: 'Can I add or remove a PDF password?',
+      a: [
+        'Yes. To add one, open the arrow next to Save and turn on "Require a password to open". Every PDF you save then asks for it. RayPDF never stores the password, so keep it somewhere safe.',
+        'To remove one, add the protected PDF and enter its password where its pages would be. Whatever you save from it opens without a password.',
+      ],
+    },
+    {
       q: 'Does it work offline?',
       a: [
         "Yes. After your first visit everything is saved by your browser, so RayPDF opens and works without a connection. You can also install it as an app from your browser's menu.",

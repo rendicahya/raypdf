@@ -1,4 +1,5 @@
 import { PDFDocument, degrees } from '@cantoo/pdf-lib';
+import { loadEditablePdf } from './password';
 
 /**
  * Page-level edits — move, delete, duplicate, insert a blank page, rotate one
@@ -13,7 +14,7 @@ import { PDFDocument, degrees } from '@cantoo/pdf-lib';
 export const PAGE_DRAG_TYPE = 'application/x-raypdf-page';
 
 async function editPdf(file: File, edit: (pdfDoc: PDFDocument) => void | Promise<void>): Promise<File> {
-  const pdfDoc = await PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false });
+  const pdfDoc = await loadEditablePdf(await file.arrayBuffer(), { updateMetadata: false });
   await edit(pdfDoc);
   const bytes = await pdfDoc.save();
   return new File([bytes], file.name, { type: 'application/pdf', lastModified: file.lastModified });
@@ -46,7 +47,7 @@ export function deletePdfPages(file: File, pages: number[]): Promise<File> {
 export function duplicatePdfPage(file: File, page: number): Promise<File> {
   return editPdf(file, async (pdfDoc) => {
     // Copied from a second parse of the same bytes: copyPages expects a separate source document.
-    const source = await PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false });
+    const source = await loadEditablePdf(await file.arrayBuffer(), { updateMetadata: false });
     const [copy] = await pdfDoc.copyPages(source, [page - 1]);
     pdfDoc.insertPage(page, copy);
   });

@@ -83,7 +83,8 @@ It is **not** a replacement for PKI-based digital signatures.
 - **Save** and **Print** sit at the right end of the top bar. The arrow next to Save opens **Save compressed**, **Save each page as a separate PDF (ZIP)**, **Save all (ZIP)**, **Save all as one PDF** (choose the order), and the export options below.
 - Exported as `original_filename_signed.pdf`.
 - **Save compressed** saves everything you added, then shrinks the file in the browser: images are scaled down (at most 1800 px on the long side) and re-encoded as JPEG, uncompressed streams are deflated, and objects are packed into object streams. Text, vector graphics, and fonts are untouched, an image is only replaced when the result is clearly smaller, and the file is never made bigger. It works on an unedited PDF too, and reports the size before and after. Saved as `original_filename_compressed.pdf`.
-- Optional: strip embedded JavaScript carried over from the source PDF, and lock text/content copying.
+- Optional: strip embedded JavaScript carried over from the source PDF, lock text/content copying (printing, form filling, and annotating stay allowed), and **require a password to open** the saved PDF (AES-256). The password is kept in memory for the visit only, never stored; the Save button shows a lock while it's on. Printing skips the password, since the print dialog can't ask for it.
+- **Remove a password**: a password-protected PDF shows a password field in place of its pages (and in the list of added files, and in Verify). Once unlocked, it works like any other PDF and what you save opens without the password. PDFs that only restrict permissions (copying, printing) open and save without any prompt, and the saved copy is unrestricted.
 - Each export embeds a small RayPDF record (document ID, name, export time, watermark text) in the PDF's metadata.
 
 ### Verify

@@ -2,6 +2,8 @@
   import { untrack } from 'svelte';
   import { PDFDocument } from '@cantoo/pdf-lib';
   import { extractVerificationRecord, type VerificationRecord } from '../lib/pdf/verification';
+  import { isLockedPdf } from '../lib/pdf/docCache';
+  import UnlockPdf from './UnlockPdf.svelte';
 
   interface Props {
     documents: { id: string; file: File }[];
@@ -13,21 +15,29 @@
     | { status: 'checking' }
     | { status: 'found'; record: VerificationRecord }
     | { status: 'not-found' }
+    | { status: 'locked' }
     | { status: 'error'; message: string };
 
   // Keyed by document id, so PDFs added while this view is open (e.g. dropped
-  // onto the page) get checked too, and each file is only read once.
+  // onto the page) get checked too, and each file is only read once (again
+  // once a locked one is unlocked, which replaces its file).
   let results: Record<string, Result> = $state({});
+  const checkedFiles = new Map<string, File>();
 
   $effect(() => {
     for (const doc of documents) {
-      if (untrack(() => results[doc.id])) continue;
+      if (untrack(() => results[doc.id]) && checkedFiles.get(doc.id) === doc.file) continue;
+      checkedFiles.set(doc.id, doc.file);
       results[doc.id] = { status: 'checking' };
       check(doc.id, doc.file);
     }
   });
 
   async function check(id: string, file: File) {
+    if (await isLockedPdf(id, file)) {
+      results[id] = { status: 'locked' };
+      return;
+    }
     try {
       const bytes = await file.arrayBuffer();
       // updateMetadata: false — this is a read-only check, no reason to let
@@ -118,6 +128,8 @@
           "{doc.file.name}" doesn't carry a RayPDF export record. It may never have gone through RayPDF, or the
           metadata was stripped or overwritten by another tool since.
         </p>
+      {:else if result.status === 'locked'}
+        <UnlockPdf id={doc.id} file={doc.file} />
       {:else}
         <div class="flex items-center gap-2 text-red-700 dark:text-red-400">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-5 w-5 shrink-0">

@@ -9,6 +9,7 @@ import {
   PDFRef,
   decodePDFRawStream,
 } from '@cantoo/pdf-lib';
+import { loadEditablePdf } from './password';
 
 /**
  * Makes a PDF smaller, entirely in the browser:
@@ -157,7 +158,7 @@ export async function compressPdf(
   input: Uint8Array,
   finish?: (pdfDoc: PDFDocument) => void,
 ): Promise<CompressResult> {
-  const pdfDoc = await PDFDocument.load(input);
+  const pdfDoc = await loadEditablePdf(input);
   const { context } = pdfDoc;
 
   // Soft masks (transparency) are images too, but blurring them with JPEG

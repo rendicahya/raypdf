@@ -26,7 +26,8 @@
   import { activePanelTool, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
   import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
-  import { clearCachedPdf } from './lib/pdf/docCache';
+  import { clearCachedPdf, isLockedPdf } from './lib/pdf/docCache';
+  import UnlockPdf from './components/UnlockPdf.svelte';
 
   const PDF_ACCEPT = 'application/pdf,.pdf';
 
@@ -415,7 +416,14 @@
                 <li class="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5
                   dark:bg-neutral-800">
                   <DocumentThumbnail id={doc.id} file={doc.file} />
-                  <span class="min-w-0 flex-1 truncate">{doc.file.name}</span>
+                  <div class="flex min-w-0 flex-1 flex-col gap-1">
+                    <span class="truncate">{doc.file.name}</span>
+                    {#await isLockedPdf(doc.id, doc.file) then locked}
+                      {#if locked}
+                        <UnlockPdf id={doc.id} file={doc.file} compact />
+                      {/if}
+                    {/await}
+                  </div>
                   <span class="shrink-0 text-xs text-neutral-400">
                     {doc.pageCount} page{doc.pageCount > 1 ? 's' : ''}
                   </span>

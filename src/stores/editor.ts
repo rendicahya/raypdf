@@ -465,6 +465,21 @@ function createEditorStore() {
     added.forEach(resolvePageCount);
   }
 
+  /**
+   * Swaps a password-protected document for its unlocked copy (see
+   * lib/pdf/password.ts). Nothing can be placed on a locked document, so it
+   * becomes the file "as uploaded" and there's no history to keep.
+   */
+  function unlockDocument(id: string, file: File) {
+    clearHistory(id);
+    update((state) => ({
+      ...state,
+      documents: state.documents.map((doc) => (doc.id === id ? { ...doc, file, originalFile: file } : doc)),
+    }));
+    const doc = currentState().documents.find((d) => d.id === id);
+    if (doc) resolvePageCount(doc);
+  }
+
   function removeDocument(id: string) {
     clearHistory(id);
     update((state) => {
@@ -1180,6 +1195,7 @@ function createEditorStore() {
     getHistory,
     loadPdfs,
     addPdfs,
+    unlockDocument,
     removeDocument,
     moveDocument,
     setActiveDocument,
