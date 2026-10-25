@@ -29,8 +29,7 @@ async function rasterizePageWithRedactions(
   });
 
   // Render at a fixed high resolution and explicit rotation 0 — this matches
-  // pdf-lib's page coordinate space (MediaBox-relative, unaffected by
-  // /Rotate), so the flattened image can be dropped straight in without the
+  // pdf-lib's page coordinate space (unaffected by /Rotate), so the flattened image can be dropped straight in without the
   // page's existing rotation double-applying.
   const nativeViewport = page.getViewport({ scale: RASTER_SCALE, rotation: 0 });
 
@@ -100,7 +99,13 @@ export async function applyRedactions(
     const flattenedImage = await pdfDoc.embedPng(pngBytes);
 
     const targetPage = pdfDoc.getPage(pageNumber - 1);
-    const { x, y, width, height } = targetPage.getMediaBox();
+    // The image covers what pdf.js rendered: the visible area, which for a
+    // cropped page is its crop box rather than the whole media box.
+    const [x1, y1, x2, y2] = (await pdfjsDoc.getPage(pageNumber)).view;
+    const x = Math.min(x1, x2);
+    const y = Math.min(y1, y2);
+    const width = Math.abs(x2 - x1);
+    const height = Math.abs(y2 - y1);
 
     // Discard the original content stream before drawing the flattened
     // replacement — otherwise the real content would still sit underneath,

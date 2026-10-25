@@ -13,6 +13,7 @@
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { shapeToolMode } from '../stores/shapeTool';
+  import { cropToolMode } from '../stores/cropTool';
   import { addImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
   import { downloadBlob } from '../lib/pdf/screenshot';
 
@@ -40,6 +41,7 @@
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -54,6 +56,7 @@
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -69,6 +72,7 @@
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -84,6 +88,7 @@
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -99,6 +104,7 @@
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -114,6 +120,7 @@
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -133,7 +140,8 @@
       !$textSelectMode &&
       !$screenshotToolMode &&
       !$pageNumbersToolMode &&
-      !$shapeToolMode,
+      !$shapeToolMode &&
+      !$cropToolMode,
   );
 
   function toggleScreenshotToolMode() {
@@ -148,6 +156,7 @@
       textSelectMode.set(false);
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -163,6 +172,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       shapeToolMode.set(false);
+      cropToolMode.set(false);
     }
   }
 
@@ -178,6 +188,23 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      cropToolMode.set(false);
+    }
+  }
+
+  function toggleCropToolMode() {
+    cropToolMode.update((v) => !v);
+    if ($cropToolMode) {
+      redactMode.set(false);
+      textToolMode.set(false);
+      commentToolMode.set(false);
+      clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+      screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -226,6 +253,7 @@
     screenshotToolMode.set(false);
     pageNumbersToolMode.set(false);
     shapeToolMode.set(false);
+    cropToolMode.set(false);
   }
 
   // Fits the current page to the visible scroll area — width-only, or both
@@ -706,6 +734,28 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
         <rect x="3" y="11" width="10" height="10" rx="1" />
         <circle cx="16" cy="8" r="5" />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      aria-label="Crop"
+      aria-pressed={$cropToolMode}
+      use:tooltip={'Crop: drag on a page to frame the part to keep'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$cropToolMode}
+      class:text-neutral-600={!$cropToolMode}
+      class:hover:bg-neutral-100={!$cropToolMode}
+      class:dark:border-neutral-800={!$cropToolMode}
+      class:dark:text-neutral-300={!$cropToolMode}
+      class:dark:hover:bg-neutral-800={!$cropToolMode}
+      class:border-orange-600={$cropToolMode}
+      class:bg-orange-600={$cropToolMode}
+      class:text-white={$cropToolMode}
+      onclick={toggleCropToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
       </svg>
     </button>
 

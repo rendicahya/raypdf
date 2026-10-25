@@ -2,8 +2,8 @@ import { PDFDocument, degrees } from '@cantoo/pdf-lib';
 import { loadEditablePdf } from './password';
 
 /**
- * Page-level edits — move, delete, duplicate, insert a blank page, rotate one
- * page. Each returns a rewritten copy of the file; the editor store swaps it
+ * Page-level edits — move, delete, duplicate, insert a blank page, rotate or
+ * crop pages. Each returns a rewritten copy of the file; the editor store swaps it
  * in (keeping the old one for undo) so rendering, thumbnails, and export all
  * keep working on plain page numbers. Pages are edited within the same
  * document rather than copied into a fresh one, so everything else in the
@@ -57,9 +57,42 @@ export function duplicatePdfPage(file: File, page: number): Promise<File> {
 export function insertBlankPdfPage(file: File, after: number): Promise<File> {
   return editPdf(file, (pdfDoc) => {
     const neighbor = pdfDoc.getPage(after - 1);
-    const { width, height } = neighbor.getSize();
+    // The size shown, which for a cropped page is its crop box.
+    const { width, height } = neighbor.getCropBox();
     const blank = pdfDoc.insertPage(after, [width, height]);
     blank.setRotation(neighbor.getRotation());
+  });
+}
+
+/** A rectangle in a page's own PDF coordinates (points, unaffected by /Rotate). */
+export interface PdfRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Crops pages (1-indexed) to the given areas by setting their crop box. What's
+ * outside is hidden, not removed: it's still in the file, and can be shown
+ * again with uncropPdfPages.
+ */
+export function cropPdfPages(file: File, crops: { page: number; area: PdfRect }[]): Promise<File> {
+  return editPdf(file, (pdfDoc) => {
+    for (const { page, area } of crops) {
+      pdfDoc.getPage(page - 1).setCropBox(area.x, area.y, area.width, area.height);
+    }
+  });
+}
+
+/** Shows the whole of the given pages (1-indexed) again: the crop box becomes the media box. */
+export function uncropPdfPages(file: File, pages: number[]): Promise<File> {
+  return editPdf(file, (pdfDoc) => {
+    for (const page of new Set(pages)) {
+      const target = pdfDoc.getPage(page - 1);
+      const { x, y, width, height } = target.getMediaBox();
+      target.setCropBox(x, y, width, height);
+    }
   });
 }
 

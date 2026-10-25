@@ -7,8 +7,10 @@
   import ScreenshotOptions from './toolOptions/ScreenshotOptions.svelte';
   import PageTextOptions from './toolOptions/PageTextOptions.svelte';
   import ShapeOptions from './toolOptions/ShapeOptions.svelte';
+  import CropOptions from './toolOptions/CropOptions.svelte';
   import { signatureToolMode } from '../stores/signatureTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
+  import { cropToolMode } from '../stores/cropTool';
   import { toolPanelOpen, type PanelTool } from '../stores/toolPanel';
 
   interface Props {
@@ -17,7 +19,7 @@
 
   let { tool }: Props = $props();
 
-  // The Signature and Page numbers tools are nothing but their panel, so
+  // The Signature, Page numbers, and Crop tools can't do without their panel, so
   // closing it turns the tool off; for the others the × only hides the options.
   const hide = () => toolPanelOpen.set(false);
 </script>
@@ -38,4 +40,6 @@
   <PageTextOptions onClose={() => pageNumbersToolMode.set(false)} />
 {:else if tool === 'shapes'}
   <ShapeOptions onClose={hide} />
+{:else if tool === 'crop'}
+  <CropOptions onClose={() => cropToolMode.set(false)} />
 {/if}

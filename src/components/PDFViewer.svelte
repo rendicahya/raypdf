@@ -37,6 +37,8 @@
     shapeFill,
     shapeOpacity,
   } from '../stores/shapeTool';
+  import { cropToolMode } from '../stores/cropTool';
+  import CropOverlay from './CropOverlay.svelte';
   import { addImageFile, imageFor, isImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
   import {
@@ -399,7 +401,8 @@
       !$zoomToolMode &&
       !$textSelectMode &&
       !$screenshotToolMode &&
-      !$shapeToolMode,
+      !$shapeToolMode &&
+      !$cropToolMode,
   );
 
   // Move mode auto-switches into text selection when the pointer rests over
@@ -459,7 +462,8 @@
       $zoomToolMode ||
       $textSelectMode ||
       $screenshotToolMode ||
-      $shapeToolMode;
+      $shapeToolMode ||
+      $cropToolMode;
     const otherInteractionInProgress =
       isPanning ||
       drawingBox ||
@@ -1068,6 +1072,7 @@
       !$clickToPlaceMode &&
       !$zoomToolMode &&
       !$shapeToolMode &&
+      !$cropToolMode &&
       !textSelectActive &&
       e.target === canvasEl
     );
@@ -2701,6 +2706,11 @@
         <div class="pointer-events-none absolute inset-0 animate-pulse bg-white/30 dark:bg-black/20"></div>
       {/if}
     </div>
+  {/if}
+
+  <!-- Crop tool: frames the part of the page to keep (CropOverlay). -->
+  {#if $cropToolMode}
+    <CropOverlay {pageNumber} />
   {/if}
 </div>
 

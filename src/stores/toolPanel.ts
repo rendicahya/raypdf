@@ -8,9 +8,10 @@ import { textSelectMode } from './textSelect';
 import { screenshotToolMode } from './screenshotTool';
 import { pageNumbersToolMode } from './pageNumbersTool';
 import { shapeToolMode } from './shapeTool';
+import { cropToolMode } from './cropTool';
 
 /** Tools whose options are shown in the right-hand panel while they're on. */
-export type PanelTool = 'signature' | 'redact' | 'text' | 'comment' | 'select' | 'screenshot' | 'pageNumbers' | 'shapes';
+export type PanelTool = 'signature' | 'redact' | 'text' | 'comment' | 'select' | 'screenshot' | 'pageNumbers' | 'shapes' | 'crop';
 
 /** Width of the right-hand panel in CSS pixels (Tailwind w-72). */
 export const TOOL_PANEL_WIDTH = 288;
@@ -18,15 +19,15 @@ export const TOOL_PANEL_WIDTH = 288;
 /**
  * Whether the options panel shows for the tools other than Signature. Its ×
  * hides the panel without turning the tool off, and the edge tab brings it
- * back; the choice is remembered. Signature and Page numbers ignore this:
+ * back; the choice is remembered. Signature, Page numbers, and Crop ignore this:
  * their panel is the whole tool, so closing the panel turns the tool off instead.
  */
 export const toolPanelOpen = persistedWritable<boolean>('toolPanelOpen', true);
 
 /** The active tool, if it's one with options (tools are mutually exclusive). */
 export const activePanelTool = derived(
-  [signatureToolMode, redactMode, textToolMode, commentToolMode, textSelectMode, screenshotToolMode, pageNumbersToolMode, shapeToolMode],
-  ([signature, redact, text, comment, select, screenshot, pageNumbers, shapes]): PanelTool | null =>
+  [signatureToolMode, redactMode, textToolMode, commentToolMode, textSelectMode, screenshotToolMode, pageNumbersToolMode, shapeToolMode, cropToolMode],
+  ([signature, redact, text, comment, select, screenshot, pageNumbers, shapes, crop]): PanelTool | null =>
     signature
       ? 'signature'
       : redact
@@ -43,10 +44,12 @@ export const activePanelTool = derived(
                   ? 'pageNumbers'
                   : shapes
                     ? 'shapes'
-                    : null,
+                    : crop
+                      ? 'crop'
+                      : null,
 );
 
 /** The tool whose options the right-hand panel is showing right now, if any. */
 export const shownPanelTool = derived([activePanelTool, toolPanelOpen], ([tool, open]) =>
-  tool === 'signature' || tool === 'pageNumbers' || (tool && open) ? tool : null,
+  tool === 'signature' || tool === 'pageNumbers' || tool === 'crop' || (tool && open) ? tool : null,
 );

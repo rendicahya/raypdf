@@ -7,6 +7,8 @@ import {
   duplicatePdfPage,
   insertBlankPdfPage,
   rotatePdfPages,
+  cropPdfPages,
+  uncropPdfPages,
 } from '../lib/pdf/pageOps';
 import type { FormValues } from '../lib/pdf/forms';
 import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
@@ -1251,6 +1253,49 @@ function createEditorStore() {
     return rotatePages([page], delta);
   }
 
+  /**
+   * Crops pages (1-indexed) to `area`, given as fractions (0 to 1) of each
+   * page as it's shown, rotation included, so one frame fits pages of any
+   * size. Saved into the file; everything placed on the pages stays over
+   * the same content.
+   */
+  async function cropPages(pages: number[], area: Geometry) {
+    const doc = getActiveDocument(currentState());
+    if (!doc || pages.length === 0) return;
+    const pdf = await getCachedPdf(doc.id, doc.file);
+    const crops = await Promise.all(
+      pages.map(async (page) => {
+        const pdfPage = await pdf.getPage(page);
+        const viewport = pdfPage.getViewport({ scale: 1, rotation: getTotalRotation(pdfPage, doc.rotation) });
+        const [x1, y1] = viewport.convertToPdfPoint(area.x * viewport.width, area.y * viewport.height);
+        const [x2, y2] = viewport.convertToPdfPoint(
+          (area.x + area.width) * viewport.width,
+          (area.y + area.height) * viewport.height,
+        );
+        return {
+          page,
+          area: { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) },
+        };
+      }),
+    );
+    return editPages({
+      rewrite: (file) => cropPdfPages(file, crops),
+      mapPage: (p) => p,
+      mapCurrent: (p) => p,
+      reshapesPages: pages,
+    });
+  }
+
+  /** Shows the whole of pages (1-indexed) again, undoing any crop (the file's own included). */
+  function uncropPages(pages: number[]) {
+    return editPages({
+      rewrite: (file) => uncropPdfPages(file, pages),
+      mapPage: (p) => p,
+      mapCurrent: (p) => p,
+      reshapesPages: pages,
+    });
+  }
+
   function rotateLeft() {
     rotateBy(-90);
   }
@@ -1364,6 +1409,8 @@ function createEditorStore() {
     insertBlankPage,
     rotatePage,
     rotatePages,
+    cropPages,
+    uncropPages,
     markExported,
     undo,
     redo,
