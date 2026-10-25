@@ -3,6 +3,7 @@ import type { FormWidgetKind } from './forms';
 import type { MarkupPaint } from './highlight';
 import type { PlacedText } from '../../stores/editor';
 import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
+import { pageNumberAnchor, type PageNumberSettings } from './pageNumbers';
 
 /** An area of the page as fractions (0–1) of its width/height, so it's independent of zoom. */
 export interface CaptureArea {
@@ -49,6 +50,8 @@ export interface CaptureOverlays {
   /** Each placed signature with its image, visible watermark already applied (see lib/watermark/visible.ts). */
   signatures: (Box & { image: Blob })[];
   texts: PlacedText[];
+  /** This page's number, if the document is numbered and this page gets one. */
+  pageNumber?: { settings: PageNumberSettings; text: string } | null;
 }
 
 /**
@@ -127,6 +130,19 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
   bitmaps.forEach((b) => b.close());
 
   for (const t of overlays.texts) drawTextBox(ctx, t);
+
+  if (overlays.pageNumber) {
+    const { settings, text } = overlays.pageNumber;
+    const unit = overlays.renderScale;
+    const factor = overlays.renderScale / scale;
+    ctx.font = `${settings.fontSize * unit}px ${FONT_FAMILY_CSS[settings.font]}`;
+    ctx.fillStyle = settings.color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    const width = ctx.measureText(text).width;
+    const { x, baseline } = pageNumberAnchor(settings, canvas.width * factor, canvas.height * factor, width, unit);
+    ctx.fillText(text, x, baseline);
+  }
 
   ctx.restore();
 }

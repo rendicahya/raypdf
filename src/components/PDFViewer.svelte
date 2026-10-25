@@ -9,6 +9,7 @@
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
   import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
+  import { pageNumberLabel } from '../lib/pdf/pageNumbers';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
   import {
@@ -490,6 +491,10 @@
   );
   const redactionsOnCurrentPage = $derived($activeDocument?.redactions.filter((box) => box.page === pageNumber) ?? []);
   const textsOnCurrentPage = $derived($activeDocument?.texts.filter((t) => t.page === pageNumber) ?? []);
+  const pageNumberSettings = $derived($activeDocument?.pageNumbers ?? null);
+  const pageNumberText = $derived(
+    pageNumberSettings ? pageNumberLabel(pageNumberSettings, pageNumber, $activeDocument?.pageCount ?? 1) : null,
+  );
   const commentsOnCurrentPage = $derived($activeDocument?.comments.filter((c) => c.page === pageNumber) ?? []);
   const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
 
@@ -1098,6 +1103,7 @@
       redactions: redactionsOnCurrentPage,
       signatures,
       texts: textsOnCurrentPage,
+      pageNumber: pageNumberSettings && pageNumberText ? { settings: pageNumberSettings, text: pageNumberText } : null,
     };
     return capturePage(loaded, pageNumber, doc.rotation, area, overlays, $screenshotScale);
   }
@@ -1723,6 +1729,27 @@
        never steals clicks/drags meant for the canvas or the other overlays
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
+
+  <!-- Page number preview: lib/pdf/pageNumbers.ts draws the same on export.
+       With line-height 1 the baseline sits about 0.85em below the box top. -->
+  {#if pageNumberSettings && pageNumberText}
+    {@const s = pageNumberSettings}
+    {@const unit = $editorStore.renderScale}
+    {@const [vertical, horizontal] = s.position.split('-')}
+    <div
+      class="pointer-events-none absolute select-none whitespace-nowrap leading-none"
+      style:font-family={FONT_FAMILY_CSS[s.font]}
+      style:font-size="{s.fontSize * unit}px"
+      style:color={s.color}
+      style:left={horizontal === 'left' ? `${s.margin * unit}px` : horizontal === 'center' ? '50%' : null}
+      style:right={horizontal === 'right' ? `${s.margin * unit}px` : null}
+      style:transform={horizontal === 'center' ? 'translateX(-50%)' : null}
+      style:top={vertical === 'top' ? `${(s.margin - 0.13 * s.fontSize) * unit}px` : null}
+      style:bottom={vertical === 'bottom' ? `${(s.margin - 0.15 * s.fontSize) * unit}px` : null}
+    >
+      {pageNumberText}
+    </div>
+  {/if}
 
   <!-- Search matches: drawn under everything else and never take clicks. -->
   {#each searchHits as hit}

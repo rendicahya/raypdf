@@ -8,6 +8,7 @@ import { applyVisibleWatermark, type WatermarkOptions } from '../watermark/visib
 import { drawTextBox, embedTextFont, hexToRgb } from './textRender';
 import { embedVerificationRecord } from './verification';
 import { embedHighlightAnnotations } from './highlight';
+import { drawPageNumbers, type PageNumberSettings } from './pageNumbers';
 import type {
   PdfDocumentState,
   PlacedComment,
@@ -48,6 +49,8 @@ export interface ExportParams {
   securePdf?: boolean;
   /** Values the user entered into the PDF's own form fields, by field name — see `lib/pdf/forms.ts`. */
   formValues?: FormValues;
+  /** Numbers to draw on the pages, if any — see `lib/pdf/pageNumbers.ts`. */
+  pageNumbers?: PageNumberSettings | null;
 }
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
@@ -155,6 +158,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     onlyPages,
     securePdf = false,
     formValues = {},
+    pageNumbers = null,
   } = params;
 
   const pdfBytes = await blobToBytes(pdfFile);
@@ -255,6 +259,8 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       });
     }
   }
+
+  if (pageNumbers) await drawPageNumbers(pdfDoc, pdfjsDoc, pageNumbers, rotation);
 
   if (comments.length > 0) {
     await embedCommentAnnotations(pdfDoc, pdfjsDoc, comments, renderScale, rotation);
@@ -440,6 +446,7 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
     doc.comments.length > 0 ||
     doc.highlights.length > 0 ||
     Object.keys(doc.formValues).length > 0 ||
+    doc.pageNumbers !== null ||
     doc.file !== doc.originalFile ||
     doc.rotation !== 0
   );
@@ -480,6 +487,7 @@ export async function exportPagesAsZip(
       comments: doc.comments,
       highlights: doc.highlights,
       formValues: doc.formValues,
+      pageNumbers: doc.pageNumbers,
       onlyPages: [page],
       securePdf,
     });
@@ -534,6 +542,7 @@ export async function exportAllAsZip(
       comments: doc.comments,
       highlights: doc.highlights,
       formValues: doc.formValues,
+      pageNumbers: doc.pageNumbers,
       securePdf,
     });
 
@@ -591,6 +600,7 @@ export async function exportMergedPdf(
       comments: doc.comments,
       highlights: doc.highlights,
       formValues: doc.formValues,
+      pageNumbers: doc.pageNumbers,
     });
 
     const sourceDoc = await PDFDocument.load(bytes);

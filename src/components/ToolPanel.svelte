@@ -5,7 +5,9 @@
   import CommentOptions from './toolOptions/CommentOptions.svelte';
   import SelectOptions from './toolOptions/SelectOptions.svelte';
   import ScreenshotOptions from './toolOptions/ScreenshotOptions.svelte';
+  import PageNumberOptions from './toolOptions/PageNumberOptions.svelte';
   import { signatureToolMode } from '../stores/signatureTool';
+  import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { toolPanelOpen, type PanelTool } from '../stores/toolPanel';
 
   interface Props {
@@ -14,8 +16,8 @@
 
   let { tool }: Props = $props();
 
-  // The Signature tool is nothing but its panel, so closing it turns the
-  // tool off; for the others the × only hides the options.
+  // The Signature and Page numbers tools are nothing but their panel, so
+  // closing it turns the tool off; for the others the × only hides the options.
   const hide = () => toolPanelOpen.set(false);
 </script>
 
@@ -31,4 +33,6 @@
   <SelectOptions onClose={hide} />
 {:else if tool === 'screenshot'}
   <ScreenshotOptions onClose={hide} />
+{:else if tool === 'pageNumbers'}
+  <PageNumberOptions onClose={() => pageNumbersToolMode.set(false)} />
 {/if}

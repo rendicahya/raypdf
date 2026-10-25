@@ -11,6 +11,7 @@
   import { getTotalRotation } from '../lib/pdf/loader';
   import { tooltip } from '../lib/utils/tooltip';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
+  import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { downloadBlob } from '../lib/pdf/screenshot';
 
   const groupClass = 'flex items-center gap-0.5 rounded-full border border-neutral-200 p-0.5 dark:border-neutral-800';
@@ -35,6 +36,7 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
     }
   }
 
@@ -47,6 +49,7 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
     }
   }
 
@@ -60,6 +63,7 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
     }
   }
 
@@ -73,6 +77,7 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
     }
   }
 
@@ -86,6 +91,7 @@
       signatureToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
     }
   }
 
@@ -99,6 +105,7 @@
       signatureToolMode.set(false);
       zoomToolMode.set(false);
       screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
     }
   }
 
@@ -116,7 +123,8 @@
       !$signatureToolMode &&
       !$zoomToolMode &&
       !$textSelectMode &&
-      !$screenshotToolMode,
+      !$screenshotToolMode &&
+      !$pageNumbersToolMode,
   );
 
   function toggleScreenshotToolMode() {
@@ -129,6 +137,21 @@
       signatureToolMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
+      pageNumbersToolMode.set(false);
+    }
+  }
+
+  function togglePageNumbersToolMode() {
+    pageNumbersToolMode.update((v) => !v);
+    if ($pageNumbersToolMode) {
+      redactMode.set(false);
+      textToolMode.set(false);
+      commentToolMode.set(false);
+      clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+      screenshotToolMode.set(false);
     }
   }
 
@@ -155,6 +178,7 @@
     zoomToolMode.set(false);
     textSelectMode.set(false);
     screenshotToolMode.set(false);
+    pageNumbersToolMode.set(false);
   }
 
   // Fits the current page to the visible scroll area — width-only, or both
@@ -579,6 +603,29 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
         <circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      aria-label="Page numbers"
+      aria-pressed={$pageNumbersToolMode}
+      use:tooltip={'Page numbers: number the pages, with the position and style you choose'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$pageNumbersToolMode}
+      class:text-neutral-600={!$pageNumbersToolMode}
+      class:hover:bg-neutral-100={!$pageNumbersToolMode}
+      class:dark:border-neutral-800={!$pageNumbersToolMode}
+      class:dark:text-neutral-300={!$pageNumbersToolMode}
+      class:dark:hover:bg-neutral-800={!$pageNumbersToolMode}
+      class:border-teal-600={$pageNumbersToolMode}
+      class:bg-teal-600={$pageNumbersToolMode}
+      class:text-white={$pageNumbersToolMode}
+      onclick={togglePageNumbersToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="5" y="3" width="14" height="18" rx="1.5" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
       </svg>
     </button>
   </div>

@@ -9,6 +9,7 @@ import {
   rotatePdfPages,
 } from '../lib/pdf/pageOps';
 import type { FormValues } from '../lib/pdf/forms';
+import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
 
 /** Signature instance placed on the page, in canvas pixel coordinates. */
 export interface PlacedSignature {
@@ -125,6 +126,8 @@ export interface PdfDocumentState {
   highlights: PlacedHighlight[];
   /** Values entered into the PDF's own form fields, by field name — only fields the user changed. */
   formValues: FormValues;
+  /** How the pages are numbered on export, or null for no page numbers. */
+  pageNumbers: PageNumberSettings | null;
   /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
   rotation: number;
   /** Whether the current placement/redactions have been saved/printed — cleared whenever either changes. Used to warn before closing an unsaved tab. */
@@ -162,6 +165,7 @@ function createDocumentState(file: File): PdfDocumentState {
     comments: [],
     highlights: [],
     formValues: {},
+    pageNumbers: null,
     rotation: 0,
     exported: false,
   };
@@ -307,6 +311,7 @@ interface DocSnapshot {
   comments: PlacedComment[];
   highlights: PlacedHighlight[];
   formValues: FormValues;
+  pageNumbers: PageNumberSettings | null;
   rotation: number;
 }
 
@@ -373,6 +378,7 @@ function createEditorStore() {
       comments: doc.comments,
       highlights: doc.highlights,
       formValues: doc.formValues,
+      pageNumbers: doc.pageNumbers,
       rotation: doc.rotation,
     };
   }
@@ -853,6 +859,14 @@ function createEditorStore() {
     );
   }
 
+  /** Turns page numbers on (with these settings) or off (null) for the active document. */
+  function setPageNumbers(settings: PageNumberSettings | null) {
+    recordActiveHistory('page-numbers');
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({ ...doc, pageNumbers: settings, exported: false })),
+    );
+  }
+
   /** Marks a specific document as saved/printed in its current placement — clears the "signed but not downloaded" warning for that tab. */
   function markDocumentExported(id: string) {
     update((state) => ({
@@ -1200,6 +1214,7 @@ function createEditorStore() {
     recolorHighlight,
     removeHighlight,
     setFormValue,
+    setPageNumbers,
     markDocumentExported,
     setRenderScale,
     zoomIn,

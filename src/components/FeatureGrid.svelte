@@ -34,7 +34,8 @@
     },
     {
       title: 'Edit pages',
-      description: 'Reorder pages by dragging, and rotate, duplicate, insert, or delete them. Every edit can be undone.',
+      description:
+        'Reorder pages by dragging, rotate, duplicate, insert, or delete them, and add page numbers. Every edit can be undone.',
       paths: ['M8 4h10v13H8z', 'M5 7v13h10'],
     },
     {

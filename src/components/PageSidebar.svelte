@@ -205,6 +205,7 @@
         comments: format === 'pdf' ? doc.comments : [],
         highlights: doc.highlights,
         formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
         onlyPages: pages,
         securePdf: format === 'pdf' && $securePdf,
       });
@@ -288,6 +289,24 @@
       ...(many
         ? []
         : [
+            {
+              label: 'Move page up',
+              icon: MENU_ICONS.moveUp,
+              disabled: pageNumber === 1,
+              onSelect: () => {
+                clearSelection();
+                runPageEdit(() => editorStore.movePage(pageNumber, pageNumber - 1), 'Failed to move the page');
+              },
+            },
+            {
+              label: 'Move page down',
+              icon: MENU_ICONS.moveDown,
+              disabled: pageNumber === pageNumbers.length,
+              onSelect: () => {
+                clearSelection();
+                runPageEdit(() => editorStore.movePage(pageNumber, pageNumber + 1), 'Failed to move the page');
+              },
+            },
             {
               label: 'Duplicate',
               icon: MENU_ICONS.duplicate,

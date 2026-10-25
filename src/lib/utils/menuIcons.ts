@@ -4,7 +4,9 @@ export const MENU_ICONS = {
   rotateRight: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
   duplicate:
     'M10 8h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
-  insert: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z M12 11v6 M9 14h6',
+  moveUp: 'M12 19V5 M5 12l7-7 7 7',
+  moveDown: 'M12 5v14 M19 12l-7 7-7-7',
+  insert:'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z M12 11v6 M9 14h6',
   save: 'M12 4v11m0 0-4-4m4 4 4-4 M5 20h14',
   select: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z m2 8 3 3 5-6',
   clear: 'M6 6l12 12 M18 6L6 18',

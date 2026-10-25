@@ -22,6 +22,7 @@
   import { screenshotToolMode } from './stores/screenshotTool';
   import { textSelectMode } from './stores/textSelect';
   import { signatureToolMode } from './stores/signatureTool';
+  import { pageNumbersToolMode } from './stores/pageNumbersTool';
   import { activePanelTool, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
   import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
@@ -238,6 +239,11 @@
       if ($signatureToolMode) {
         e.preventDefault();
         signatureToolMode.set(false);
+        return;
+      }
+      if ($pageNumbersToolMode) {
+        e.preventDefault();
+        pageNumbersToolMode.set(false);
         return;
       }
       if ($search.open) {
@@ -504,7 +510,7 @@
           </div>
         </aside>
       {/if}
-      {#if $activePanelTool && $activePanelTool !== 'signature'}
+      {#if $activePanelTool && $activePanelTool !== 'signature' && $activePanelTool !== 'pageNumbers'}
         <button
           type="button"
           aria-label={$toolPanelOpen ? 'Hide tool options' : 'Show tool options'}

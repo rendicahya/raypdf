@@ -81,6 +81,7 @@
         comments: doc.comments,
         highlights: doc.highlights,
         formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
         securePdf: $securePdf,
       });
       downloadSignedPdf(bytes, doc.file.name);
@@ -119,6 +120,7 @@
         comments: doc.comments,
         highlights: doc.highlights,
         formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
         // Locked after compressing: an encrypted file can't be rewritten.
         securePdf: false,
       });
@@ -163,6 +165,7 @@
         comments: doc.comments,
         highlights: doc.highlights,
         formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
         onlyPages: [doc.pageNumber],
         securePdf: $securePdf,
       });
@@ -227,6 +230,7 @@
         comments: doc.comments,
         highlights: doc.highlights,
         formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
         securePdf: $securePdf,
       });
       printPdfBytes(bytes);
