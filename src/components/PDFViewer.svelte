@@ -1,8 +1,12 @@
+<script lang="ts" module>
+  // The find-bar match last scrolled to, shared by every page.
+  let lastScrolledMatch = '';
+</script>
+
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
-  import { getCachedPdf } from '../lib/pdf/docCache';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
   import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
@@ -81,13 +85,18 @@
   import { fitWithinBox } from '../lib/signature/layout';
   import { buildWatermarkLines } from '../lib/watermark/visible';
 
+  // One page of the document. PDFPages stacks one of these per page (only
+  // for pages near the viewport) and owns loading the file.
+  let { pageNumber, pdfDoc }: { pageNumber: number; pdfDoc: PdfDocument } = $props();
+
   let canvasEl: HTMLCanvasElement;
   let wrapperEl: HTMLDivElement;
   let textLayerEl: HTMLDivElement;
-  let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
   let isDragOver = $state(false);
   let cursorPos = $state({ x: 0, y: 0 });
+  // Click-to-place previews the signature under the cursor, on this page only.
+  let pointerInside = $state(false);
 
   // Live preview of the watermark text, kept in sync with the export logic in lib/watermark/visible.ts.
   const previewLines = $derived(
@@ -104,33 +113,7 @@
 
   const previewAlign = $derived(positionToFlex($watermarkPosition));
 
-  // This component is remounted (via a #key block in App.svelte) whenever
-  // the active document changes; within one document the file itself can
-  // still be swapped (reordering pages, or undoing that), so reload on that too.
-  // Only the identity of the document/file matters here — depending on the
-  // whole $activeDocument would reload on every edit.
   const docId = $derived($activeDocument?.id ?? null);
-  const docFile = $derived($activeDocument?.file ?? null);
-
-  $effect(() => {
-    const id = docId;
-    const file = docFile;
-    if (id === null || !file) return;
-    let cancelled = false;
-    getCachedPdf(id, file)
-      .then((loaded) => {
-        if (cancelled) return;
-        pdfDoc = loaded;
-        error = null;
-        editorStore.setPageCount(loaded.numPages);
-      })
-      .catch((e) => {
-        if (!cancelled) error = e instanceof Error ? e.message : 'Failed to load PDF';
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
 
   // Tracks whether there's a live (non-collapsed) selection anchored inside
   // the text layer, independent of hoverTextSelect/$textSelectMode — so that
@@ -230,7 +213,7 @@
   function addMarkup(boxes: Box[], kind: MarkupKind) {
     const doc = $activeDocument;
     if (!doc || boxes.length === 0) return;
-    editorStore.addHighlight(doc.pageNumber, boxes, kind, markupColorFor(kind, $markupColor));
+    editorStore.addHighlight(pageNumber, boxes, kind, markupColorFor(kind, $markupColor));
     pendingHighlight = null;
     window.getSelection()?.removeAllRanges();
   }
@@ -247,18 +230,20 @@
     if (selectedHighlightGroup === groupId) selectedHighlightGroup = null;
   }
 
+  const viewRotation = $derived($activeDocument?.rotation ?? 0);
+
   // After a page edit or undo swaps the file, the page number can briefly point
   // past the end of the previous parse until the new one has loaded.
-  function pageExists(doc: { pageNumber: number }, loaded: PdfDocument): boolean {
-    return doc.pageNumber <= loaded.numPages;
-  }
+  const pageExists = $derived(pageNumber <= pdfDoc.numPages);
 
-  // Re-render the current page whenever the page number, zoom level, rotation, or the document changes.
+  // Re-render the page whenever the zoom level, rotation, or the file changes.
+  // Reads only those values, not the whole $activeDocument, so edits don't
+  // re-render every visible page.
   $effect(() => {
-    const doc = $activeDocument;
     const scale = $editorStore.renderScale;
-    if (!doc || !pdfDoc || !canvasEl || !pageExists(doc, pdfDoc)) return;
-    renderPageToCanvas(pdfDoc, doc.pageNumber, canvasEl, scale, doc.rotation).catch((e) => {
+    const rotation = viewRotation;
+    if (!canvasEl || !pageExists) return;
+    renderPageToCanvas(pdfDoc, pageNumber, canvasEl, scale, rotation).catch((e) => {
       error = e instanceof Error ? e.message : 'Failed to render PDF';
     });
   });
@@ -273,16 +258,16 @@
   // (see textLayer.ts) handles cancelling a previous in-flight build when a
   // newer one starts.
   $effect(() => {
-    const doc = $activeDocument;
     const scale = $editorStore.renderScale;
+    const rotation = viewRotation;
 
     if (!textLayerEl) return;
-    if (!doc || !pdfDoc || !pageExists(doc, pdfDoc)) {
+    if (!pageExists) {
       cancelTextLayer(textLayerEl);
       return;
     }
 
-    renderTextLayer(pdfDoc, doc.pageNumber, textLayerEl, scale, doc.rotation)
+    renderTextLayer(pdfDoc, pageNumber, textLayerEl, scale, rotation)
       .then((handle) => {
         if (handle) textLayerVersion++;
       })
@@ -302,7 +287,7 @@
   $effect(() => {
     void textLayerVersion;
     const { open, query, matches, current } = $search;
-    const page = viewPage;
+    const page = pageNumber;
     if (!open || !textLayerEl || !canvasEl || matches.length === 0) {
       searchHits = [];
       return;
@@ -321,9 +306,16 @@
         current: currentMatch?.page === page && currentMatch.index === index,
       };
     });
-    tick().then(() =>
-      wrapperEl?.querySelector('[data-search-current]')?.scrollIntoView({ block: 'center', inline: 'nearest' }),
-    );
+    // Scroll to each match once: this page re-runs this on every zoom and
+    // whenever it scrolls back into view, which mustn't pull the view back.
+    const key = `${query}\u0000${current}\u0000${matches.length}`;
+    if (currentMatch?.page !== page || key === lastScrolledMatch) return;
+    tick().then(() => {
+      const el = wrapperEl?.querySelector('[data-search-current]');
+      if (!el) return;
+      lastScrolledMatch = key;
+      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    });
   });
 
   // The PDF's own form fields on this page (lib/pdf/forms.ts), positioned in
@@ -332,16 +324,13 @@
   // when the page view changes, not on every edit.
   type FormBox = FormWidget & { left: number; top: number; boxWidth: number; boxHeight: number; fontPx: number };
   let formBoxes: FormBox[] = $state([]);
-  const viewPage = $derived($activeDocument?.pageNumber ?? 1);
-  const viewRotation = $derived($activeDocument?.rotation ?? 0);
   const formValues = $derived($activeDocument?.formValues ?? {});
 
   $effect(() => {
     const loaded = pdfDoc;
-    const pageNumber = viewPage;
     const rotation = viewRotation;
     const scale = $editorStore.renderScale;
-    if (!loaded || pageNumber > loaded.numPages) {
+    if (!pageExists) {
       formBoxes = [];
       return;
     }
@@ -372,9 +361,8 @@
 
   $effect(() => {
     const loaded = pdfDoc;
-    const pageNumber = viewPage;
     const rotation = viewRotation;
-    if (!loaded || pageNumber > loaded.numPages) return;
+    if (!pageExists) return;
     let cancelled = false;
     loaded
       .getPage(pageNumber)
@@ -493,60 +481,23 @@
   function onWrapperPointerLeave() {
     clearHoverTimer();
     hoverTextSelect = false;
+    pointerInside = false;
   }
 
-  // Only show placements when we're looking at their page.
-  const signaturesOnCurrentPage = $derived.by(() => {
-    const doc = $activeDocument;
-    if (!doc) return [];
-    return doc.placedSignatures.filter((sig) => sig.page === doc.pageNumber);
-  });
-
-  const redactionsOnCurrentPage = $derived.by(() => {
-    const doc = $activeDocument;
-    if (!doc) return [];
-    return doc.redactions.filter((box) => box.page === doc.pageNumber);
-  });
-
-  const textsOnCurrentPage = $derived.by(() => {
-    const doc = $activeDocument;
-    if (!doc) return [];
-    return doc.texts.filter((t) => t.page === doc.pageNumber);
-  });
-
-  const commentsOnCurrentPage = $derived.by(() => {
-    const doc = $activeDocument;
-    if (!doc) return [];
-    return doc.comments.filter((c) => c.page === doc.pageNumber);
-  });
-
-  const highlightsOnCurrentPage = $derived.by(() => {
-    const doc = $activeDocument;
-    if (!doc) return [];
-    return doc.highlights.filter((h) => h.page === doc.pageNumber);
-  });
+  // What's been placed on this page.
+  const signaturesOnCurrentPage = $derived(
+    $activeDocument?.placedSignatures.filter((sig) => sig.page === pageNumber) ?? [],
+  );
+  const redactionsOnCurrentPage = $derived($activeDocument?.redactions.filter((box) => box.page === pageNumber) ?? []);
+  const textsOnCurrentPage = $derived($activeDocument?.texts.filter((t) => t.page === pageNumber) ?? []);
+  const commentsOnCurrentPage = $derived($activeDocument?.comments.filter((c) => c.page === pageNumber) ?? []);
+  const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
 
   // The move/resize/remove controls only show while a signature is
   // "selected" — right after it's placed, or after the user clicks it again
   // — and hide once the user clicks anywhere else, so signatures don't
   // permanently sit under a distracting border and handles.
   let selectedSignatureId: string | null = $state(null);
-
-  // Reset selection when the page changes.
-  let lastPageForSelection: number | undefined;
-  $effect(() => {
-    const page = $activeDocument?.pageNumber;
-    if (page === lastPageForSelection) return;
-    lastPageForSelection = page;
-    selectedSignatureId = null;
-    selectedRedactionId = null;
-    if (editingTextId) commitTextEdit();
-    $selectedTextId = null;
-    if (editingCommentId) commitCommentEdit();
-    selectedCommentId = null;
-    selectedHighlightGroup = null;
-    pendingHighlight = null;
-  });
 
   function onWindowPointerDown(e: PointerEvent) {
     const current = selectedSignatureId
@@ -572,9 +523,19 @@
     // committing/discarding an edit; it only fires once the element genuinely
     // existed and had focus, so it doesn't have this race.
     // Clicks in the tool panel keep the box selected: that's where it's styled.
-    const currentText = $selectedTextId ? wrapperEl?.querySelector(`[data-placed-text="${$selectedTextId}"]`) : null;
+    // The selection is shared by every page, so only the page holding the
+    // selected box decides.
+    const currentText =
+      $selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)
+        ? wrapperEl?.querySelector(`[data-placed-text="${$selectedTextId}"]`)
+        : undefined;
     const inToolPanel = !!(e.target as Element | null)?.closest?.('[data-tool-panel]');
-    if (!currentText?.contains(e.target as Node) && !inToolPanel && editingTextId !== $selectedTextId) {
+    if (
+      currentText !== undefined &&
+      !currentText?.contains(e.target as Node) &&
+      !inToolPanel &&
+      editingTextId !== $selectedTextId
+    ) {
       $selectedTextId = null;
     }
 
@@ -594,8 +555,10 @@
     // as the click lands elsewhere (see textSelectActive), so there's no
     // guarantee the browser's own native "click away clears selection"
     // behavior fires on an element that isn't even receiving the click.
+    // Only the page the selection is on clears it, so a shift-click on that
+    // page isn't undone by the others.
     const selection = window.getSelection();
-    if (selection && !selection.isCollapsed && !textLayerEl?.contains(e.target as Node)) {
+    if (hasTextSelection && selection && !selection.isCollapsed && !textLayerEl?.contains(e.target as Node)) {
       selection.removeAllRanges();
     }
   }
@@ -638,6 +601,7 @@
   function onCanvasMouseMove(e: PointerEvent) {
     const rect = canvasEl.getBoundingClientRect();
     cursorPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    pointerInside = true;
   }
 
   // Zoom tool: clicking the document zooms in one step, keeping the clicked
@@ -751,7 +715,7 @@
     const x = clamp(e.clientX - rect.left - width / 2, 0, rect.width - width);
     const y = clamp(e.clientY - rect.top - height / 2, 0, rect.height - height);
 
-    const placement = { x, y, width, height, page: doc.pageNumber, signatureId: sig.id };
+    const placement = { x, y, width, height, page: pageNumber, signatureId: sig.id };
     const id = editorStore.addSignature(placement);
     rememberPlacement({ ...placement, id });
     selectedSignatureId = id;
@@ -983,7 +947,7 @@
       drawingBox = null;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       if (!doc || box.width < REDACT_DRAW_MIN_SIZE || box.height < REDACT_DRAW_MIN_SIZE) return;
-      editorStore.addRedaction({ ...box, page: doc.pageNumber });
+      editorStore.addRedaction({ ...box, page: pageNumber });
       return;
     }
 
@@ -1055,12 +1019,12 @@
     if (!doc || !pdfDoc || capturing) return;
 
     const baseName = doc.file.name.replace(/\.pdf$/i, '');
-    const fileName = `${baseName}_page${doc.pageNumber}${area ? '_area' : ''}.png`;
+    const fileName = `${baseName}_page${pageNumber}${area ? '_area' : ''}.png`;
 
     capturing = true;
     const png = $screenshotIncludeEdits
       ? captureWithEdits(pdfDoc, doc, area)
-      : capturePage(pdfDoc, doc.pageNumber, doc.rotation, area, null, $screenshotScale);
+      : capturePage(pdfDoc, pageNumber, doc.rotation, area, null, $screenshotScale);
     if (destination === 'download') {
       png
         .then((blob) => {
@@ -1135,7 +1099,7 @@
       signatures,
       texts: textsOnCurrentPage,
     };
-    return capturePage(loaded, doc.pageNumber, doc.rotation, area, overlays, $screenshotScale);
+    return capturePage(loaded, pageNumber, doc.rotation, area, overlays, $screenshotScale);
   }
 
   // Move an existing box. Looks the box up fresh by id on every step (rather
@@ -1290,7 +1254,7 @@
       y,
       width,
       height,
-      page: doc.pageNumber,
+      page: pageNumber,
       text: '',
       fontFamily: $defaultTextFontFamily,
       fontSize: $defaultTextFontSize,
@@ -1456,7 +1420,7 @@
       y,
       width: COMMENT_SIZE,
       height: COMMENT_SIZE,
-      page: doc.pageNumber,
+      page: pageNumber,
       text: '',
     });
     selectedCommentId = id;
@@ -1667,7 +1631,7 @@
       ];
     }
 
-    const page = doc.pageNumber;
+    const page = pageNumber;
     return [
       {
         label: 'Place signature here',
@@ -1720,7 +1684,7 @@
 <div
   bind:this={wrapperEl}
   role="region"
-  aria-label="PDF page. Drop the signature here."
+  aria-label="Page {pageNumber}. Drop the signature here."
   class="relative mx-auto w-fit"
   class:ring-2={isDragOver}
   class:ring-blue-400={isDragOver}
@@ -1937,7 +1901,7 @@
     </div>
   {/if}
 
-  {#if $clickToPlaceMode && !$redactMode && $signatureStore.previewUrl}
+  {#if $clickToPlaceMode && pointerInside && !$redactMode && $signatureStore.previewUrl}
     {@const sig = $signatureStore}
     {@const { width, height } = fitWithinBox(sig.naturalWidth, sig.naturalHeight)}
     <div

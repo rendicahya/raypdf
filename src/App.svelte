@@ -1,7 +1,7 @@
 <script lang="ts">
   import UploadCard from './components/UploadCard.svelte';
   import DocumentThumbnail from './components/DocumentThumbnail.svelte';
-  import PDFViewer from './components/PDFViewer.svelte';
+  import PDFPages from './components/PDFPages.svelte';
   import ToolPanel from './components/ToolPanel.svelte';
   import PageSidebar from './components/PageSidebar.svelte';
   import FloatingControls from './components/FloatingControls.svelte';
@@ -491,7 +491,7 @@
         <SearchBar />
         <div class="flex-1 overflow-auto px-6 py-8" data-pdf-scroll-container>
           {#key active.id}
-            <PDFViewer />
+            <PDFPages />
           {/key}
         </div>
       </div>

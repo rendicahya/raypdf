@@ -68,7 +68,7 @@
 
   // The box selected on the page, if it's on the page on screen.
   const selected = $derived(
-    $activeDocument?.texts.find((t) => t.id === $selectedTextId && t.page === $activeDocument?.pageNumber),
+    $activeDocument?.texts.find((t) => t.id === $selectedTextId),
   );
 
   const style: TextStyle = $derived(

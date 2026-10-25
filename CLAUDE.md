@@ -114,7 +114,7 @@ Users should only need to upload a new PDF.
 
 ## PDF Editor
 
-Display the PDF using pdf.js, with one tab per open document.
+Display the PDF using pdf.js, with one tab per open document. Pages scroll continuously: PDFPages loads the file and stacks a placeholder of each page's real size, mounting a PDFViewer (one page: canvas, text layer, overlays, its own `pageNumber` prop) only for pages near the view. The page in view becomes `pageNumber` in the store, pointerdown on a page makes it current without scrolling, and any other change to `pageNumber` scrolls to that page. Anything shared across pages (like `selectedTextId`) must not be cleared by a page that doesn't hold it.
 
 Left sidebar: page thumbnails, rendered lazily as they scroll into view, with redaction boxes overlaid (not re-rendered). The thumbnail menu's "Save page as" submenu (ContextMenu `children`) saves PDF, PNG, or JPG; images are rendered from the exported PDF (`lib/pdf/pageImages.ts`), so they match the saved file. Click to jump, drag and drop to reorder pages; per-page actions rotate, duplicate, insert a blank page after, or delete. Several pages can be selected (Ctrl/Shift-click, checkboxes) to rotate, save, or delete together. Page edits rewrite the file (`lib/pdf/pageOps.ts`) and go through `editPages` in `stores/editor.ts`, which renumbers everything placed on the pages and keeps the old file for undo.
 
@@ -233,7 +233,7 @@ Users should never need to upload their signature every time they use RayPDF.
 components/
 
 - UploadCard, FeatureGrid (front-page feature showcase), Faq, WatermarkIllustration, SignatureCreator, SearchBar
-- PDFViewer, PageSidebar, PageThumbnail
+- PDFPages (the scrolling page column), PDFViewer (one page), PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
 - ToolPanel, SignaturePanel, toolOptions/ (PanelHeader, RedactOptions, TextOptions, CommentOptions, SelectOptions, ScreenshotOptions)
