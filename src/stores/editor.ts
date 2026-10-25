@@ -110,6 +110,45 @@ export interface PlacedHighlight {
   page: number;
 }
 
+export type ShapeKind = 'rectangle' | 'ellipse' | 'line' | 'arrow';
+
+/** A drawn shape, in canvas pixel coordinates. Lines and arrows run corner to corner across the box. */
+export interface PlacedShape {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 1-indexed page this shape belongs to. */
+  page: number;
+  kind: ShapeKind;
+  /** CSS hex color of the outline, or of the line itself. */
+  stroke: string;
+  /** In canvas pixels at the current render scale — rescaled on zoom. 0 means no outline. */
+  strokeWidth: number;
+  /** CSS hex color filling a rectangle or ellipse, or null for none. */
+  fill: string | null;
+  /** 0.1 to 1. */
+  opacity: number;
+  /** Where a line starts: the right (flipX) or bottom (flipY) edge instead of the left or top. Arrows point to the other end. */
+  flipX: boolean;
+  flipY: boolean;
+}
+
+/** An image placed on the page, in canvas pixel coordinates. The image itself is in stores/images.ts. */
+export interface PlacedImage {
+  id: string;
+  imageId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 1-indexed page this image belongs to. */
+  page: number;
+  /** 0.1 to 1. */
+  opacity: number;
+}
+
 /** Per-document editing state — one entry per uploaded PDF. */
 export interface PdfDocumentState {
   id: string;
@@ -124,6 +163,8 @@ export interface PdfDocumentState {
   texts: PlacedText[];
   comments: PlacedComment[];
   highlights: PlacedHighlight[];
+  shapes: PlacedShape[];
+  images: PlacedImage[];
   /** Values entered into the PDF's own form fields, by field name — only fields the user changed. */
   formValues: FormValues;
   /** How the pages are numbered on export, or null for no page numbers. */
@@ -164,6 +205,8 @@ function createDocumentState(file: File): PdfDocumentState {
     texts: [],
     comments: [],
     highlights: [],
+    shapes: [],
+    images: [],
     formValues: {},
     pageNumbers: null,
     rotation: 0,
@@ -233,6 +276,21 @@ function rescale(state: EditorState, nextScale: number): EditorState {
       width: h.width * factor,
       height: h.height * factor,
     })),
+    shapes: doc.shapes.map((s) => ({
+      ...s,
+      x: s.x * factor,
+      y: s.y * factor,
+      width: s.width * factor,
+      height: s.height * factor,
+      strokeWidth: s.strokeWidth * factor,
+    })),
+    images: doc.images.map((img) => ({
+      ...img,
+      x: img.x * factor,
+      y: img.y * factor,
+      width: img.width * factor,
+      height: img.height * factor,
+    })),
   }));
   return { ...state, renderScale, documents };
 }
@@ -288,13 +346,27 @@ async function convertGeometry<T extends Geometry>(
   const [vx1, vy1] = newViewport.convertToViewportPoint(px1, py1);
   const [vx2, vy2] = newViewport.convertToViewportPoint(px2, py2);
 
-  return {
+  const converted = {
     ...box,
     x: Math.min(vx1, vx2),
     y: Math.min(vy1, vy2),
     width: Math.abs(vx2 - vx1),
     height: Math.abs(vy2 - vy1),
   };
+
+  // A line runs between two opposite corners; follow its start and end to
+  // see which corners they've landed on.
+  if ('flipX' in box && 'flipY' in box) {
+    const line = box as T & { flipX: boolean; flipY: boolean };
+    const toNew = (x: number, y: number) => {
+      const [px, py] = oldViewport.convertToPdfPoint(x, y);
+      return newViewport.convertToViewportPoint(px, py);
+    };
+    const [sx, sy] = toNew(line.flipX ? box.x + box.width : box.x, line.flipY ? box.y + box.height : box.y);
+    const [ex, ey] = toNew(line.flipX ? box.x : box.x + box.width, line.flipY ? box.y : box.y + box.height);
+    return { ...converted, flipX: sx > ex, flipY: sy > ey };
+  }
+  return converted;
 }
 
 /** The subset of a document's state that undo/redo tracks — everything the
@@ -310,6 +382,8 @@ interface DocSnapshot {
   texts: PlacedText[];
   comments: PlacedComment[];
   highlights: PlacedHighlight[];
+  shapes: PlacedShape[];
+  images: PlacedImage[];
   formValues: FormValues;
   pageNumbers: PageNumberSettings | null;
   rotation: number;
@@ -317,6 +391,29 @@ interface DocSnapshot {
 
 /** Anything placed on a page. */
 type PageItem = Geometry & { id: string; page: number };
+
+/** Every list of things placed on a document's pages. */
+type PageItems = Pick<
+  PdfDocumentState,
+  'placedSignatures' | 'redactions' | 'texts' | 'comments' | 'highlights' | 'shapes' | 'images'
+>;
+
+/** Runs `fn` over each of a document's item lists — for edits (rotation, page edits) that move all of them alike. */
+async function mapPageItems(
+  doc: PageItems,
+  fn: <T extends PageItem>(items: T[]) => Promise<T[]>,
+): Promise<PageItems> {
+  const [placedSignatures, redactions, texts, comments, highlights, shapes, images] = await Promise.all([
+    fn(doc.placedSignatures),
+    fn(doc.redactions),
+    fn(doc.texts),
+    fn(doc.comments),
+    fn(doc.highlights),
+    fn(doc.shapes),
+    fn(doc.images),
+  ]);
+  return { placedSignatures, redactions, texts, comments, highlights, shapes, images };
+}
 
 /** A page-level edit of the active document — see editPages. */
 interface PageEdit {
@@ -377,6 +474,8 @@ function createEditorStore() {
       texts: doc.texts,
       comments: doc.comments,
       highlights: doc.highlights,
+      shapes: doc.shapes,
+      images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       rotation: doc.rotation,
@@ -862,6 +961,46 @@ function createEditorStore() {
     );
   }
 
+  /** Shapes and images: add, change, and remove, each an undo step (changes to one item coalesce like a drag). */
+  function editActiveList<K extends 'shapes' | 'images'>(
+    key: K,
+    actionKey: string,
+    fn: (items: PdfDocumentState[K]) => PdfDocumentState[K],
+  ) {
+    recordActiveHistory(actionKey);
+    update((state) => updateActiveDocument(state, (doc) => ({ ...doc, [key]: fn(doc[key]), exported: false })));
+  }
+
+  function addShape(shape: Omit<PlacedShape, 'id'>): string {
+    const id = crypto.randomUUID();
+    editActiveList('shapes', `add-shape-${id}`, (shapes) => [...shapes, { ...shape, id }]);
+    return id;
+  }
+
+  function updateShape(id: string, partial: Partial<PlacedShape>) {
+    editActiveList('shapes', `update-shape-${id}`, (shapes) => shapes.map((s) => (s.id === id ? { ...s, ...partial } : s)));
+  }
+
+  function removeShape(id: string) {
+    editActiveList('shapes', `remove-shape-${id}-${Date.now()}`, (shapes) => shapes.filter((s) => s.id !== id));
+  }
+
+  function addImage(image: Omit<PlacedImage, 'id'>): string {
+    const id = crypto.randomUUID();
+    editActiveList('images', `add-image-${id}`, (images) => [...images, { ...image, id }]);
+    return id;
+  }
+
+  function updateImage(id: string, partial: Partial<PlacedImage>) {
+    editActiveList('images', `update-image-${id}`, (images) =>
+      images.map((img) => (img.id === id ? { ...img, ...partial } : img)),
+    );
+  }
+
+  function removeImage(id: string) {
+    editActiveList('images', `remove-image-${id}-${Date.now()}`, (images) => images.filter((img) => img.id !== id));
+  }
+
   /** Records a value typed or picked into one of the PDF's own form fields. */
   function setFormValue(fieldName: string, value: string | boolean) {
     recordActiveHistory(`form-${fieldName}`);
@@ -912,65 +1051,33 @@ function createEditorStore() {
     const doc = getActiveDocument(state);
     if (!doc) return;
 
-    const { id, file, rotation: oldRotation, placedSignatures, redactions, texts, comments, highlights } = doc;
+    const { id, file, rotation: oldRotation } = doc;
     const { renderScale } = state;
     const newRotation = (((oldRotation + delta) % 360) + 360) % 360;
 
     recordHistory(id, `rotate-${crypto.randomUUID()}`, doc);
 
-    const applyRotation = (
-      placements: PlacedSignature[],
-      boxes: RedactionBox[],
-      newTexts: PlacedText[],
-      newComments: PlacedComment[],
-      newHighlights: PlacedHighlight[],
-    ) => {
+    const applyRotation = (items: PageItems) => {
       update((state) => ({
         ...state,
         // Target this specific document rather than "whichever is active
         // now" — the pdf.js work below is async, so the user could have
         // switched tabs before it resolves.
         documents: state.documents.map((d) =>
-          d.id === id
-            ? {
-                ...d,
-                rotation: newRotation,
-                placedSignatures: placements,
-                redactions: boxes,
-                texts: newTexts,
-                comments: newComments,
-                highlights: newHighlights,
-                exported: false,
-              }
-            : d,
+          d.id === id ? { ...d, ...items, rotation: newRotation, exported: false } : d,
         ),
       }));
     };
 
     try {
       const pdfjsDoc = await getCachedPdf(id, file);
-      const newPlacements = await Promise.all(
-        placedSignatures.map((sig) =>
-          rotateGeometry(pdfjsDoc, sig.page, renderScale, oldRotation, newRotation, sig),
-        ),
-      );
-      const newRedactions = await Promise.all(
-        redactions.map((box) => rotateGeometry(pdfjsDoc, box.page, renderScale, oldRotation, newRotation, box)),
-      );
-      const newTexts = await Promise.all(
-        texts.map((t) => rotateGeometry(pdfjsDoc, t.page, renderScale, oldRotation, newRotation, t)),
-      );
-      const newComments = await Promise.all(
-        comments.map((c) => rotateGeometry(pdfjsDoc, c.page, renderScale, oldRotation, newRotation, c)),
-      );
-      const newHighlights = await Promise.all(
-        highlights.map((h) => rotateGeometry(pdfjsDoc, h.page, renderScale, oldRotation, newRotation, h)),
-      );
-      applyRotation(newPlacements, newRedactions, newTexts, newComments, newHighlights);
+      const rotate = <T extends PageItem>(items: T[]) =>
+        Promise.all(items.map((item) => rotateGeometry(pdfjsDoc, item.page, renderScale, oldRotation, newRotation, item)));
+      applyRotation(await mapPageItems(doc, rotate));
     } catch {
       // Couldn't re-derive the geometry (e.g. the PDF failed to load) — fall
       // back to clearing rather than leaving stale, now-misaligned positions.
-      applyRotation([], [], [], [], []);
+      applyRotation(await mapPageItems(doc, async () => []));
     }
   }
 
@@ -1038,13 +1145,8 @@ function createEditorStore() {
     const current = findLatest();
     if (!current || current.file !== doc.file) return;
 
-    const [placedSignatures, redactions, texts, comments, highlights] = await Promise.all([
-      remap(current.placedSignatures),
-      remap(current.redactions),
-      remap(current.texts),
-      remap(current.comments),
-      remap(current.highlights).then(regroupCopies),
-    ]);
+    const items = await mapPageItems(current, remap);
+    items.highlights = regroupCopies(items.highlights);
 
     const latest = findLatest();
     if (!latest || latest.file !== doc.file) return;
@@ -1056,14 +1158,10 @@ function createEditorStore() {
         d.id === latest.id
           ? {
               ...d,
+              ...items,
               file,
               pageCount,
               pageNumber: clamp(edit.mapCurrent(d.pageNumber, pageCount), 1, pageCount),
-              placedSignatures,
-              redactions,
-              texts,
-              comments,
-              highlights,
               exported: false,
             }
           : d,
@@ -1229,6 +1327,12 @@ function createEditorStore() {
     addHighlight,
     recolorHighlight,
     removeHighlight,
+    addShape,
+    updateShape,
+    removeShape,
+    addImage,
+    updateImage,
+    removeImage,
     setFormValue,
     setPageNumbers,
     markDocumentExported,

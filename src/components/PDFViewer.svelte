@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
@@ -26,6 +26,18 @@
   import { MENU_ICONS } from '../lib/utils/menuIcons';
   import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
+  import PlacedBox from './PlacedBox.svelte';
+  import ShapeGraphic from './ShapeGraphic.svelte';
+  import {
+    shapeToolMode,
+    selectedShapeId,
+    shapeKind,
+    shapeStroke,
+    shapeStrokeWidth,
+    shapeFill,
+    shapeOpacity,
+  } from '../stores/shapeTool';
+  import { addImageFile, imageFor, isImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
   import {
     screenshotToolMode,
@@ -42,6 +54,7 @@
     type PlacedText,
     type RedactionBox,
     type PlacedComment,
+    type ShapeKind,
   } from '../stores/editor';
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
@@ -385,7 +398,8 @@
       !$clickToPlaceMode &&
       !$zoomToolMode &&
       !$textSelectMode &&
-      !$screenshotToolMode,
+      !$screenshotToolMode &&
+      !$shapeToolMode,
   );
 
   // Move mode auto-switches into text selection when the pointer rests over
@@ -444,7 +458,8 @@
       $clickToPlaceMode ||
       $zoomToolMode ||
       $textSelectMode ||
-      $screenshotToolMode;
+      $screenshotToolMode ||
+      $shapeToolMode;
     const otherInteractionInProgress =
       isPanning ||
       drawingBox ||
@@ -454,7 +469,9 @@
       movingCommentId ||
       resizingSignatureId ||
       resizingRedactionId ||
-      resizingTextId;
+      resizingTextId ||
+      drawingShape ||
+      !!(e.target as Element | null)?.closest?.('[data-placed-box]');
 
     if (explicitToolActive || otherInteractionInProgress) {
       clearHoverTimer();
@@ -497,6 +514,150 @@
   );
   const commentsOnCurrentPage = $derived($activeDocument?.comments.filter((c) => c.page === pageNumber) ?? []);
   const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
+  const shapesOnCurrentPage = $derived($activeDocument?.shapes.filter((s) => s.page === pageNumber) ?? []);
+  const imagesOnCurrentPage = $derived($activeDocument?.images.filter((img) => img.page === pageNumber) ?? []);
+
+  function canvasBounds() {
+    const rect = canvasEl.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  }
+
+  const isLineKind = (kind: ShapeKind) => kind === 'line' || kind === 'arrow';
+  const SHAPE_LABELS: Record<ShapeKind, string> = {
+    rectangle: 'Rectangle',
+    ellipse: 'Ellipse',
+    line: 'Line',
+    arrow: 'Arrow',
+  };
+
+  // Shapes tool: drag on the page to draw the chosen shape (Shift keeps a
+  // square, a circle, or a line at 45° steps); a plain click drops one of a
+  // default size. The tool stays on, so several can be drawn in a row.
+  const SHAPE_DRAW_MIN = 6;
+  let drawingShape: { x: number; y: number; width: number; height: number; flipX: boolean; flipY: boolean } | null =
+    $state(null);
+  let shapeStart = { x: 0, y: 0 };
+
+  $effect(() => {
+    if (!$shapeToolMode) drawingShape = null;
+  });
+
+  function shapeDraft(e: PointerEvent) {
+    const rect = canvasEl.getBoundingClientRect();
+    let endX = clamp(e.clientX - rect.left, 0, rect.width);
+    let endY = clamp(e.clientY - rect.top, 0, rect.height);
+    if (e.shiftKey) {
+      const dx = endX - shapeStart.x;
+      const dy = endY - shapeStart.y;
+      if (isLineKind($shapeKind)) {
+        const step = Math.PI / 4;
+        const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+        const length = Math.hypot(dx, dy);
+        endX = clamp(shapeStart.x + Math.round(Math.cos(angle) * length), 0, rect.width);
+        endY = clamp(shapeStart.y + Math.round(Math.sin(angle) * length), 0, rect.height);
+      } else {
+        const size = Math.max(Math.abs(dx), Math.abs(dy));
+        endX = clamp(shapeStart.x + (dx < 0 ? -size : size), 0, rect.width);
+        endY = clamp(shapeStart.y + (dy < 0 ? -size : size), 0, rect.height);
+      }
+    }
+    return {
+      x: Math.min(shapeStart.x, endX),
+      y: Math.min(shapeStart.y, endY),
+      width: Math.abs(endX - shapeStart.x),
+      height: Math.abs(endY - shapeStart.y),
+      flipX: endX < shapeStart.x,
+      flipY: endY < shapeStart.y,
+    };
+  }
+
+  function finishShape(box: NonNullable<typeof drawingShape>) {
+    const kind = $shapeKind;
+    const scale = $editorStore.renderScale;
+    let geometry = box;
+    // A click rather than a drag: a shape of a default size, centred there.
+    if (Math.max(box.width, box.height) < SHAPE_DRAW_MIN) {
+      const rect = canvasEl.getBoundingClientRect();
+      const width = Math.min(80 * scale, rect.width);
+      const height = isLineKind(kind) ? 0 : Math.min(54 * scale, rect.height);
+      geometry = {
+        x: clamp(box.x - width / 2, 0, rect.width - width),
+        y: clamp(box.y - height / 2, 0, rect.height - height),
+        width,
+        height,
+        flipX: false,
+        flipY: false,
+      };
+    }
+    $selectedShapeId = editorStore.addShape({
+      ...geometry,
+      page: pageNumber,
+      kind,
+      stroke: $shapeStroke,
+      strokeWidth: (isLineKind(kind) ? Math.max(1, $shapeStrokeWidth) : $shapeStrokeWidth) * scale,
+      fill: isLineKind(kind) ? null : $shapeFill,
+      opacity: $shapeOpacity,
+    });
+  }
+
+  // Images: placed from the toolbar's Add image (on the page in view), by
+  // dropping an image file onto a page, or from the page's right-click menu.
+  // They start at most 40% of the page across, centred on the point given
+  // or on the visible part of the page.
+  let selectedImageId: string | null = $state(null);
+  let imageInputEl: HTMLInputElement | undefined = $state();
+  let imageMenuPoint: ClientPoint | null = null;
+  let imageError: string | null = $state(null);
+
+  function placeImage(image: { id: string; width: number; height: number }, at?: ClientPoint) {
+    if (!$activeDocument || !canvasEl) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const fit = Math.min(1, (rect.width * 0.4) / image.width, (rect.height * 0.4) / image.height);
+    const width = image.width * fit;
+    const height = image.height * fit;
+    let centerX = rect.width / 2;
+    let centerY = rect.height / 2;
+    if (at) {
+      centerX = at.clientX - rect.left;
+      centerY = at.clientY - rect.top;
+    } else {
+      const view = wrapperEl.closest('[data-pdf-scroll-container]')?.getBoundingClientRect();
+      if (view) {
+        const top = Math.max(rect.top, view.top);
+        const bottom = Math.min(rect.bottom, view.bottom);
+        if (bottom > top) centerY = (top + bottom) / 2 - rect.top;
+      }
+    }
+    selectedImageId = editorStore.addImage({
+      imageId: image.id,
+      x: clamp(centerX - width / 2, 0, rect.width - width),
+      y: clamp(centerY - height / 2, 0, rect.height - height),
+      width,
+      height,
+      page: pageNumber,
+      opacity: 1,
+    });
+  }
+
+  function addImageAt(file: File, at?: ClientPoint) {
+    imageError = null;
+    addImageFile(file)
+      .then((image) => placeImage(image, at))
+      .catch((err) => {
+        imageError = err instanceof Error ? err.message : 'Failed to add the image';
+        setTimeout(() => (imageError = null), 6000);
+      });
+  }
+
+  // The toolbar's Add image lands on the page being viewed.
+  $effect(() => {
+    const pending = $pendingImage;
+    if (!pending || !canvasEl || pageNumber !== ($activeDocument?.pageNumber ?? 1)) return;
+    untrack(() => {
+      pendingImage.set(null);
+      placeImage(pending);
+    });
+  });
 
   // The move/resize/remove controls only show while a signature is
   // "selected" — right after it's placed, or after the user clicks it again
@@ -599,6 +760,11 @@
     if (isPageDrag(e)) return;
     e.preventDefault();
     isDragOver = false;
+    const imageFile = Array.from(e.dataTransfer?.files ?? []).find(isImageFile);
+    if (imageFile) {
+      addImageAt(imageFile, { clientX: e.clientX, clientY: e.clientY });
+      return;
+    }
     // The signature panel tags each dragged signature with its id.
     placeSignatureAt(e, e.dataTransfer?.getData(SIGNATURE_DRAG_TYPE) || undefined);
   }
@@ -891,6 +1057,7 @@
       !$commentToolMode &&
       !$clickToPlaceMode &&
       !$zoomToolMode &&
+      !$shapeToolMode &&
       !textSelectActive &&
       e.target === canvasEl
     );
@@ -905,6 +1072,15 @@
       drawStart = { x, y };
       drawingBox = { x, y, width: 0, height: 0 };
       selectedRedactionId = null;
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    if ($shapeToolMode && e.target === canvasEl) {
+      const rect = canvasEl.getBoundingClientRect();
+      shapeStart = { x: clamp(e.clientX - rect.left, 0, rect.width), y: clamp(e.clientY - rect.top, 0, rect.height) };
+      drawingShape = { ...shapeStart, width: 0, height: 0, flipX: false, flipY: false };
+      $selectedShapeId = null;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
@@ -926,6 +1102,11 @@
   function onWrapperPointerMove(e: PointerEvent) {
     updateHoverTextSelect(e);
 
+    if (drawingShape) {
+      drawingShape = shapeDraft(e);
+      return;
+    }
+
     if (drawingBox) {
       const rect = canvasEl.getBoundingClientRect();
       const x = clamp(e.clientX - rect.left, 0, rect.width);
@@ -946,6 +1127,14 @@
   }
 
   function onWrapperPointerUp(e: PointerEvent) {
+    if (drawingShape) {
+      const box = shapeDraft(e);
+      drawingShape = null;
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      finishShape(box);
+      return;
+    }
+
     if (drawingBox) {
       const doc = $activeDocument;
       const box = drawingBox;
@@ -1103,6 +1292,11 @@
       redactions: redactionsOnCurrentPage,
       signatures,
       texts: textsOnCurrentPage,
+      shapes: shapesOnCurrentPage,
+      images: imagesOnCurrentPage.flatMap((img) => {
+        const stored = imageFor(img.imageId);
+        return stored ? [{ ...img, image: stored.blob }] : [];
+      }),
       pageNumber: pageNumberSettings && pageNumberText ? { settings: pageNumberSettings, text: pageNumberText } : null,
     };
     return capturePage(loaded, pageNumber, doc.rotation, area, overlays, $screenshotScale);
@@ -1533,6 +1727,29 @@
       onSelect: remove,
     });
 
+    const shapeId = idOf('data-placed-shape');
+    const shape = shapeId ? doc.shapes.find((s) => s.id === shapeId) : undefined;
+    if (shape) {
+      $selectedShapeId = shape.id;
+      return [
+        deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
+          editorStore.removeShape(shape.id);
+          $selectedShapeId = null;
+        }),
+      ];
+    }
+
+    const placedImageId = idOf('data-placed-image');
+    if (placedImageId) {
+      selectedImageId = placedImageId;
+      return [
+        deleteItem('Delete image', () => {
+          editorStore.removeImage(placedImageId);
+          selectedImageId = null;
+        }),
+      ];
+    }
+
     const signatureId = idOf('data-placed-signature');
     if (signatureId) {
       selectedSignatureId = signatureId;
@@ -1661,6 +1878,14 @@
           addCommentAt(point);
         },
       },
+      {
+        label: 'Add image here',
+        icon: MENU_ICONS.image,
+        onSelect: () => {
+          imageMenuPoint = point;
+          imageInputEl?.click();
+        },
+      },
       { label: 'Zoom in', icon: MENU_ICONS.zoomIn, separatorBefore: true, onSelect: editorStore.zoomIn },
       { label: 'Zoom out', icon: MENU_ICONS.zoomOut, onSelect: editorStore.zoomOut },
       {
@@ -1706,7 +1931,7 @@
   <canvas
     bind:this={canvasEl}
     class="rounded-lg shadow-lg active:cursor-grabbing"
-    class:cursor-crosshair={$redactMode}
+    class:cursor-crosshair={$redactMode || $shapeToolMode}
     class:cursor-text={($textToolMode || $commentToolMode) && !$redactMode}
     class:cursor-zoom-in={$zoomToolMode && !$redactMode && !$textToolMode && !$commentToolMode}
     class:cursor-grab={!$redactMode &&
@@ -1714,6 +1939,7 @@
       !$commentToolMode &&
       !$clickToPlaceMode &&
       !$zoomToolMode &&
+      !$shapeToolMode &&
       !textSelectActive}
     onpointerdown={onCanvasClick}
     onpointermove={onCanvasMouseMove}
@@ -1925,6 +2151,111 @@
           </select>
         {/if}
       {/each}
+    </div>
+  {/if}
+
+  <!-- Images, then shapes: under signatures and text, as export draws them. -->
+  {#each imagesOnCurrentPage as img (img.id)}
+    {@const stored = imageFor(img.imageId)}
+    {#if stored}
+      <PlacedBox
+        attr="placed-image"
+        id={img.id}
+        box={img}
+        selected={selectedImageId === img.id}
+        label="Image"
+        keepAspect
+        minSize={16}
+        bounds={canvasBounds}
+        onSelect={() => (selectedImageId = img.id)}
+        onDeselect={() => {
+          if (selectedImageId === img.id) selectedImageId = null;
+        }}
+        onChange={(geometry) => editorStore.updateImage(img.id, geometry)}
+        onRemove={() => {
+          editorStore.removeImage(img.id);
+          selectedImageId = null;
+        }}
+      >
+        <img
+          src={stored.url}
+          alt=""
+          draggable="false"
+          class="h-full w-full select-none"
+          style:opacity={img.opacity}
+        />
+      </PlacedBox>
+    {/if}
+  {/each}
+
+  {#each shapesOnCurrentPage as s (s.id)}
+    <PlacedBox
+      attr="placed-shape"
+      id={s.id}
+      box={s}
+      selected={$selectedShapeId === s.id}
+      label={SHAPE_LABELS[s.kind]}
+      minSize={8}
+      pad={isLineKind(s.kind) ? 6 : 0}
+      bounds={canvasBounds}
+      onSelect={() => ($selectedShapeId = s.id)}
+      onDeselect={() => {
+        if ($selectedShapeId === s.id) $selectedShapeId = null;
+      }}
+      onChange={(geometry) => editorStore.updateShape(s.id, geometry)}
+      onRemove={() => {
+        editorStore.removeShape(s.id);
+        $selectedShapeId = null;
+      }}
+    >
+      <ShapeGraphic shape={s} />
+    </PlacedBox>
+  {/each}
+
+  {#if drawingShape}
+    {@const kind = $shapeKind}
+    <div
+      class="pointer-events-none absolute"
+      style:left="{drawingShape.x}px"
+      style:top="{drawingShape.y}px"
+      style:width="{drawingShape.width}px"
+      style:height="{drawingShape.height}px"
+    >
+      <ShapeGraphic
+        shape={{
+          ...drawingShape,
+          kind,
+          stroke: $shapeStroke,
+          strokeWidth: (isLineKind(kind) ? Math.max(1, $shapeStrokeWidth) : $shapeStrokeWidth) * $editorStore.renderScale,
+          fill: isLineKind(kind) ? null : $shapeFill,
+          opacity: $shapeOpacity,
+        }}
+      />
+    </div>
+  {/if}
+
+  <!-- For "Add image here" in the page's right-click menu. -->
+  <input
+    bind:this={imageInputEl}
+    type="file"
+    accept={IMAGE_ACCEPT}
+    class="hidden"
+    onchange={(e) => {
+      const input = e.currentTarget;
+      const file = input.files?.[0];
+      input.value = '';
+      if (file) addImageAt(file, imageMenuPoint ?? undefined);
+      imageMenuPoint = null;
+    }}
+  />
+
+  {#if imageError}
+    <div
+      role="alert"
+      class="absolute left-1/2 top-2 z-50 -translate-x-1/2 rounded-full bg-white/95 px-3 py-1 text-xs text-red-600
+        shadow dark:bg-neutral-900/95 dark:text-red-400"
+    >
+      {imageError}
     </div>
   {/if}
 

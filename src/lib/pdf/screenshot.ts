@@ -1,7 +1,8 @@
 import { renderPageToCanvas, type PdfDocument } from './loader';
 import type { FormWidgetKind } from './forms';
 import type { MarkupPaint } from './highlight';
-import type { PlacedText } from '../../stores/editor';
+import type { PlacedShape, PlacedText } from '../../stores/editor';
+import { insetBox, lineGeometry } from './shapes';
 import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
 import { pageNumberAnchor, type PageNumberSettings } from './pageNumbers';
 
@@ -50,6 +51,9 @@ export interface CaptureOverlays {
   /** Each placed signature with its image, visible watermark already applied (see lib/watermark/visible.ts). */
   signatures: (Box & { image: Blob })[];
   texts: PlacedText[];
+  shapes?: PlacedShape[];
+  /** Each placed image with its picture. */
+  images?: (Box & { opacity: number; image: Blob })[];
   /** This page's number, if the document is numbered and this page gets one. */
   pageNumber?: { settings: PageNumberSettings; text: string } | null;
 }
@@ -113,6 +117,16 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
 
   ctx.fillStyle = '#000';
   for (const box of overlays.redactions) ctx.fillRect(box.x, box.y, box.width, box.height);
+
+  // Images, then shapes, under signatures and text, in the order export draws them.
+  for (const placed of overlays.images ?? []) {
+    const bitmap = await createImageBitmap(placed.image);
+    ctx.globalAlpha = placed.opacity;
+    ctx.drawImage(bitmap, placed.x, placed.y, placed.width, placed.height);
+    bitmap.close();
+  }
+  ctx.globalAlpha = 1;
+  for (const s of overlays.shapes ?? []) drawShape(ctx, s);
 
   const bitmaps = new Map<Blob, ImageBitmap>();
   for (const box of overlays.signatures) {
@@ -241,6 +255,33 @@ function drawTextBox(ctx: CanvasRenderingContext2D, t: PlacedText): void {
     underline: t.underline,
     strikethrough: t.strikethrough,
   });
+  ctx.restore();
+}
+
+function drawShape(ctx: CanvasRenderingContext2D, s: PlacedShape): void {
+  ctx.save();
+  ctx.globalAlpha = s.opacity;
+  ctx.strokeStyle = s.stroke;
+  ctx.lineWidth = s.strokeWidth;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (s.kind === 'line' || s.kind === 'arrow') {
+    const { start, end, head } = lineGeometry(s);
+    for (const [a, b] of [[start, end], ...head]) {
+      ctx.moveTo(...a);
+      ctx.lineTo(...b);
+    }
+    if (s.strokeWidth > 0) ctx.stroke();
+  } else {
+    const box = insetBox(s);
+    if (s.kind === 'rectangle') ctx.rect(box.x, box.y, box.width, box.height);
+    else ctx.ellipse(box.x + box.width / 2, box.y + box.height / 2, box.width / 2, box.height / 2, 0, 0, Math.PI * 2);
+    if (s.fill) {
+      ctx.fillStyle = s.fill;
+      ctx.fill();
+    }
+    if (s.strokeWidth > 0) ctx.stroke();
+  }
   ctx.restore();
 }
 

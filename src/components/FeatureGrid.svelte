@@ -62,9 +62,10 @@
       kind: 'markup',
       title: 'Mark up',
       description:
-        'Select text to highlight it, underline it, or strike it through. Add text boxes in the font and size you want, and leave comments as sticky notes.',
+        'Select text to highlight it, underline it, or strike it through. Add text boxes in the font and size you want, draw rectangles, circles, lines, and arrows, place images or a logo, and leave comments as sticky notes.',
       points: [
         'Highlights come in five colors.',
+        'Shapes and images can be moved, resized, and restyled at any time before you save.',
         'Markups and comments are saved as real PDF annotations that other PDF readers show.',
         'Text boxes support bold, italic, alignment, spacing, and a background color.',
       ],

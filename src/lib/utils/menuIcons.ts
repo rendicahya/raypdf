@@ -19,6 +19,7 @@ export const MENU_ICONS = {
   signature: 'M3 17c3-1 5-9 7-9s-1 9 1 9 3-4 4-4 1 3 2 3 2-1 4-1 M3 21h18',
   text: 'M4 7V5h16v2 M12 5v14 M9 19h6',
   comment: 'M4 5h16v11H8l-4 4V5Z',
+  image: 'M4 5h16v14H4Z M9 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z M20 15l-5-5-9 9',
   edit: 'M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
   zoomIn: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3 M11 8v6 M8 11h6',
   zoomOut: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3 M8 11h6',

@@ -204,6 +204,8 @@
         // Comments are notes, not page content, so images leave them out (like screenshots).
         comments: format === 'pdf' ? doc.comments : [],
         highlights: doc.highlights,
+        shapes: doc.shapes,
+        images: doc.images,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
         onlyPages: pages,

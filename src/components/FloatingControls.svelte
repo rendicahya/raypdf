@@ -12,6 +12,8 @@
   import { tooltip } from '../lib/utils/tooltip';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
+  import { shapeToolMode } from '../stores/shapeTool';
+  import { addImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
   import { downloadBlob } from '../lib/pdf/screenshot';
 
   const groupClass = 'flex items-center gap-0.5 rounded-full border border-neutral-200 p-0.5 dark:border-neutral-800';
@@ -37,6 +39,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -50,6 +53,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -64,6 +68,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -78,6 +83,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -92,6 +98,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -106,6 +113,7 @@
       zoomToolMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -124,7 +132,8 @@
       !$zoomToolMode &&
       !$textSelectMode &&
       !$screenshotToolMode &&
-      !$pageNumbersToolMode,
+      !$pageNumbersToolMode &&
+      !$shapeToolMode,
   );
 
   function toggleScreenshotToolMode() {
@@ -138,6 +147,7 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       pageNumbersToolMode.set(false);
+      shapeToolMode.set(false);
     }
   }
 
@@ -152,6 +162,42 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      shapeToolMode.set(false);
+    }
+  }
+
+  function toggleShapeToolMode() {
+    shapeToolMode.update((v) => !v);
+    if ($shapeToolMode) {
+      redactMode.set(false);
+      textToolMode.set(false);
+      commentToolMode.set(false);
+      clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+      screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
+    }
+  }
+
+  // Add image: the picked image is placed on the current page (PDFViewer
+  // picks it up from pendingImage), selected, ready to move and resize.
+  let imageError: string | null = $state(null);
+  let imageErrorTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  async function onImagePicked(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    clearTimeout(imageErrorTimeout);
+    try {
+      imageError = null;
+      pendingImage.set(await addImageFile(file));
+    } catch (err) {
+      imageError = err instanceof Error ? err.message : 'Failed to add the image';
+      imageErrorTimeout = setTimeout(() => (imageError = null), 6000);
     }
   }
 
@@ -179,6 +225,7 @@
     textSelectMode.set(false);
     screenshotToolMode.set(false);
     pageNumbersToolMode.set(false);
+    shapeToolMode.set(false);
   }
 
   // Fits the current page to the visible scroll area — width-only, or both
@@ -249,6 +296,16 @@
           <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
         </svg>
       </button>
+    </div>
+  {/if}
+
+  {#if imageError}
+    <div
+      role="alert"
+      class="pointer-events-auto mb-1 max-w-full rounded-full bg-white/90 px-3 py-1 text-xs text-red-600 shadow
+        dark:bg-neutral-900/90 dark:text-red-400"
+    >
+      {imageError}
     </div>
   {/if}
 
@@ -628,5 +685,42 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
       </svg>
     </button>
+
+    <button
+      type="button"
+      aria-label="Shapes"
+      aria-pressed={$shapeToolMode}
+      use:tooltip={'Shapes: drag on the page to draw a rectangle, ellipse, line, or arrow'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$shapeToolMode}
+      class:text-neutral-600={!$shapeToolMode}
+      class:hover:bg-neutral-100={!$shapeToolMode}
+      class:dark:border-neutral-800={!$shapeToolMode}
+      class:dark:text-neutral-300={!$shapeToolMode}
+      class:dark:hover:bg-neutral-800={!$shapeToolMode}
+      class:border-fuchsia-600={$shapeToolMode}
+      class:bg-fuchsia-600={$shapeToolMode}
+      class:text-white={$shapeToolMode}
+      onclick={toggleShapeToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="3" y="11" width="10" height="10" rx="1" />
+        <circle cx="16" cy="8" r="5" />
+      </svg>
+    </button>
+
+    <label
+      aria-label="Add image"
+      use:tooltip={'Add image: place a picture or logo on the page (or drop an image file onto a page)'}
+      class="{toolButtonClass} cursor-pointer border-neutral-200 text-neutral-600 hover:bg-neutral-100
+        dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+    >
+      <input type="file" accept={IMAGE_ACCEPT} class="hidden" onchange={onImagePicked} />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="9" cy="10" r="2" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 16l-5-5-9 9" />
+      </svg>
+    </label>
   </div>
 </div>

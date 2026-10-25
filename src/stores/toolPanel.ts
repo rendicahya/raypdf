@@ -7,9 +7,10 @@ import { commentToolMode } from './commentTool';
 import { textSelectMode } from './textSelect';
 import { screenshotToolMode } from './screenshotTool';
 import { pageNumbersToolMode } from './pageNumbersTool';
+import { shapeToolMode } from './shapeTool';
 
 /** Tools whose options are shown in the right-hand panel while they're on. */
-export type PanelTool = 'signature' | 'redact' | 'text' | 'comment' | 'select' | 'screenshot' | 'pageNumbers';
+export type PanelTool = 'signature' | 'redact' | 'text' | 'comment' | 'select' | 'screenshot' | 'pageNumbers' | 'shapes';
 
 /** Width of the right-hand panel in CSS pixels (Tailwind w-72). */
 export const TOOL_PANEL_WIDTH = 288;
@@ -24,8 +25,8 @@ export const toolPanelOpen = persistedWritable<boolean>('toolPanelOpen', true);
 
 /** The active tool, if it's one with options (tools are mutually exclusive). */
 export const activePanelTool = derived(
-  [signatureToolMode, redactMode, textToolMode, commentToolMode, textSelectMode, screenshotToolMode, pageNumbersToolMode],
-  ([signature, redact, text, comment, select, screenshot, pageNumbers]): PanelTool | null =>
+  [signatureToolMode, redactMode, textToolMode, commentToolMode, textSelectMode, screenshotToolMode, pageNumbersToolMode, shapeToolMode],
+  ([signature, redact, text, comment, select, screenshot, pageNumbers, shapes]): PanelTool | null =>
     signature
       ? 'signature'
       : redact
@@ -40,7 +41,9 @@ export const activePanelTool = derived(
                 ? 'screenshot'
                 : pageNumbers
                   ? 'pageNumbers'
-                  : null,
+                  : shapes
+                    ? 'shapes'
+                    : null,
 );
 
 /** The tool whose options the right-hand panel is showing right now, if any. */

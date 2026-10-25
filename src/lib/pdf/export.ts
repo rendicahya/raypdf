@@ -10,10 +10,14 @@ import { embedVerificationRecord } from './verification';
 import { embedHighlightAnnotations } from './highlight';
 import { drawPageNumbers, type PageNumberSettings } from './pageNumbers';
 import { applyProtection, loadEditablePdf, type SaveProtection } from './password';
+import { drawImages, drawShapes } from './shapes';
+import { imageFor } from '../../stores/images';
 import type {
   PdfDocumentState,
   PlacedComment,
   PlacedHighlight,
+  PlacedImage,
+  PlacedShape,
   PlacedSignature,
   PlacedText,
   RedactionBox,
@@ -44,6 +48,9 @@ export interface ExportParams {
   comments?: PlacedComment[];
   /** Text highlights to embed as PDF Highlight annotations. */
   highlights?: PlacedHighlight[];
+  /** Drawn shapes and placed images, drawn under signatures and text. */
+  shapes?: PlacedShape[];
+  images?: PlacedImage[];
   /** If set, the exported PDF contains only these 1-indexed pages, in this order (with any placements/redactions/text still applied), instead of every page. */
   onlyPages?: number[];
   /** A password to open the saved file and/or locked copying — see `applyProtection`. */
@@ -130,6 +137,8 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     texts = [],
     comments = [],
     highlights = [],
+    shapes = [],
+    images = [],
     onlyPages,
     protection = {},
     formValues = {},
@@ -143,6 +152,9 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
   // drawing signatures, so each signature ends up as a normal image on top of
   // the flattened page rather than being wiped out by it.
   await applyRedactions(pdfDoc, pdfjsDoc, redactions, renderScale, rotation);
+
+  if (images.length > 0) await drawImages(pdfDoc, pdfjsDoc, images, imageFor, renderScale, rotation);
+  if (shapes.length > 0) await drawShapes(pdfDoc, pdfjsDoc, shapes, renderScale, rotation);
 
   if (signatureFor && placements.length > 0) {
     // Each distinct signature image is watermarked and embedded once, then
@@ -420,6 +432,8 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
     doc.texts.length > 0 ||
     doc.comments.length > 0 ||
     doc.highlights.length > 0 ||
+    doc.shapes.length > 0 ||
+    doc.images.length > 0 ||
     Object.keys(doc.formValues).length > 0 ||
     doc.pageNumbers !== null ||
     doc.file !== doc.originalFile ||
@@ -461,6 +475,8 @@ export async function exportPagesAsZip(
       texts: doc.texts,
       comments: doc.comments,
       highlights: doc.highlights,
+      shapes: doc.shapes,
+      images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       onlyPages: [page],
@@ -516,6 +532,8 @@ export async function exportAllAsZip(
       texts: doc.texts,
       comments: doc.comments,
       highlights: doc.highlights,
+      shapes: doc.shapes,
+      images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       protection,
@@ -574,6 +592,8 @@ export async function exportMergedPdf(
       texts: doc.texts,
       comments: doc.comments,
       highlights: doc.highlights,
+      shapes: doc.shapes,
+      images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
     });

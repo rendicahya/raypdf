@@ -6,6 +6,7 @@
   import SelectOptions from './toolOptions/SelectOptions.svelte';
   import ScreenshotOptions from './toolOptions/ScreenshotOptions.svelte';
   import PageNumberOptions from './toolOptions/PageNumberOptions.svelte';
+  import ShapeOptions from './toolOptions/ShapeOptions.svelte';
   import { signatureToolMode } from '../stores/signatureTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { toolPanelOpen, type PanelTool } from '../stores/toolPanel';
@@ -35,4 +36,6 @@
   <ScreenshotOptions onClose={hide} />
 {:else if tool === 'pageNumbers'}
   <PageNumberOptions onClose={() => pageNumbersToolMode.set(false)} />
+{:else if tool === 'shapes'}
+  <ShapeOptions onClose={hide} />
 {/if}

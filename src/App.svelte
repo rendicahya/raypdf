@@ -23,6 +23,7 @@
   import { textSelectMode } from './stores/textSelect';
   import { signatureToolMode } from './stores/signatureTool';
   import { pageNumbersToolMode } from './stores/pageNumbersTool';
+  import { shapeToolMode } from './stores/shapeTool';
   import { activePanelTool, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
   import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
@@ -245,6 +246,11 @@
       if ($pageNumbersToolMode) {
         e.preventDefault();
         pageNumbersToolMode.set(false);
+        return;
+      }
+      if ($shapeToolMode) {
+        e.preventDefault();
+        shapeToolMode.set(false);
         return;
       }
       if ($search.open) {
