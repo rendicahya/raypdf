@@ -59,7 +59,7 @@ function blobToBytes(blob: Blob): Promise<Uint8Array> {
  * some password to set permission flags on a document, but the exported PDF
  * itself gets no user password — anyone can still open it, only the
  * restricted permissions (e.g. copying) are enforced by compliant readers.
- * Since the password is never stored, no one — including Signy — can later
+ * Since the password is never stored, no one — including RayPDF — can later
  * remove the restriction from the exported file.
  */
 function randomOwnerPassword(): string {
@@ -360,7 +360,7 @@ export function downloadSelectedPagesPdf(bytes: Uint8Array, originalFileName: st
 }
 
 export function downloadZip(blob: Blob): void {
-  downloadBlob(blob, `signy_signed_pdfs.zip`);
+  downloadBlob(blob, `raypdf_signed_pdfs.zip`);
 }
 
 export function pagesZipFileName(originalFileName: string): string {
@@ -373,7 +373,7 @@ export function downloadPagesZip(blob: Blob, originalFileName: string): void {
 }
 
 export function downloadMergedPdf(bytes: Uint8Array): void {
-  downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), 'signy_merged.pdf');
+  downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), 'raypdf_merged.pdf');
 }
 
 /**

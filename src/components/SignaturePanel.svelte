@@ -3,10 +3,6 @@
   import { editorStore, activeDocument } from '../stores/editor';
   import { lastPlacement } from '../stores/placement';
   import { clickToPlaceMode } from '../stores/clickToPlace';
-  import { textToolMode } from '../stores/textTool';
-  import { zoomToolMode } from '../stores/zoomTool';
-  import { textSelectMode } from '../stores/textSelect';
-  import { screenshotToolMode } from '../stores/screenshotTool';
   import {
     watermarkText,
     includeTimestamp,
@@ -35,6 +31,12 @@
   import { wheelRange } from '../lib/utils/wheelRange';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import SignatureCreator from './SignatureCreator.svelte';
+
+  interface Props {
+    onClose: () => void;
+  }
+
+  let { onClose }: Props = $props();
 
   const sig = $derived($signatureStore);
 
@@ -310,13 +312,27 @@
     <h3 class="text-sm font-semibold text-neutral-600 dark:text-neutral-300">
       Your Signature{sig.signatures.length > 1 ? 's' : ''}
     </h3>
-    <button
-      type="button"
-      class="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-      onclick={() => (creatorOpen = true)}
-    >
-      + New Signature
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+        onclick={() => (creatorOpen = true)}
+      >
+        + New Signature
+      </button>
+      <button
+        type="button"
+        aria-label="Close signature panel"
+        use:tooltip={'Close (Esc)'}
+        class="flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 transition-colors
+          hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+        onclick={onClose}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+    </div>
   </div>
 
   {#if sig.signature && sig.previewUrl}
@@ -440,19 +456,9 @@
       {/if}
 
       <label class="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-        <input
-          type="checkbox"
-          bind:checked={$clickToPlaceMode}
-          onchange={() => {
-            if ($clickToPlaceMode) {
-              textToolMode.set(false);
-              zoomToolMode.set(false);
-              textSelectMode.set(false);
-              screenshotToolMode.set(false);
-            }
-          }}
-          class="rounded"
-        />
+        <!-- The other tools are already off while this panel is open (it's the
+             Signature tool's panel), so this needs no resets of its own. -->
+        <input type="checkbox" bind:checked={$clickToPlaceMode} class="rounded" />
         Click-to-place mode
       </label>
 
@@ -668,8 +674,5 @@
       <span class="text-sm font-medium text-neutral-700 dark:text-neutral-200">Add your signature</span>
       <span class="text-xs text-neutral-500 dark:text-neutral-400">Draw, type, or upload a scan</span>
     </button>
-    <p class="mt-2 text-xs text-neutral-400">
-      Signing is optional. Use Redact below the document if that's all you need.
-    </p>
   {/if}
 </div>

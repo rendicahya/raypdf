@@ -6,7 +6,6 @@
   import PageSidebar from './components/PageSidebar.svelte';
   import FloatingControls from './components/FloatingControls.svelte';
   import Toolbar from './components/Toolbar.svelte';
-  import ExportButton from './components/ExportButton.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
   import UpdateToast from './components/UpdateToast.svelte';
   import VerifyResults from './components/VerifyResults.svelte';
@@ -20,6 +19,7 @@
   import { zoomToolMode } from './stores/zoomTool';
   import { screenshotToolMode } from './stores/screenshotTool';
   import { textSelectMode } from './stores/textSelect';
+  import { signatureToolMode } from './stores/signatureTool';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf } from './lib/pdf/docCache';
 
@@ -211,6 +211,11 @@
         screenshotToolMode.set(false);
         return;
       }
+      if ($signatureToolMode) {
+        e.preventDefault();
+        signatureToolMode.set(false);
+        return;
+      }
       if ($search.open) {
         e.preventDefault();
         closeSearch();
@@ -291,7 +296,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
           </svg>
         </div>
-        <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">Signy</h1>
+        <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">RayPDF</h1>
         <p class="mx-auto mt-3 max-w-sm text-neutral-500 dark:text-neutral-400">
           Add a PDF, then sign it or verify it, entirely in your browser.
         </p>
@@ -420,7 +425,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 12l2.5 2.5 4.5-5" />
               </svg>
               <span class="font-semibold">Verify</span>
-              <span class="text-xs text-neutral-500 dark:text-neutral-400">Check for a Signy record</span>
+              <span class="text-xs text-neutral-500 dark:text-neutral-400">Check for a RayPDF record</span>
             </button>
           </div>
         </div>
@@ -461,15 +466,15 @@
         </div>
         <FloatingControls />
       </div>
-      <aside class="flex w-72 shrink-0 flex-col border-l border-neutral-200 bg-white
-        dark:border-neutral-800 dark:bg-neutral-950">
-        <div class="flex-1 overflow-y-auto p-4">
-          <SignaturePanel />
-        </div>
-        <div class="flex flex-col gap-2 border-t border-neutral-200 p-4 dark:border-neutral-800">
-          <ExportButton />
-        </div>
-      </aside>
+      <!-- Only while the Signature tool is on (FloatingControls). -->
+      {#if $signatureToolMode}
+        <aside class="flex w-72 shrink-0 flex-col border-l border-neutral-200 bg-white
+          dark:border-neutral-800 dark:bg-neutral-950">
+          <div class="flex-1 overflow-y-auto p-4">
+            <SignaturePanel onClose={() => signatureToolMode.set(false)} />
+          </div>
+        </aside>
+      {/if}
     </div>
   {/if}
 </main>

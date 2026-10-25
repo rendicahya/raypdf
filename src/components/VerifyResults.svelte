@@ -32,7 +32,7 @@
       const bytes = await file.arrayBuffer();
       // updateMetadata: false — this is a read-only check, no reason to let
       // pdf-lib touch the ModDate/Producer fields of the file we're inspecting.
-      // password: '' — Signy's own "secure" exports set no user password, only
+      // password: '' — RayPDF's own "secure" exports set no user password, only
       // an owner password to lock permissions, so an empty password decrypts
       // them (and is simply ignored for a file that isn't encrypted at all).
       const pdfDoc = await PDFDocument.load(bytes, { updateMetadata: false, password: '' });
@@ -57,8 +57,8 @@
 
 <div class="flex w-full flex-col gap-3">
   <p class="text-center text-xs text-neutral-400 dark:text-neutral-500">
-    Checks for the Signy export record (document id, name, and export time) embedded when a PDF is saved from
-    Signy. This confirms the file passed through Signy; it isn't a cryptographic guarantee the pages weren't edited
+    Checks for the RayPDF export record (document id, name, and export time) embedded when a PDF is saved from
+    RayPDF (or Signy, its earlier name). This confirms the file passed through RayPDF; it isn't a cryptographic guarantee the pages weren't edited
     afterward.
   </p>
 
@@ -80,7 +80,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-5 w-5 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
           </svg>
-          <span class="font-medium">Signy record found</span>
+          <span class="font-medium">RayPDF record found</span>
         </div>
         <dl class="mt-4 space-y-2 text-sm">
           <div class="flex justify-between gap-4">
@@ -112,10 +112,10 @@
             <circle cx="12" cy="12" r="9" />
             <path stroke-linecap="round" d="M12 8v5M12 16h.01" />
           </svg>
-          <span class="font-medium">No Signy record found</span>
+          <span class="font-medium">No RayPDF record found</span>
         </div>
         <p class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-          "{doc.file.name}" doesn't carry a Signy export record. It may never have gone through Signy, or the
+          "{doc.file.name}" doesn't carry a RayPDF export record. It may never have gone through RayPDF, or the
           metadata was stripped or overwritten by another tool since.
         </p>
       {:else}

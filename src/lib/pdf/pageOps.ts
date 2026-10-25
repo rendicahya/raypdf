@@ -10,7 +10,7 @@ import { PDFDocument, degrees } from '@cantoo/pdf-lib';
  */
 
 /** dataTransfer type set while dragging a page thumbnail, so other drop targets can ignore it. */
-export const PAGE_DRAG_TYPE = 'application/x-signy-page';
+export const PAGE_DRAG_TYPE = 'application/x-raypdf-page';
 
 async function editPdf(file: File, edit: (pdfDoc: PDFDocument) => void | Promise<void>): Promise<File> {
   const pdfDoc = await PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false });

@@ -1,9 +1,9 @@
 /**
- * Lightweight, local-only "did this PDF pass through Signy" check. This is
- * explicitly NOT a cryptographic signature — README.md is clear Signy isn't
+ * Lightweight, local-only "did this PDF pass through RayPDF" check. This is
+ * explicitly NOT a cryptographic signature — README.md is clear RayPDF isn't
  * a PKI replacement — it's a small metadata breadcrumb embedded in the PDF's
  * standard Keywords field at export time, and read back on the Verify page.
- * It confirms provenance (this file was exported by Signy, with this
+ * It confirms provenance (this file was exported by RayPDF, with this
  * document id, at this time) but not that the pages haven't been edited
  * since — a full guarantee of that is what the future invisible watermark
  * (see Roadmap in README.md) is for.
@@ -13,7 +13,7 @@ import type { PDFDocument } from '@cantoo/pdf-lib';
 
 export interface VerificationRecord {
   v: 1;
-  /** Stable per-document id, generated once when the document is loaded into Signy (see stores/editor.ts). */
+  /** Stable per-document id, generated once when the document is loaded into RayPDF (see stores/editor.ts). */
   documentId: string;
   documentName: string;
   /** ISO 8601 timestamp of this export. */
@@ -22,7 +22,10 @@ export interface VerificationRecord {
   watermarkText?: string;
 }
 
-const MARKER_PREFIX = 'signy-verify:v1:';
+const MARKER_PREFIX = 'raypdf-verify:v1:';
+// Files exported before the app was renamed from Signy carry this prefix
+// instead; the record inside is identical, so they still verify.
+const LEGACY_MARKER_PREFIX = 'signy-verify:v1:';
 
 function toBase64Url(json: string): string {
   const bytes = new TextEncoder().encode(json);
@@ -53,7 +56,7 @@ export function extractVerificationRecord(pdfDoc: PDFDocument): VerificationReco
   const keywords = pdfDoc.getKeywords();
   if (!keywords) return null;
 
-  const match = keywords.match(new RegExp(`${MARKER_PREFIX}([A-Za-z0-9_-]+)`));
+  const match = keywords.match(new RegExp(`(?:${MARKER_PREFIX}|${LEGACY_MARKER_PREFIX})([A-Za-z0-9_-]+)`));
   if (!match) return null;
 
   try {

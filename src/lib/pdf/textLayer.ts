@@ -22,7 +22,7 @@ const pendingRenders = new WeakMap<HTMLDivElement, RenderClaim>();
  * Renders pdf.js's built-in TextLayer — an invisible grid of positioned
  * <span> elements holding the page's real text — into `container`, stacked
  * on top of the already-rendered canvas. This is what lets users click-drag
- * to select and copy text, without Signy ever drawing the text itself.
+ * to select and copy text, without RayPDF ever drawing the text itself.
  *
  * Uses the exact same scale + combined rotation as renderPageToCanvas so the
  * invisible spans line up with the glyphs painted on the canvas beneath

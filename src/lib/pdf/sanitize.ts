@@ -3,7 +3,7 @@ import { PDFArray, PDFDict, PDFName, type PDFDocument } from '@cantoo/pdf-lib';
 /**
  * Strips embedded JavaScript and auto-run actions from a PDF in place.
  *
- * Signy never adds any of this itself — but a source PDF (e.g. a bank or
+ * RayPDF never adds any of this itself — but a source PDF (e.g. a bank or
  * government e-form built in Acrobat with field validation/auto-calc
  * scripts) can already contain it, and pdf-lib preserves the document
  * structure it doesn't touch. Some upload systems reject any PDF containing

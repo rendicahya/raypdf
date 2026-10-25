@@ -3,6 +3,7 @@
   import FullscreenToggle from './FullscreenToggle.svelte';
   import StartOverButton from './StartOverButton.svelte';
   import DocumentTabs from './DocumentTabs.svelte';
+  import ExportButton from './ExportButton.svelte';
   import { editorStore } from '../stores/editor';
   import { openSearch } from '../stores/search';
   import { isFileAccepted, dedupeFiles, formatFileSize, MAX_PDF_SIZE_BYTES } from '../lib/utils/fileValidation';
@@ -44,10 +45,12 @@
   }
 </script>
 
-<header class="sticky top-0 z-20 flex flex-col border-b border-neutral-200 bg-white/90
+<!-- z-[70]: the Save menu drops down from here and has to sit above the page's
+     own overlays (e.g. the screenshot tool's z-[60] cover). -->
+<header class="sticky top-0 z-[70] flex flex-col border-b border-neutral-200 bg-white/90
   backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
   <div class="flex items-end gap-4 px-4 pb-0 pt-2">
-    <span class="shrink-0 pb-2 text-lg font-bold tracking-tight">Signy</span>
+    <span class="shrink-0 pb-2 text-lg font-bold tracking-tight">RayPDF</span>
 
     <div class="shrink-0 pb-2">
       <StartOverButton variant="icon" />
@@ -87,6 +90,9 @@
       </button>
       <FullscreenToggle />
       <ThemeToggle />
+      <div class="ml-2">
+        <ExportButton />
+      </div>
     </div>
   </div>
 

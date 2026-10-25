@@ -1,12 +1,14 @@
-# Signy
+# RayPDF
+
+(Formerly Signy. Storage keys still use the old name on purpose: the IndexedDB database `signy`, the `signy:` localStorage prefix. Renaming them would wipe returning users' signatures and settings. The verifier also accepts the old `signy-verify:v1:` marker.)
 
 ## Product Vision
 
-Signy is a privacy-first web application for signing PDF documents using handwritten signature images.
+RayPDF is a privacy-first, in-browser PDF editor: signing, form filling, markup, redaction, page edits, and verification.
 
-Unlike traditional PDF signing tools, Signy focuses on protecting scanned handwritten signatures by binding them to the document context using watermarking techniques.
+Its headline feature, and what sets it apart from other PDF tools, is protecting scanned handwritten signatures by binding them to the document context using watermarking techniques.
 
-Signy is **not** a replacement for PKI-based digital signatures. It is a lightweight protection layer for organizations that still rely on handwritten signature images.
+RayPDF is **not** a replacement for PKI-based digital signatures. It is a lightweight protection layer for organizations that still rely on handwritten signature images.
 
 The application should feel modern, approachable, and extremely easy to use.
 
@@ -121,7 +123,9 @@ Left sidebar: page thumbnails, rendered lazily as they scroll into view. Click t
 
 The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 
-Right sidebar: the saved signature, placement helpers (Find Signature Spot, Use last position, Apply Signature to All Pages, Apply to All Documents), watermark controls, and export.
+Right sidebar (SignaturePanel): shown only while the Signature tool is on (`stores/signatureTool.ts`). It holds the saved signatures, placement helpers (Find Signature Spot, Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls. On the canvas the Signature tool behaves like Move; click-to-place is its sub-mode and turns off with it.
+
+Save / Print (ExportButton) sit at the right end of the top Toolbar; the chevron menu holds the other save options and the export toggles.
 
 The user drags the signature from the panel onto the document.
 
@@ -130,7 +134,7 @@ Supported interactions:
 - Move
 - Resize
 
-Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot.
+Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot.
 
 Selecting text shows a markup toolbar (highlight / underline / strikethrough, five colors); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`).
 
@@ -138,7 +142,7 @@ Ctrl+F opens SearchBar (`stores/search.ts`, `lib/pdf/search.ts`): matches are co
 
 Several signatures can be saved (drawn, typed, or uploaded — `SignatureCreator`, `lib/signature/create.ts`); every `PlacedSignature` has a `signatureId`, and export takes a `signatureFor` lookup rather than one image.
 
-Tools are mutually exclusive: turning one on turns the others off, and Escape or Move returns to the default. A new tool must be added to every place that resets the others (FloatingControls, SignaturePanel's click-to-place, App's Escape handler, PDFViewer's hover/pan checks).
+Tools are mutually exclusive: turning one on turns the others off, and Escape or Move returns to the default. A new tool must be added to every place that resets the others (FloatingControls, App's Escape handler, PDFViewer's hover/pan checks). The Signature tool is the exception in PDFViewer: it leaves the canvas in Move behavior, so it isn't in those checks.
 
 Future:
 
@@ -221,7 +225,7 @@ Save the latest signature in IndexedDB.
 
 Do not use localStorage for image data. Small preferences (watermark settings, export options, theme) use localStorage via `lib/utils/persist.ts`.
 
-Users should never need to upload their signature every time they use Signy.
+Users should never need to upload their signature every time they use RayPDF.
 
 ---
 

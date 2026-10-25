@@ -6,6 +6,8 @@ import { writable, type Writable } from 'svelte/store';
  * must stay in IndexedDB, never localStorage.
  */
 export function persistedWritable<T>(key: string, initialValue: T): Writable<T> {
+  // Still prefixed with the app's old name (Signy): renaming it would drop
+  // every returning user's saved preferences.
   const storageKey = `signy:${key}`;
 
   function read(): T {

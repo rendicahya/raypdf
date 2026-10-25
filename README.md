@@ -1,14 +1,16 @@
-# Signy
+# RayPDF
 
-Sign PDF documents with protected handwritten signatures, or verify PDFs signed with Signy, entirely in your browser. Add a PDF, then choose **Sign** or **Verify**.
+A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, mark up, redact, edit pages, and verify PDFs exported with RayPDF. Add a PDF, then choose **Sign** or **Verify**.
+
+RayPDF was previously called Signy.
 
 No backend, no uploads, no accounts. Everything runs client-side and works fully offline once loaded. A "100% local" badge on the landing screen says so before any file is touched.
 
-Live at https://rendicahya.github.io/signy/
+Live at https://rendicahya.github.io/raypdf/
 
-## What Signy is (and isn't)
+## What RayPDF is (and isn't)
 
-Signy is a lightweight protection layer for organizations that still rely on scanned handwritten signature images. It binds the signature to the document it was used on with a watermark baked into the signature image, so it's harder to lift and reuse elsewhere.
+RayPDF's headline feature is a lightweight protection layer for organizations that still rely on scanned handwritten signature images. It binds the signature to the document it was used on with a watermark baked into the signature image, so it's harder to lift and reuse elsewhere.
 
 It is **not** a replacement for PKI-based digital signatures.
 
@@ -27,7 +29,7 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Getting started
 
 - Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
-- Then choose what to do with them: **Sign** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a Signy record right on the front page.
+- Then choose what to do with them: **Sign** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
 - **Keep several signatures**, say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.
 
@@ -49,6 +51,7 @@ It is **not** a replacement for PKI-based digital signatures.
   - Rotate left / right
   - Tools (`Esc` returns to Move):
     - **Move**: drag placed items around; drag the page background to pan. Resting the pointer on text switches to text selection, which stays on while the pointer moves over text and turns back into the hand once it leaves.
+    - **Signature**: opens the signature panel on the right (your signatures, placement helpers, watermark). The page still behaves like Move, so placed signatures can be dragged and resized. Turning the tool off, or `Esc`, closes the panel.
     - **Redact**: draw boxes; the content underneath is permanently removed from the exported PDF.
     - **Add Text**: click to place a text box (font, size, style, color, spacing, alignment).
     - **Comment**: click to leave a sticky note, exported as a real PDF annotation.
@@ -60,7 +63,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Placing the signature
 
-- Drag a signature from the right sidebar onto the page, or click the large preview to place the active one. Click-to-place mode follows the cursor.
+- Turn on the **Signature** tool, then drag a signature from the panel onto the page, or click the large preview to place the active one. Click-to-place mode follows the cursor.
 - Move and resize (aspect ratio locked); several signatures per document are supported. Selected items can be nudged with the arrow keys and removed with `Delete`.
 - **Find Signature Spot** scans the page text for signature lines or labels ("Signature", "Tanda Tangan", "TTD") and suggests a spot. It never places anything without confirmation.
 - **Use last position** re-applies the last placement (as a ratio of the page) to the current page.
@@ -77,14 +80,14 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Export
 
-- **Save This PDF**, **Save This Page Only**, **Save Each Page as Separate PDF (ZIP)**, **Save All (ZIP)**, **Merge** (choose the order), and **Print**.
+- **Save** and **Print** sit at the right end of the top bar. The arrow next to Save opens **Save This Page Only**, **Save Each Page as Separate PDF (ZIP)**, **Save All (ZIP)**, **Merge** (choose the order), and the export options below.
 - Exported as `original_filename_signed.pdf`.
 - Optional: strip embedded JavaScript carried over from the source PDF, and lock text/content copying.
-- Each export embeds a small Signy record (document ID, name, export time, watermark text) in the PDF's metadata.
+- Each export embeds a small RayPDF record (document ID, name, export time, watermark text) in the PDF's metadata.
 
 ### Verify
 
-- Add one or more PDFs and choose **Verify** to read each one's Signy record back, showing whether and when it was exported by Signy. You can switch to signing the same files from there. This confirms provenance, not that the pages are unchanged since. That's what the planned invisible watermark is for.
+- Add one or more PDFs and choose **Verify** to read each one's RayPDF record back, showing whether and when it was exported by RayPDF. You can switch to signing the same files from there. This confirms provenance, not that the pages are unchanged since. That's what the planned invisible watermark is for.
 
 ### Offline (PWA)
 
@@ -109,7 +112,7 @@ npm run build    # production build into dist/
 npm run deploy   # build and publish dist/ to the gh-pages branch
 ```
 
-`vite.config.ts` sets `base: '/signy/'` in production builds. Update `REPO_NAME` there if the repository is renamed.
+`vite.config.ts` sets `base: '/raypdf/'` in production builds. Update `REPO_NAME` there if the repository is renamed.
 
 Project guidelines (product vision, principles, UX rules, code structure, and workflow) live in [CLAUDE.md](CLAUDE.md). In short: run `npm run check` before committing, then push and `npm run deploy` after each change, and keep this README's feature list up to date.
 

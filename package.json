@@ -1,9 +1,9 @@
 {
-  "name": "signy",
+  "name": "raypdf",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Privacy-first, in-browser PDF signing with protected handwritten signatures.",
+  "description": "Privacy-first, in-browser PDF editor: protected handwritten signatures, forms, markup, and redaction.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

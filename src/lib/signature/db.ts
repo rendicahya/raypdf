@@ -5,6 +5,7 @@ import { openDB, type IDBPDatabase } from 'idb';
  * or typed. Everything stays in IndexedDB — nothing ever leaves the browser.
  */
 
+// The app's old name (Signy). Kept so returning users keep their saved signatures.
 const DB_NAME = 'signy';
 const DB_VERSION = 2;
 const STORE_NAME = 'signatures';

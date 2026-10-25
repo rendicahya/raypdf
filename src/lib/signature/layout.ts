@@ -1,5 +1,5 @@
 /** dataTransfer type carrying a saved signature's id while it's dragged from the signature panel onto a page. */
-export const SIGNATURE_DRAG_TYPE = 'application/x-signy-signature';
+export const SIGNATURE_DRAG_TYPE = 'application/x-raypdf-signature';
 
 /**
  * Fits an image's natural dimensions inside a max box while preserving

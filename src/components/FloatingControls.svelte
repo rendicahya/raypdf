@@ -4,6 +4,7 @@
   import { textToolMode } from '../stores/textTool';
   import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
+  import { signatureToolMode } from '../stores/signatureTool';
   import { zoomToolMode } from '../stores/zoomTool';
   import { textSelectMode } from '../stores/textSelect';
   import { getCachedPdf } from '../lib/pdf/docCache';
@@ -29,6 +30,19 @@
   function toggleRedactMode() {
     redactMode.update((v) => !v);
     if ($redactMode) {
+      signatureToolMode.set(false);
+      textToolMode.set(false);
+      commentToolMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+      screenshotToolMode.set(false);
+    }
+  }
+
+  function toggleSignatureToolMode() {
+    signatureToolMode.update((v) => !v);
+    if ($signatureToolMode) {
+      redactMode.set(false);
       textToolMode.set(false);
       commentToolMode.set(false);
       zoomToolMode.set(false);
@@ -43,6 +57,7 @@
       redactMode.set(false);
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
@@ -55,6 +70,7 @@
       redactMode.set(false);
       textToolMode.set(false);
       clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
@@ -68,6 +84,7 @@
       textToolMode.set(false);
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
     }
@@ -80,6 +97,7 @@
       textToolMode.set(false);
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
       zoomToolMode.set(false);
       screenshotToolMode.set(false);
     }
@@ -96,6 +114,7 @@
       !$textToolMode &&
       !$commentToolMode &&
       !$clickToPlaceMode &&
+      !$signatureToolMode &&
       !$zoomToolMode &&
       !$textSelectMode &&
       !$screenshotToolMode,
@@ -108,6 +127,7 @@
       textToolMode.set(false);
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
       zoomToolMode.set(false);
       textSelectMode.set(false);
     }
@@ -464,6 +484,29 @@
           stroke-linejoin="round"
           d="M9 11.5V6a1.5 1.5 0 0 1 3 0v5M12 11.5V5a1.5 1.5 0 0 1 3 0v6.5M15 11.5V7a1.5 1.5 0 0 1 3 0v7c0 3.31-2.69 6-6 6h-1c-2 0-3-.5-4-2l-2.7-3.6a1.4 1.4 0 0 1 .3-1.9 1.4 1.4 0 0 1 1.8.1L9 15"
         />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      aria-label="Signature"
+      aria-pressed={$signatureToolMode}
+      use:tooltip={'Signature: open the signature panel to place, manage, and watermark signatures'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$signatureToolMode}
+      class:text-neutral-600={!$signatureToolMode}
+      class:hover:bg-neutral-100={!$signatureToolMode}
+      class:dark:border-neutral-800={!$signatureToolMode}
+      class:dark:text-neutral-300={!$signatureToolMode}
+      class:dark:hover:bg-neutral-800={!$signatureToolMode}
+      class:border-indigo-600={$signatureToolMode}
+      class:bg-indigo-600={$signatureToolMode}
+      class:text-white={$signatureToolMode}
+      onclick={toggleSignatureToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
       </svg>
     </button>
 

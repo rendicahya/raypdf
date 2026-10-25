@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // GitHub Pages serves project sites from /<repo-name>/, so the base path
 // must match the repository name. Adjust REPO_NAME if the repo is renamed.
-const REPO_NAME = 'signy';
+const REPO_NAME = 'raypdf';
 
 export default defineConfig(({ mode }) => ({
   plugins: [
@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => ({
       registerType: 'prompt',
       injectRegister: null,
       manifest: {
-        name: 'Signy',
-        short_name: 'Signy',
-        description: 'Sign PDF documents with protected handwritten signatures, entirely in your browser.',
+        name: 'RayPDF',
+        short_name: 'RayPDF',
+        description: 'Sign, fill, mark up, and redact PDFs, entirely in your browser.',
         theme_color: '#2563eb',
         background_color: '#0a0a0a',
         display: 'standalone',
