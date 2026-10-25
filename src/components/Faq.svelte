@@ -15,6 +15,13 @@
       ],
     },
     {
+      q: 'How is RayPDF different from other online PDF tools?',
+      a: [
+        'Many online tools do one job at a time: you upload a file, run one tool, download the result, and upload it again for the next tool. In RayPDF you sign, fill, mark up, redact, edit pages, add page numbers, and compress the same open document, and save once when you are done. Every change can be undone until then.',
+        'And your files never leave your device. There is no upload and no server, so nothing waits on a connection and nobody else ever has a copy.',
+      ],
+    },
+    {
       q: 'Is RayPDF free? Do I need an account?',
       a: ['It is free, with no account, no sign-up, and no limits on how many files you edit.'],
     },
