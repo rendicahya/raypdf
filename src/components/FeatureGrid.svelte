@@ -24,7 +24,7 @@
     },
     {
       title: 'Mark up',
-      description: 'Highlight, underline, or strike through text in five colors, and add text boxes and comments.',
+      description: 'Highlight text in five colors, underline or strike it through, and add text boxes and comments.',
       paths: ['M9 11l-5 5v4h4l5-5', 'M14 6l4 4', 'M12 8l5-5 4 4-5 5'],
     },
     {

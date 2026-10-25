@@ -18,6 +18,13 @@ export const MARKUP_COLORS = [
   { value: '#f05252', label: 'Red' },
 ] as const;
 
+/** Underlines and strikethroughs are always black; only highlights take a color. */
+export const LINE_MARKUP_COLOR = '#000000';
+
+export function markupColorFor(kind: MarkupKind, color: string): string {
+  return kind === 'highlight' ? color : LINE_MARKUP_COLOR;
+}
+
 export const MARKUP_LABELS: Record<MarkupKind, string> = {
   highlight: 'Highlight',
   underline: 'Underline',
@@ -39,7 +46,7 @@ export interface MarkupPaint extends Box {
  * page is turned 90°, the top at 180°, the right edge at 270°.
  */
 export function markupPaint(box: PlacedHighlight, totalRotation: number): MarkupPaint {
-  const base = { color: box.color, multiply: box.kind === 'highlight' };
+  const base = { color: markupColorFor(box.kind, box.color), multiply: box.kind === 'highlight' };
   if (box.kind === 'highlight') return { ...box, ...base };
 
   const turned = totalRotation % 180 !== 0;
@@ -146,7 +153,7 @@ export async function embedHighlightAnnotations(
 
   for (const group of groups.values()) {
     const { page, kind, color } = group[0];
-    const [r, g, b] = hexToUnitRgb(color);
+    const [r, g, b] = hexToUnitRgb(markupColorFor(kind, color));
     const pdfjsPage = await pdfjsDoc.getPage(page);
     const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: getTotalRotation(pdfjsPage, rotation) });
 

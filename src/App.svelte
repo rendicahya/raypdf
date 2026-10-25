@@ -493,7 +493,7 @@
       </div>
       <!-- The active tool's options (stores/toolPanel.ts). -->
       {#if $shownPanelTool}
-        <aside class="flex shrink-0 flex-col border-l border-neutral-200 bg-white
+        <aside data-tool-panel class="flex shrink-0 flex-col border-l border-neutral-200 bg-white
           dark:border-neutral-800 dark:bg-neutral-950" style:width="{TOOL_PANEL_WIDTH}px">
           <div class="flex-1 overflow-y-auto p-4">
             <ToolPanel tool={$shownPanelTool} />

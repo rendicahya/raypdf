@@ -664,6 +664,12 @@ function createEditorStore() {
     );
   }
 
+  /** Removes every box in the active document, as one undo step. */
+  function removeAllRedactions() {
+    recordActiveHistory(`remove-all-redactions-${Date.now()}`);
+    update((state) => updateActiveDocument(state, (doc) => ({ ...doc, redactions: [], exported: false })));
+  }
+
   /** Replaces an arbitrary document's entire redaction set (not just the active one) — used by "Apply to All" to make every other document match the active one exactly. */
   function setRedactionsForDocument(id: string, boxes: Omit<RedactionBox, 'id'>[]) {
     update((state) => ({
@@ -1167,6 +1173,7 @@ function createEditorStore() {
     removeRedaction,
     addRedactions,
     removeRedactionsOnPage,
+    removeAllRedactions,
     setRedactionsForDocument,
     addText,
     updateText,

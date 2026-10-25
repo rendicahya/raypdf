@@ -20,7 +20,7 @@
   </p>
 
   <div class="mt-4">
-    <h4 class="text-xs font-medium text-neutral-600 dark:text-neutral-300">Markup color</h4>
+    <h4 class="text-xs font-medium text-neutral-600 dark:text-neutral-300">Highlight color</h4>
     <div class="mt-2 flex items-center gap-2">
       {#each MARKUP_COLORS as color (color.value)}
         <button
@@ -37,6 +37,6 @@
         ></button>
       {/each}
     </div>
-    <p class="mt-2 text-xs text-neutral-400">Used for the next highlight, underline, or strikethrough.</p>
+    <p class="mt-2 text-xs text-neutral-400">Used for the next highlight. Underlines and strikethroughs are always black.</p>
   </div>
 </div>

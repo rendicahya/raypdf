@@ -5,6 +5,9 @@ import type { TextAlign, TextFontFamily } from './editor';
 /** Whether the editor is in "click to add a text box" mode. */
 export const textToolMode = writable(false);
 
+/** The text box selected on the page, if any. The Add Text panel restyles it. */
+export const selectedTextId = writable<string | null>(null);
+
 /**
  * Style used for the next text box the user places, persisted so repeat
  * users don't have to re-pick font/size/color every time — same reasoning

@@ -223,6 +223,16 @@
       {#if copyMessage}
         <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{copyMessage}</p>
       {/if}
+      <button
+        type="button"
+        class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-2
+          text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900
+          dark:text-red-400 dark:hover:bg-red-950/50"
+        onclick={() => editorStore.removeAllRedactions()}
+      >
+        {@render trashIcon()}
+        Remove all redactions
+      </button>
     {/if}
   </div>
 

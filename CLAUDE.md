@@ -120,7 +120,7 @@ Left sidebar: page thumbnails, rendered lazily as they scroll into view, with re
 
 The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 
-Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Find Signature Spot, Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. Redact, Add Text, Comment, Select, and Screenshot have their own panels in `components/toolOptions/`; their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
+Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. Redact, Add Text, Comment, Select, and Screenshot have their own panels in `components/toolOptions/` (text boxes have no floating style bar: TextOptions restyles the box in `selectedTextId`, and clicks inside `[data-tool-panel]` don't deselect it); their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
 
 The bottom toolbar is positioned by App.svelte, centred on the area right of the page sidebar including the panel, so it doesn't move when the panel opens (it only slides left if it would otherwise overlap the panel).
 
@@ -135,7 +135,7 @@ Supported interactions:
 
 Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot.
 
-Selecting text shows a markup toolbar (highlight / underline / strikethrough, five colors); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`).
+Selecting text shows a markup toolbar (highlight in five colors, underline / strikethrough always black via `markupColorFor`); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`).
 
 Ctrl+F opens SearchBar (`stores/search.ts`, `lib/pdf/search.ts`): matches are counted from pdf.js text content and boxed on screen from the text layer.
 
@@ -244,7 +244,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, pageImages, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, signatureDetect, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, pageImages, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange

@@ -10,6 +10,7 @@
   import {
     MARKUP_COLORS,
     MARKUP_LABELS,
+    markupColorFor,
     markupPaint,
     selectionToBoxes,
     type Box,
@@ -44,6 +45,7 @@
   import { textSelectMode } from '../stores/textSelect';
   import {
     textToolMode,
+    selectedTextId,
     defaultTextFontFamily,
     defaultTextFontSize,
     defaultTextBold,
@@ -53,11 +55,6 @@
     defaultTextLetterSpacing,
     defaultTextAlign,
     FONT_FAMILY_CSS,
-    FONT_FAMILY_LABELS,
-    TEXT_FONT_SIZE_MIN,
-    TEXT_FONT_SIZE_MAX,
-    TEXT_LETTER_SPACING_MIN,
-    TEXT_LETTER_SPACING_MAX,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
@@ -74,7 +71,6 @@
   import { lastPlacement } from '../stores/placement';
   import { fitWithinBox } from '../lib/signature/layout';
   import { buildWatermarkLines } from '../lib/watermark/visible';
-  import { signatureSuggestion } from '../stores/signatureSuggestion';
 
   let canvasEl: HTMLCanvasElement;
   let wrapperEl: HTMLDivElement;
@@ -225,7 +221,7 @@
   function addMarkup(boxes: Box[], kind: MarkupKind) {
     const doc = $activeDocument;
     if (!doc || boxes.length === 0) return;
-    editorStore.addHighlight(doc.pageNumber, boxes, kind, $markupColor);
+    editorStore.addHighlight(doc.pageNumber, boxes, kind, markupColorFor(kind, $markupColor));
     pendingHighlight = null;
     window.getSelection()?.removeAllRanges();
   }
@@ -521,31 +517,6 @@
     return doc.highlights.filter((h) => h.page === doc.pageNumber);
   });
 
-  // The "Find Signature Spot" suggestion — only shown while it's scoped to
-  // the document/page currently on screen, so navigating away (or the
-  // document changing) doesn't leave a stale box floating in the wrong place.
-  const suggestion = $derived.by(() => {
-    const doc = $activeDocument;
-    const s = $signatureSuggestion;
-    if (!doc || !s || s.documentId !== doc.id || s.page !== doc.pageNumber) return null;
-    return s;
-  });
-
-  function placeSuggestedSignature() {
-    const s = suggestion;
-    if (!s) return;
-    const signatureId = $signatureStore.activeId;
-    if (!signatureId) return;
-    const id = editorStore.addSignature({ x: s.x, y: s.y, width: s.width, height: s.height, page: s.page, signatureId });
-    selectedSignatureId = id;
-    signatureSuggestion.set(null);
-  }
-
-  function dismissSuggestion(e: MouseEvent) {
-    e.stopPropagation();
-    signatureSuggestion.set(null);
-  }
-
   // The move/resize/remove controls only show while a signature is
   // "selected" — right after it's placed, or after the user clicks it again
   // — and hide once the user clicks anywhere else, so signatures don't
@@ -561,7 +532,7 @@
     selectedSignatureId = null;
     selectedRedactionId = null;
     if (editingTextId) commitTextEdit();
-    selectedTextId = null;
+    $selectedTextId = null;
     if (editingCommentId) commitCommentEdit();
     selectedCommentId = null;
     selectedHighlightGroup = null;
@@ -591,9 +562,11 @@
     // can type. The textarea's own onblur is the sole authority for
     // committing/discarding an edit; it only fires once the element genuinely
     // existed and had focus, so it doesn't have this race.
-    const currentText = selectedTextId ? wrapperEl?.querySelector(`[data-placed-text="${selectedTextId}"]`) : null;
-    if (!currentText?.contains(e.target as Node) && editingTextId !== selectedTextId) {
-      selectedTextId = null;
+    // Clicks in the tool panel keep the box selected: that's where it's styled.
+    const currentText = $selectedTextId ? wrapperEl?.querySelector(`[data-placed-text="${$selectedTextId}"]`) : null;
+    const inToolPanel = !!(e.target as Element | null)?.closest?.('[data-tool-panel]');
+    if (!currentText?.contains(e.target as Node) && !inToolPanel && editingTextId !== $selectedTextId) {
+      $selectedTextId = null;
     }
 
     // Same reasoning as currentText above — the just-created comment marker
@@ -1257,7 +1230,6 @@
   const TEXT_MIN_WIDTH = 40;
   const TEXT_MIN_HEIGHT = 20;
 
-  let selectedTextId: string | null = $state(null);
   let editingTextId: string | null = $state(null);
   let textEditValue = $state('');
 
@@ -1320,13 +1292,13 @@
       letterSpacing: $defaultTextLetterSpacing,
       align: $defaultTextAlign,
     });
-    selectedTextId = id;
+    $selectedTextId = id;
     startEditingText(id, '');
   }
 
   function onTextDoubleClick(e: MouseEvent, t: PlacedText) {
     e.stopPropagation();
-    selectedTextId = t.id;
+    $selectedTextId = t.id;
     startEditingText(t.id, t.text);
   }
 
@@ -1336,7 +1308,7 @@
   function onTextPointerDown(e: PointerEvent, id: string) {
     if (editingTextId === id) return;
     e.stopPropagation();
-    selectedTextId = id;
+    $selectedTextId = id;
     movingTextId = id;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const boxRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1361,7 +1333,7 @@
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       editorStore.removeText(id);
-      if (selectedTextId === id) selectedTextId = null;
+      if ($selectedTextId === id) $selectedTextId = null;
       return;
     }
 
@@ -1416,21 +1388,7 @@
   function removeText(e: MouseEvent, id: string) {
     e.stopPropagation();
     editorStore.removeText(id);
-    if (selectedTextId === id) selectedTextId = null;
-  }
-
-  // Style toolbar edits apply to the selected box and become the default for
-  // the next text box placed, mirroring how the watermark panel's settings persist.
-  function setTextStyle(id: string, partial: Partial<PlacedText>) {
-    editorStore.updateText(id, partial);
-    if ('fontFamily' in partial) defaultTextFontFamily.set(partial.fontFamily!);
-    if ('fontSize' in partial) defaultTextFontSize.set(partial.fontSize!);
-    if ('bold' in partial) defaultTextBold.set(partial.bold!);
-    if ('italic' in partial) defaultTextItalic.set(partial.italic!);
-    if ('underline' in partial) defaultTextUnderline.set(partial.underline!);
-    if ('color' in partial) defaultTextColor.set(partial.color!);
-    if ('letterSpacing' in partial) defaultTextLetterSpacing.set(partial.letterSpacing!);
-    if ('align' in partial) defaultTextAlign.set(partial.align!);
+    if ($selectedTextId === id) $selectedTextId = null;
   }
 
   // Comment tool: click to drop a fixed-size sticky-note marker (in
@@ -1615,19 +1573,19 @@
     const textId = idOf('data-placed-text');
     const text = textId ? doc.texts.find((t) => t.id === textId) : undefined;
     if (text) {
-      selectedTextId = text.id;
+      $selectedTextId = text.id;
       return [
         {
           label: 'Edit text',
           icon: MENU_ICONS.edit,
           onSelect: () => {
-            selectedTextId = text.id;
+            $selectedTextId = text.id;
             startEditingText(text.id, text.text);
           },
         },
         deleteItem('Delete text', () => {
           editorStore.removeText(text.id);
-          selectedTextId = null;
+          $selectedTextId = null;
         }),
       ];
     }
@@ -1680,6 +1638,9 @@
     const markup = groupId ? doc.highlights.find((h) => h.groupId === groupId) : undefined;
     if (groupId && markup) {
       selectedHighlightGroup = groupId;
+      // Only highlights can be recolored; lines are always black.
+      const remove = deleteItem(`Remove ${MARKUP_LABELS[markup.kind].toLowerCase()}`, () => removeHighlight(groupId));
+      if (markup.kind !== 'highlight') return [remove];
       return [
         ...MARKUP_COLORS.map((c) => ({
           label: c.label,
@@ -1687,10 +1648,7 @@
           disabled: markup.color === c.value,
           onSelect: () => editorStore.recolorHighlight(groupId, c.value),
         })),
-        {
-          ...deleteItem(`Remove ${MARKUP_LABELS[markup.kind].toLowerCase()}`, () => removeHighlight(groupId)),
-          separatorBefore: true,
-        },
+        { ...remove, separatorBefore: true },
       ];
     }
 
@@ -1862,20 +1820,22 @@
       style:top={h.y < 40 ? `${h.y + h.height + 6}px` : `${h.y - 34}px`}
       onpointerdown={(e) => e.stopPropagation()}
     >
-      {#each MARKUP_COLORS as c}
-        <button
-          type="button"
-          aria-label="{c.label}"
-          aria-pressed={h.color === c.value}
-          use:tooltip={c.label}
-          class="h-4 w-4 rounded-full border transition-transform hover:scale-110 {h.color === c.value
-            ? 'border-neutral-700 ring-2 ring-blue-400/50 dark:border-white'
-            : 'border-black/10 dark:border-white/20'}"
-          style:background-color={c.value}
-          onclick={() => editorStore.recolorHighlight(h.groupId, c.value)}
-        ></button>
-      {/each}
-      <span class="mx-0.5 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
+      {#if h.kind === 'highlight'}
+        {#each MARKUP_COLORS as c}
+          <button
+            type="button"
+            aria-label="{c.label}"
+            aria-pressed={h.color === c.value}
+            use:tooltip={c.label}
+            class="h-4 w-4 rounded-full border transition-transform hover:scale-110 {h.color === c.value
+              ? 'border-neutral-700 ring-2 ring-blue-400/50 dark:border-white'
+              : 'border-black/10 dark:border-white/20'}"
+            style:background-color={c.value}
+            onclick={() => editorStore.recolorHighlight(h.groupId, c.value)}
+          ></button>
+        {/each}
+        <span class="mx-0.5 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
+      {/if}
       <button
         type="button"
         aria-label="Remove {MARKUP_LABELS[h.kind].toLowerCase()}"
@@ -1978,53 +1938,6 @@
         draggable="false"
         class="h-full w-full select-none object-contain border-2 border-blue-400 rounded-lg"
       />
-    </div>
-  {/if}
-
-  {#if suggestion && $signatureStore.previewUrl}
-    <div
-      role="button"
-      tabindex="0"
-      class="absolute cursor-pointer touch-none rounded-lg ring-2 ring-blue-400 ring-offset-2 animate-pulse"
-      style:left="{suggestion.x}px"
-      style:top="{suggestion.y}px"
-      style:width="{suggestion.width}px"
-      style:height="{suggestion.height}px"
-      title="Best guess: {suggestion.reason}. Click to place here."
-      aria-label="Suggested signature placement: {suggestion.reason}. Press Enter to place here."
-      onclick={placeSuggestedSignature}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          placeSuggestedSignature();
-        }
-      }}
-    >
-      <img
-        src={$signatureStore.previewUrl}
-        alt="Suggested signature placement"
-        draggable="false"
-        class="h-full w-full select-none object-contain opacity-70"
-      />
-      <button
-        type="button"
-        aria-label="Dismiss suggested placement"
-        title="Dismiss"
-        class="absolute -right-1.5 -top-1.5 flex h-5 w-5 touch-none items-center justify-center rounded-full
-          border border-white bg-neutral-500 text-white shadow transition-colors hover:bg-neutral-600"
-        onpointerdown={(e) => e.stopPropagation()}
-        onclick={dismissSuggestion}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
-          <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </button>
-      <span
-        class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full
-          bg-blue-600 px-2 py-0.5 text-[10px] font-medium text-white shadow"
-      >
-        Click to place
-      </span>
     </div>
   {/if}
 
@@ -2165,7 +2078,7 @@
   {/each}
 
   {#each textsOnCurrentPage as t (t.id)}
-    {@const isSelected = selectedTextId === t.id}
+    {@const isSelected = $selectedTextId === t.id}
     {@const isEditing = editingTextId === t.id}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -2185,7 +2098,7 @@
       onpointermove={(e) => onTextPointerMove(e, t.id)}
       onpointerup={onTextPointerUp}
       ondblclick={(e) => onTextDoubleClick(e, t)}
-      onfocus={() => (selectedTextId = t.id)}
+      onfocus={() => ($selectedTextId = t.id)}
       onkeydown={(e) => onTextKeydown(e, t.id)}
     >
       {#if isEditing}
@@ -2260,122 +2173,6 @@
             <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
-
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="absolute z-10 flex items-center gap-1 whitespace-nowrap rounded-full border border-neutral-200
-            bg-white px-2 py-1 text-xs shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-          style:left="0px"
-          style:top={t.y < 48 ? `${t.height + 8}px` : '-40px'}
-          onpointerdown={(e) => e.stopPropagation()}
-        >
-          <select
-            aria-label="Font family"
-            class="rounded border-none bg-transparent py-0.5 pr-4 text-xs focus:outline-none focus:ring-1
-              focus:ring-blue-400 dark:text-neutral-100"
-            value={t.fontFamily}
-            onchange={(e) => setTextStyle(t.id, { fontFamily: (e.target as HTMLSelectElement).value as PlacedText['fontFamily'] })}
-          >
-            {#each Object.entries(FONT_FAMILY_LABELS) as [value, label]}
-              <option {value}>{label}</option>
-            {/each}
-          </select>
-
-          <input
-            type="number"
-            aria-label="Font size"
-            title="Font size (scroll to adjust)"
-            min={TEXT_FONT_SIZE_MIN}
-            max={TEXT_FONT_SIZE_MAX}
-            class="w-10 rounded border border-neutral-200 bg-transparent px-1 py-0.5 text-xs focus:outline-none
-              focus:ring-1 focus:ring-blue-400 dark:border-neutral-700 dark:text-neutral-100"
-            value={Math.round(t.fontSize)}
-            onchange={(e) =>
-              setTextStyle(t.id, {
-                fontSize: clamp(Number((e.target as HTMLInputElement).value), TEXT_FONT_SIZE_MIN, TEXT_FONT_SIZE_MAX),
-              })}
-            onwheel={(e) => {
-              e.preventDefault();
-              const delta = e.deltaY < 0 ? 1 : -1;
-              setTextStyle(t.id, { fontSize: clamp(t.fontSize + delta, TEXT_FONT_SIZE_MIN, TEXT_FONT_SIZE_MAX) });
-            }}
-          />
-
-          <button
-            type="button"
-            aria-pressed={t.bold}
-            title="Bold"
-            class="flex h-6 w-6 items-center justify-center rounded font-bold {t.bold
-              ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
-              : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'}"
-            onclick={() => setTextStyle(t.id, { bold: !t.bold })}
-          >
-            B
-          </button>
-          <button
-            type="button"
-            aria-pressed={t.italic}
-            title="Italic"
-            class="flex h-6 w-6 items-center justify-center rounded italic {t.italic
-              ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
-              : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'}"
-            onclick={() => setTextStyle(t.id, { italic: !t.italic })}
-          >
-            I
-          </button>
-          <button
-            type="button"
-            aria-pressed={t.underline}
-            title="Underline"
-            class="flex h-6 w-6 items-center justify-center rounded underline {t.underline
-              ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
-              : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'}"
-            onclick={() => setTextStyle(t.id, { underline: !t.underline })}
-          >
-            U
-          </button>
-
-          <div class="flex items-center gap-0.5 border-l border-neutral-200 pl-1 dark:border-neutral-700">
-            {#each [{ value: 'left', d: 'M4 6h16M4 12h10M4 18h14' }, { value: 'center', d: 'M4 6h16M7 12h10M5 18h14' }, { value: 'right', d: 'M4 6h16M10 12h10M6 18h14' }] as opt}
-              <button
-                type="button"
-                aria-pressed={t.align === opt.value}
-                title="Align {opt.value}"
-                class="flex h-6 w-6 items-center justify-center rounded {t.align === opt.value
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
-                  : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'}"
-                onclick={() => setTextStyle(t.id, { align: opt.value as PlacedText['align'] })}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-                  <path stroke-linecap="round" d={opt.d} />
-                </svg>
-              </button>
-            {/each}
-          </div>
-
-          <input
-            type="color"
-            aria-label="Text color"
-            title="Text color"
-            value={t.color}
-            onchange={(e) => setTextStyle(t.id, { color: (e.target as HTMLInputElement).value })}
-            class="h-6 w-6 cursor-pointer rounded border border-neutral-300 bg-transparent p-0
-              dark:border-neutral-600"
-          />
-
-          <label class="flex items-center gap-1 text-neutral-500 dark:text-neutral-400" title="Letter spacing">
-            <span class="text-[10px]">A↔B</span>
-            <input
-              type="range"
-              min={TEXT_LETTER_SPACING_MIN}
-              max={TEXT_LETTER_SPACING_MAX}
-              step="0.5"
-              value={t.letterSpacing}
-              oninput={(e) => setTextStyle(t.id, { letterSpacing: Number((e.target as HTMLInputElement).value) })}
-              class="w-16 accent-blue-600"
-            />
-          </label>
-        </div>
       {/if}
     </div>
   {/each}
