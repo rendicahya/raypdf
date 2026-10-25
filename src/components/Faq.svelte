@@ -12,7 +12,6 @@
       q: 'Are my files uploaded anywhere?',
       a: [
         'No. RayPDF has no server. Your PDFs are opened, edited, and saved entirely inside your browser, and nothing is sent anywhere.',
-        'Opening a PDF from a link downloads it straight from that site into your browser. RayPDF never sees it.',
       ],
     },
     {
@@ -49,12 +48,6 @@
       q: 'Can I edit the text that is already in a PDF?',
       a: [
         'Not yet. You can add your own text boxes, fill in form fields, and highlight, underline, or strike through existing text. To change a few words, a text box with a white background placed over them works well.',
-      ],
-    },
-    {
-      q: 'Why does opening a PDF from a link sometimes fail?',
-      a: [
-        "Browsers only let a page download a file from another site if that site allows it. Many sites don't, and with no server of its own RayPDF can't get around that. Download the file instead and drop it here.",
       ],
     },
     {

@@ -29,9 +29,7 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Getting started
 
 - The front page shows the upload area at the top, a quick tour of every feature below it, led by the protected signature (with an illustration of a copied signature giving itself away), and a short FAQ at the bottom.
-- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
-- **Open a PDF from a link**: paste a URL and the file is downloaded straight into the browser, with no server in between. GitHub file pages and Dropbox share links are turned into their direct-download form. This only works for sites that allow other websites to fetch their files (CORS); for the rest, RayPDF says so and suggests downloading the file instead.
-- Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
+- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).- Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
 - **Keep several signatures**, say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.
 
@@ -122,7 +120,7 @@ Project guidelines (product vision, principles, UX rules, code structure, and wo
 
 - `src/components/`: UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyResults`, …)
 - `src/stores/`: app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
-- `src/lib/pdf/`: loading (including from a link), rendering, export, compression, redaction, page operations, form filling, screenshots, verification
+- `src/lib/pdf/`: loading, rendering, export, compression, redaction, page operations, form filling, screenshots, verification
 - `src/lib/watermark/`: visible watermark layout and rendering
 - `src/lib/signature/`: signature storage and sizing
 - `src/lib/utils/`: persistence, file validation, tooltip and other Svelte actions

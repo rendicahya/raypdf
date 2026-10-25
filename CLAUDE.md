@@ -85,7 +85,7 @@ Toolbar buttons are icon-only, with instant tooltips (`lib/utils/tooltip.ts`) in
 
 ## First Visit
 
-Display a large Add PDF upload card (one or more files), a "from a link" field under it (`UrlLoader`, `lib/pdf/fetchPdf.ts`: a plain browser fetch, so it only works for CORS-enabled sites; never add a proxy, it would see the user's files), the feature showcase (`FeatureGrid`) below it, and the FAQ (`Faq`) last; the watermarked signature leads as a wide card. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
+Display a large Add PDF upload card (one or more files), the feature showcase (`FeatureGrid`) below it, and the FAQ (`Faq`) last; the watermarked signature leads as a wide card. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
 
 The upload card supports:
 
@@ -232,7 +232,7 @@ Users should never need to upload their signature every time they use RayPDF.
 
 components/
 
-- UploadCard, UrlLoader, FeatureGrid (front-page feature showcase), Faq, WatermarkIllustration, SignatureCreator, SearchBar
+- UploadCard, FeatureGrid (front-page feature showcase), Faq, WatermarkIllustration, SignatureCreator, SearchBar
 - PDFViewer, PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
@@ -244,7 +244,7 @@ components/
 
 lib/
 
-- pdf/ — loader, fetchPdf, docCache, export, compress, pageImages, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, compress, pageImages, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange
