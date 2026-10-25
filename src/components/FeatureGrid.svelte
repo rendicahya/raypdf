@@ -43,7 +43,7 @@
         'Drag one onto the page, then move and resize it.',
         'Put it on every page, or in every open document, in one click.',
       ],
-      illustration: 'A signature being dragged onto the signature line of a page',
+      illustration: 'A saved signature dragged into the signature box of a page',
       paths: ['M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z', 'M13 7l3 3'],
     },
     {
@@ -82,7 +82,7 @@
         'See every redaction in a list and jump to it.',
         'Give every open document the same redactions.',
       ],
-      illustration: 'An ID number on a page, then the saved page with the number blacked out and removed',
+      illustration: 'A box drawn over an ID number on a page, then the saved page with the number blacked out and removed',
       paths: ['M4 6h16v4H4z', 'M4 14h10v4H4z'],
     },
     {
@@ -153,7 +153,7 @@
 <section class="w-full">
   <!-- The headline feature gets its own wide card above the rows. -->
   <div
-    class="flex flex-col gap-4 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6
+    class="fi-host flex flex-col gap-4 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6
       shadow-sm sm:flex-row sm:items-center dark:border-blue-900 dark:from-blue-950/60 dark:to-neutral-900"
   >
     <div
@@ -181,7 +181,7 @@
   <ul class="mt-4 flex flex-col gap-4">
     {#each features as feature, i (feature.title)}
       <li
-        class="grid items-center gap-6 rounded-2xl border p-6 shadow-sm sm:grid-cols-2
+        class="fi-host grid items-center gap-6 rounded-2xl border p-6 shadow-sm sm:grid-cols-2
           {feature.highlight
           ? 'border-blue-200 bg-gradient-to-br from-white to-blue-50 dark:border-blue-900 dark:from-neutral-900 dark:to-blue-950/60'
           : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'}"

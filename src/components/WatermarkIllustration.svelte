@@ -51,40 +51,48 @@
         />
       {/each}
 
-      <!-- the signature, with the watermark woven through it -->
-      <rect
-        x={doc.x + 14}
-        y="100"
-        width="102"
-        height="44"
-        rx="4"
-        class={i === 0
-          ? 'fill-blue-50 stroke-blue-200 dark:fill-blue-950/60 dark:stroke-blue-900'
-          : 'fill-amber-50 stroke-amber-300 dark:fill-amber-950/50 dark:stroke-amber-700'}
-        stroke-width="1"
-      />
-      <g clip-path="url(#{doc.clip})">
-        {#each [-1, 0, 1, 2, 3, 4, 5] as row}
-          <text
-            x={doc.x + 4}
-            y={104 + row * 10}
-            font-size="6"
-            transform="rotate(-10 {doc.x + 65} 122)"
-            class="fill-blue-500/50 dark:fill-blue-400/50"
-          >
-            {WATERMARK} · {WATERMARK}
-          </text>
-        {/each}
+      <!-- the signature, with the watermark woven through it; on hover the
+           first is signed and watermarked, then copied across to the second -->
+      <g class={i === 1 ? 'fi-fly' : undefined} style:--d="1.7s" style:--dx="-214px">
+        <rect
+          x={doc.x + 14}
+          y="100"
+          width="102"
+          height="44"
+          rx="4"
+          class={i === 0
+            ? 'fill-blue-50 stroke-blue-200 dark:fill-blue-950/60 dark:stroke-blue-900'
+            : 'fill-amber-50 stroke-amber-300 dark:fill-amber-950/50 dark:stroke-amber-700'}
+          stroke-width="1"
+        />
+        <g clip-path="url(#{doc.clip})">
+          <g class={i === 0 ? 'fi-fade' : undefined} style:--d="1.2s" style:--t="0.6s">
+            {#each [-1, 0, 1, 2, 3, 4, 5] as row}
+              <text
+                x={doc.x + 4}
+                y={104 + row * 10}
+                font-size="6"
+                transform="rotate(-10 {doc.x + 65} 122)"
+                class="fill-blue-500/50 dark:fill-blue-400/50"
+              >
+                {WATERMARK} · {WATERMARK}
+              </text>
+            {/each}
+          </g>
+        </g>
+        <path
+          d={SIGNATURE}
+          pathLength="1"
+          transform="translate({doc.x + 24} 106) scale(1.1)"
+          fill="none"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="{i === 0 ? 'fi-draw' : ''} stroke-neutral-900 dark:stroke-neutral-100"
+          style:--d="0.2s"
+          style:--t="1s"
+        />
       </g>
-      <path
-        d={SIGNATURE}
-        transform="translate({doc.x + 24} 106) scale(1.1)"
-        fill="none"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="stroke-neutral-900 dark:stroke-neutral-100"
-      />
       <line
         x1={doc.x + 20}
         y1="140"
@@ -103,18 +111,28 @@
     stroke-width="2"
     stroke-dasharray="4 4"
     marker-end="url(#wm-arrow)"
-    class="stroke-blue-500"
+    class="fi-fade stroke-blue-500"
+    style:--d="1.6s"
   />
-  <text x="180" y="88" text-anchor="middle" font-size="9" class="fill-neutral-500 dark:fill-neutral-400">
+  <text x="180" y="88" text-anchor="middle" font-size="9" class="fi-fade fill-neutral-500 dark:fill-neutral-400" style:--d="1.6s">
     copied
   </text>
 
   <!-- the giveaway -->
-  <g transform="translate(336 98)">
-    <circle r="10" class="fill-amber-500" />
-    <path d="M0-5v6M0 4.5v.5" stroke="white" stroke-width="2" stroke-linecap="round" />
+  <g class="fi-pop" style:--d="2.8s">
+    <g transform="translate(336 98)">
+      <circle r="10" class="fill-amber-500" />
+      <path d="M0-5v6M0 4.5v.5" stroke="white" stroke-width="2" stroke-linecap="round" />
+    </g>
   </g>
-  <text x="287" y="156" text-anchor="middle" font-size="8" class="fill-amber-700 dark:fill-amber-400">
+  <text
+    x="287"
+    y="156"
+    text-anchor="middle"
+    font-size="8"
+    class="fi-fade fill-amber-700 dark:fill-amber-400"
+    style:--d="3s"
+  >
     still says Contract.pdf
   </text>
 </svg>

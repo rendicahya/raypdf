@@ -232,7 +232,7 @@ Users should never need to upload their signature every time they use RayPDF.
 
 components/
 
-- UploadCard, FeatureGrid (front-page feature showcase, one row per feature, drawings in FeatureIllustration), Faq, WatermarkIllustration, SignatureCreator, SearchBar
+- UploadCard, FeatureGrid (front-page feature showcase, one row per feature, drawings in FeatureIllustration; they play once while their row is hovered, using the `fi-*` classes in `app.css`, and must end on their resting frame), Faq, WatermarkIllustration, SignatureCreator, SearchBar
 - PDFPages (the scrolling page column), PDFViewer (one page), PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)

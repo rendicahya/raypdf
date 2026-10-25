@@ -75,3 +75,154 @@ body {
   transform: rotate(270deg) translateX(-100%);
 }
 
+/*
+ * Front-page illustrations (FeatureIllustration, WatermarkIllustration) play
+ * once while their card (.fi-host) is hovered. At rest no animation is
+ * applied, so the drawing shows its final frame; every keyframe set below
+ * therefore ends on the element's resting look. Timing per element comes from
+ * --d (delay), --t (duration), and --ease; offsets from --dx / --dy.
+ * Elements with a transform attribute are wrapped in a <g>, since a CSS
+ * transform would replace the attribute.
+ */
+.fi-pop,
+.fi-press,
+.fi-grow {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.fi-grow {
+  transform-origin: left center;
+}
+/* Shown only while the animation plays (fi-out). */
+.fi-gone {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fi-host:hover :is(.fi-pop, .fi-fade, .fi-grow, .fi-draw, .fi-type, .fi-slide, .fi-move, .fi-fly, .fi-out, .fi-press) {
+    animation-duration: var(--t, 0.4s);
+    animation-delay: var(--d, 0s);
+    animation-fill-mode: both;
+    animation-timing-function: var(--ease, cubic-bezier(0.2, 0.8, 0.3, 1));
+  }
+  .fi-host:hover .fi-pop {
+    animation-name: fi-pop;
+    animation-timing-function: var(--ease, cubic-bezier(0.34, 1.56, 0.64, 1));
+  }
+  .fi-host:hover .fi-fade {
+    animation-name: fi-fade;
+  }
+  .fi-host:hover .fi-grow {
+    animation-name: fi-grow;
+  }
+  /* The path needs pathLength="1". */
+  .fi-host:hover .fi-draw {
+    stroke-dasharray: 1 1;
+    animation-name: fi-draw;
+    animation-duration: var(--t, 0.9s);
+    animation-timing-function: var(--ease, ease-in-out);
+  }
+  .fi-host:hover .fi-type {
+    animation-name: fi-type;
+  }
+  .fi-host:hover .fi-slide {
+    animation-name: fi-slide;
+  }
+  .fi-host:hover .fi-move {
+    animation-name: fi-move;
+  }
+  .fi-host:hover .fi-fly {
+    animation-name: fi-fly;
+    animation-duration: var(--t, 1s);
+    animation-timing-function: var(--ease, ease-in-out);
+  }
+  .fi-host:hover .fi-out {
+    animation-name: fi-out;
+  }
+  .fi-host:hover .fi-press {
+    animation-name: fi-press;
+    animation-duration: var(--t, 0.3s);
+  }
+  .fi-host:hover .fi-blink {
+    animation: fi-blink 1s steps(1) var(--d, 0s) infinite;
+  }
+}
+
+@keyframes fi-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+@keyframes fi-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fi-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes fi-draw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  2% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes fi-type {
+  from {
+    clip-path: inset(-2px 100% -2px -2px);
+  }
+  to {
+    clip-path: inset(-2px -2px -2px -2px);
+  }
+}
+@keyframes fi-slide {
+  from {
+    opacity: 0;
+    transform: translate(var(--dx, 0px), var(--dy, 0px));
+  }
+}
+@keyframes fi-move {
+  from {
+    transform: translate(var(--dx, 0px), var(--dy, 0px));
+  }
+}
+@keyframes fi-fly {
+  from {
+    opacity: 0;
+    transform: translate(var(--dx, 0px), var(--dy, 0px));
+  }
+  15% {
+    opacity: 1;
+    transform: translate(var(--dx, 0px), var(--dy, 0px));
+  }
+}
+@keyframes fi-out {
+  from,
+  80% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes fi-press {
+  50% {
+    transform: scale(0.88);
+  }
+}
+@keyframes fi-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
