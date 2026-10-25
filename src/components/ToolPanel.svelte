@@ -5,7 +5,7 @@
   import CommentOptions from './toolOptions/CommentOptions.svelte';
   import SelectOptions from './toolOptions/SelectOptions.svelte';
   import ScreenshotOptions from './toolOptions/ScreenshotOptions.svelte';
-  import PageNumberOptions from './toolOptions/PageNumberOptions.svelte';
+  import PageTextOptions from './toolOptions/PageTextOptions.svelte';
   import ShapeOptions from './toolOptions/ShapeOptions.svelte';
   import { signatureToolMode } from '../stores/signatureTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
@@ -35,7 +35,7 @@
 {:else if tool === 'screenshot'}
   <ScreenshotOptions onClose={hide} />
 {:else if tool === 'pageNumbers'}
-  <PageNumberOptions onClose={() => pageNumbersToolMode.set(false)} />
+  <PageTextOptions onClose={() => pageNumbersToolMode.set(false)} />
 {:else if tool === 'shapes'}
   <ShapeOptions onClose={hide} />
 {/if}

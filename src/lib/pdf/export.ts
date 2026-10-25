@@ -8,7 +8,8 @@ import { applyVisibleWatermark, type WatermarkOptions } from '../watermark/visib
 import { drawTextBox, embedTextFont, hexToRgb } from './textRender';
 import { embedVerificationRecord } from './verification';
 import { embedHighlightAnnotations } from './highlight';
-import { drawPageNumbers, type PageNumberSettings } from './pageNumbers';
+import { drawPageLabels, type PageNumberSettings } from './pageNumbers';
+import { headerFooterDate, pageLabels, type HeaderFooterSettings } from './headerFooter';
 import { applyProtection, loadEditablePdf, type SaveProtection } from './password';
 import { drawImages, drawShapes } from './shapes';
 import { imageFor } from '../../stores/images';
@@ -59,6 +60,8 @@ export interface ExportParams {
   formValues?: FormValues;
   /** Numbers to draw on the pages, if any — see `lib/pdf/pageNumbers.ts`. */
   pageNumbers?: PageNumberSettings | null;
+  /** Header and footer text, if any — see `lib/pdf/headerFooter.ts`. */
+  headerFooter?: HeaderFooterSettings | null;
 }
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
@@ -143,6 +146,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     protection = {},
     formValues = {},
     pageNumbers = null,
+    headerFooter = null,
   } = params;
 
   const pdfBytes = await blobToBytes(pdfFile);
@@ -247,7 +251,15 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     }
   }
 
-  if (pageNumbers) await drawPageNumbers(pdfDoc, pdfjsDoc, pageNumbers, rotation);
+  if (pageNumbers || headerFooter) {
+    const date = headerFooterDate();
+    await drawPageLabels(
+      pdfDoc,
+      pdfjsDoc,
+      (page, pageCount) => pageLabels(pageNumbers, headerFooter, page, pageCount, pdfFile.name, date),
+      rotation,
+    );
+  }
 
   if (comments.length > 0) {
     await embedCommentAnnotations(pdfDoc, pdfjsDoc, comments, renderScale, rotation);
@@ -436,6 +448,7 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
     doc.images.length > 0 ||
     Object.keys(doc.formValues).length > 0 ||
     doc.pageNumbers !== null ||
+    doc.headerFooter !== null ||
     doc.file !== doc.originalFile ||
     doc.rotation !== 0
   );
@@ -479,6 +492,7 @@ export async function exportPagesAsZip(
       images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
+      headerFooter: doc.headerFooter,
       onlyPages: [page],
       protection,
     });
@@ -536,6 +550,7 @@ export async function exportAllAsZip(
       images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
+      headerFooter: doc.headerFooter,
       protection,
     });
 
@@ -596,6 +611,7 @@ export async function exportMergedPdf(
       images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
+      headerFooter: doc.headerFooter,
     });
 
     const sourceDoc = await PDFDocument.load(bytes);

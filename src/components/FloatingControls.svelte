@@ -665,9 +665,9 @@
 
     <button
       type="button"
-      aria-label="Page numbers"
+      aria-label="Page numbers, header & footer"
       aria-pressed={$pageNumbersToolMode}
-      use:tooltip={'Page numbers: number the pages, with the position and style you choose'}
+      use:tooltip={'Page numbers, header & footer: number the pages, or add text along their top and bottom'}
       class={toolButtonClass}
       class:border-neutral-200={!$pageNumbersToolMode}
       class:text-neutral-600={!$pageNumbersToolMode}

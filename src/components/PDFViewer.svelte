@@ -9,7 +9,7 @@
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
   import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
-  import { pageNumberLabel } from '../lib/pdf/pageNumbers';
+  import { headerFooterDate, pageLabels } from '../lib/pdf/headerFooter';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
   import {
@@ -508,9 +508,19 @@
   );
   const redactionsOnCurrentPage = $derived($activeDocument?.redactions.filter((box) => box.page === pageNumber) ?? []);
   const textsOnCurrentPage = $derived($activeDocument?.texts.filter((t) => t.page === pageNumber) ?? []);
-  const pageNumberSettings = $derived($activeDocument?.pageNumbers ?? null);
-  const pageNumberText = $derived(
-    pageNumberSettings ? pageNumberLabel(pageNumberSettings, pageNumber, $activeDocument?.pageCount ?? 1) : null,
+  // Page number, header, and footer, previewed as lib/pdf/headerFooter.ts
+  // will draw them.
+  const edgeLabels = $derived(
+    $activeDocument
+      ? pageLabels(
+          $activeDocument.pageNumbers,
+          $activeDocument.headerFooter,
+          pageNumber,
+          $activeDocument.pageCount,
+          $activeDocument.file.name,
+          headerFooterDate(),
+        )
+      : [],
   );
   const commentsOnCurrentPage = $derived($activeDocument?.comments.filter((c) => c.page === pageNumber) ?? []);
   const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
@@ -1297,7 +1307,7 @@
         const stored = imageFor(img.imageId);
         return stored ? [{ ...img, image: stored.blob }] : [];
       }),
-      pageNumber: pageNumberSettings && pageNumberText ? { settings: pageNumberSettings, text: pageNumberText } : null,
+      labels: edgeLabels,
     };
     return capturePage(loaded, pageNumber, doc.rotation, area, overlays, $screenshotScale);
   }
@@ -1956,10 +1966,10 @@
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
 
-  <!-- Page number preview: lib/pdf/pageNumbers.ts draws the same on export.
-       With line-height 1 the baseline sits about 0.85em below the box top. -->
-  {#if pageNumberSettings && pageNumberText}
-    {@const s = pageNumberSettings}
+  <!-- Page number, header, and footer preview: lib/pdf/pageNumbers.ts draws
+       the same on export. With line-height 1 the baseline sits about 0.85em
+       below the box top. -->
+  {#each edgeLabels as s}
     {@const unit = $editorStore.renderScale}
     {@const [vertical, horizontal] = s.position.split('-')}
     <div
@@ -1973,9 +1983,9 @@
       style:top={vertical === 'top' ? `${(s.margin - 0.13 * s.fontSize) * unit}px` : null}
       style:bottom={vertical === 'bottom' ? `${(s.margin - 0.15 * s.fontSize) * unit}px` : null}
     >
-      {pageNumberText}
+      {s.text}
     </div>
-  {/if}
+  {/each}
 
   <!-- Search matches: drawn under everything else and never take clicks. -->
   {#each searchHits as hit}

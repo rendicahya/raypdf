@@ -85,6 +85,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         images: doc.images,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
         protection: currentSaveProtection(),
       });
       downloadSignedPdf(bytes, doc.file.name);
@@ -127,6 +128,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         images: doc.images,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
       });
       // Protected after compressing: an encrypted file can't be rewritten.
       const result = await compressPdf(
@@ -176,6 +178,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         images: doc.images,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
         onlyPages: [doc.pageNumber],
         protection: currentSaveProtection(),
       });
@@ -243,6 +246,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         images: doc.images,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
         // A password would make the print dialog ask for it, so printing only keeps the copy lock.
         protection: { lockCopying: $securePdf },
       });

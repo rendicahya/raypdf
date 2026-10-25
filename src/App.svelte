@@ -335,7 +335,7 @@
         </div>
         <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">RayPDF</h1>
         <p class="mx-auto mt-3 max-w-md text-neutral-500 dark:text-neutral-400">
-          Sign, fill, mark up, and redact PDFs, entirely in your browser.
+          Sign, fill, edit, and protect your PDFs, all in one go.
         </p>
         <div class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50
           px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950

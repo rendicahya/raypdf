@@ -4,7 +4,7 @@ import type { MarkupPaint } from './highlight';
 import type { PlacedShape, PlacedText } from '../../stores/editor';
 import { insetBox, lineGeometry } from './shapes';
 import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
-import { pageNumberAnchor, type PageNumberSettings } from './pageNumbers';
+import { pageNumberAnchor, type PageLabel } from './pageNumbers';
 
 /** An area of the page as fractions (0–1) of its width/height, so it's independent of zoom. */
 export interface CaptureArea {
@@ -54,8 +54,8 @@ export interface CaptureOverlays {
   shapes?: PlacedShape[];
   /** Each placed image with its picture. */
   images?: (Box & { opacity: number; image: Blob })[];
-  /** This page's number, if the document is numbered and this page gets one. */
-  pageNumber?: { settings: PageNumberSettings; text: string } | null;
+  /** This page's number and header and footer text (`pageLabels`). */
+  labels?: PageLabel[];
 }
 
 /**
@@ -145,17 +145,16 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
 
   for (const t of overlays.texts) drawTextBox(ctx, t);
 
-  if (overlays.pageNumber) {
-    const { settings, text } = overlays.pageNumber;
+  for (const label of overlays.labels ?? []) {
     const unit = overlays.renderScale;
     const factor = overlays.renderScale / scale;
-    ctx.font = `${settings.fontSize * unit}px ${FONT_FAMILY_CSS[settings.font]}`;
-    ctx.fillStyle = settings.color;
+    ctx.font = `${label.fontSize * unit}px ${FONT_FAMILY_CSS[label.font]}`;
+    ctx.fillStyle = label.color;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    const width = ctx.measureText(text).width;
-    const { x, baseline } = pageNumberAnchor(settings, canvas.width * factor, canvas.height * factor, width, unit);
-    ctx.fillText(text, x, baseline);
+    const width = ctx.measureText(label.text).width;
+    const { x, baseline } = pageNumberAnchor(label, canvas.width * factor, canvas.height * factor, width, unit);
+    ctx.fillText(label.text, x, baseline);
   }
 
   ctx.restore();

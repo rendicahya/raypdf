@@ -10,6 +10,7 @@ import {
 } from '../lib/pdf/pageOps';
 import type { FormValues } from '../lib/pdf/forms';
 import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
+import type { HeaderFooterSettings } from '../lib/pdf/headerFooter';
 
 /** Signature instance placed on the page, in canvas pixel coordinates. */
 export interface PlacedSignature {
@@ -169,6 +170,8 @@ export interface PdfDocumentState {
   formValues: FormValues;
   /** How the pages are numbered on export, or null for no page numbers. */
   pageNumbers: PageNumberSettings | null;
+  /** Text along the top and bottom of the pages, or null for none. */
+  headerFooter: HeaderFooterSettings | null;
   /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
   rotation: number;
   /** Whether the current placement/redactions have been saved/printed — cleared whenever either changes. Used to warn before closing an unsaved tab. */
@@ -209,6 +212,7 @@ function createDocumentState(file: File): PdfDocumentState {
     images: [],
     formValues: {},
     pageNumbers: null,
+    headerFooter: null,
     rotation: 0,
     exported: false,
   };
@@ -386,6 +390,7 @@ interface DocSnapshot {
   images: PlacedImage[];
   formValues: FormValues;
   pageNumbers: PageNumberSettings | null;
+  headerFooter: HeaderFooterSettings | null;
   rotation: number;
 }
 
@@ -478,6 +483,7 @@ function createEditorStore() {
       images: doc.images,
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
+      headerFooter: doc.headerFooter,
       rotation: doc.rotation,
     };
   }
@@ -1021,6 +1027,14 @@ function createEditorStore() {
     );
   }
 
+  /** Sets the header and footer text (with its style) for the active document, or removes it (null). */
+  function setHeaderFooter(settings: HeaderFooterSettings | null) {
+    recordActiveHistory('header-footer');
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({ ...doc, headerFooter: settings, exported: false })),
+    );
+  }
+
   /** Marks a specific document as saved/printed in its current placement — clears the "signed but not downloaded" warning for that tab. */
   function markDocumentExported(id: string) {
     update((state) => ({
@@ -1335,6 +1349,7 @@ function createEditorStore() {
     removeImage,
     setFormValue,
     setPageNumbers,
+    setHeaderFooter,
     markDocumentExported,
     setRenderScale,
     zoomIn,

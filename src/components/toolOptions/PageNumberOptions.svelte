@@ -11,13 +11,8 @@
     type PageNumberSettings,
   } from '../../lib/pdf/pageNumbers';
   import { wheelRange } from '../../lib/utils/wheelRange';
-  import PanelHeader from './PanelHeader.svelte';
 
-  interface Props {
-    onClose: () => void;
-  }
-
-  let { onClose }: Props = $props();
+  // The Page numbers tab of PageTextOptions.
 
   const pageCount = $derived($activeDocument?.pageCount ?? 1);
   const current = $derived($activeDocument?.pageNumbers ?? null);
@@ -80,8 +75,6 @@
 {/snippet}
 
 <div>
-  <PanelHeader title="Page numbers" {onClose} />
-
   <label class="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">
     <input
       type="checkbox"

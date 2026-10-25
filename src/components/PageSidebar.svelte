@@ -208,6 +208,7 @@
         images: doc.images,
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
         onlyPages: pages,
         protection: format === 'pdf' ? currentSaveProtection() : {},
       });

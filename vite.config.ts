@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: 'RayPDF',
         short_name: 'RayPDF',
-        description: 'Sign, fill, mark up, and redact PDFs, entirely in your browser.',
+        description: 'Sign, fill, edit, and protect PDFs in one go, right in your browser.',
         theme_color: '#2563eb',
         background_color: '#0a0a0a',
         display: 'standalone',

@@ -77,7 +77,7 @@ const CAP_HEIGHT = 0.72;
  * settings' points into those units.
  */
 export function pageNumberAnchor(
-  settings: PageNumberSettings,
+  settings: Pick<PageLabel, 'position' | 'margin' | 'fontSize'>,
   width: number,
   height: number,
   textWidth: number,
@@ -92,36 +92,65 @@ export function pageNumberAnchor(
 }
 
 /**
- * Draws the numbers onto the pages, upright and placed as the page is shown:
+ * One line of text at a corner or edge center of a page: a page number, or
+ * a header or footer slot (see `headerFooter.ts`). Sizes are in PDF points.
+ */
+export interface PageLabel {
+  position: PageNumberPosition;
+  text: string;
+  font: PageNumberFont;
+  fontSize: number;
+  margin: number;
+  color: string;
+}
+
+/** This page's number as a label, or null if it isn't numbered. */
+export function pageNumberAsLabel(settings: PageNumberSettings, page: number, pageCount: number): PageLabel | null {
+  const text = pageNumberLabel(settings, page, pageCount);
+  return text === null ? null : { ...settings, text };
+}
+
+/**
+ * Draws each page's labels onto it, upright and placed as the page is shown:
  * the position is worked out on the rotated page and mapped back to PDF
  * space, and the text is turned to match.
  */
-export async function drawPageNumbers(
+export async function drawPageLabels(
   pdfDoc: PDFDocument,
   pdfjsDoc: PdfDocument,
-  settings: PageNumberSettings,
+  labelsFor: (page: number, pageCount: number) => PageLabel[],
   rotation: number,
 ): Promise<void> {
-  const font = await embedTextFont(pdfDoc, settings.font, false, false);
-  const color = hexToRgb(settings.color);
+  const fonts = new Map<PageNumberFont, Awaited<ReturnType<typeof embedTextFont>>>();
   const pages = pdfDoc.getPages();
 
   for (let i = 0; i < pages.length; i++) {
-    const label = pageNumberLabel(settings, i + 1, pages.length);
-    if (!label) continue;
+    const labels = labelsFor(i + 1, pages.length);
+    if (labels.length === 0) continue;
     const pdfjsPage = await pdfjsDoc.getPage(i + 1);
     const totalRotation = getTotalRotation(pdfjsPage, rotation);
     const viewport = pdfjsPage.getViewport({ scale: 1, rotation: totalRotation });
-    const textWidth = font.widthOfTextAtSize(label, settings.fontSize);
-    const { x, baseline } = pageNumberAnchor(settings, viewport.width, viewport.height, textWidth, 1);
-    const [px, py] = viewport.convertToPdfPoint(x, baseline);
-    pages[i].drawText(label, {
-      x: px,
-      y: py,
-      size: settings.fontSize,
-      font,
-      color,
-      rotate: degrees(totalRotation),
-    });
+    for (const label of labels) {
+      let font = fonts.get(label.font);
+      if (!font) {
+        font = await embedTextFont(pdfDoc, label.font, false, false);
+        fonts.set(label.font, font);
+      }
+      // The standard fonts only cover Latin text; anything else would make
+      // drawText throw.
+      const supported = new Set(font.getCharacterSet());
+      const text = [...label.text].map((c) => (supported.has(c.codePointAt(0)!) ? c : '?')).join('');
+      const textWidth = font.widthOfTextAtSize(text, label.fontSize);
+      const { x, baseline } = pageNumberAnchor(label, viewport.width, viewport.height, textWidth, 1);
+      const [px, py] = viewport.convertToPdfPoint(x, baseline);
+      pages[i].drawText(text, {
+        x: px,
+        y: py,
+        size: label.fontSize,
+        font,
+        color: hexToRgb(label.color),
+        rotate: degrees(totalRotation),
+      });
+    }
   }
 }
