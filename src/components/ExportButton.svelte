@@ -39,13 +39,14 @@
   const currentWatermark = currentWatermarkOptions;
 
   // Signing and redacting are independent — resolves whichever of the two
-  // this document actually has, and only errors if it has neither.
-  async function resolveExportInputs(doc: PdfDocumentState) {
+  // this document actually has, and (unless allowUnedited, as for printing)
+  // only errors if it has neither.
+  async function resolveExportInputs(doc: PdfDocumentState, allowUnedited = false) {
     const sig = $signatureStore;
     // Only signatures the user actually placed — never an implied position.
     const placements = sig.signature ? doc.placedSignatures : [];
 
-    if (placements.length === 0 && !hasDocumentEdits(doc)) {
+    if (!allowUnedited && placements.length === 0 && !hasDocumentEdits(doc)) {
       throw new Error(
         'Nothing to export yet. Place a signature, fill in a form, edit the pages, or add a redaction, text, or comment first.',
       );
@@ -209,7 +210,8 @@
     printing = true;
     error = null;
     try {
-      const { placements, signatureFor } = await resolveExportInputs(doc);
+      // Printing an untouched PDF is a reason in itself.
+      const { placements, signatureFor } = await resolveExportInputs(doc, true);
 
       const bytes = await exportSignedPdf({
         pdfFile: doc.file,
