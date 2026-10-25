@@ -85,7 +85,7 @@ Toolbar buttons are icon-only, with instant tooltips (`lib/utils/tooltip.ts`) in
 
 ## First Visit
 
-Display a large Add PDF upload card (one or more files), with the feature showcase (`FeatureGrid`) below it; the watermarked signature leads as a wide card. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
+Display a large Add PDF upload card (one or more files), a "from a link" field under it (`UrlLoader`, `lib/pdf/fetchPdf.ts`: a plain browser fetch, so it only works for CORS-enabled sites; never add a proxy, it would see the user's files), the feature showcase (`FeatureGrid`) below it, and the FAQ (`Faq`) last; the watermarked signature leads as a wide card. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
 
 The upload card supports:
 
@@ -120,7 +120,7 @@ Left sidebar: page thumbnails, rendered lazily as they scroll into view, with re
 
 The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 
-Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. Redact, Add Text, Comment, Select, and Screenshot have their own panels in `components/toolOptions/` (text boxes have no floating style bar: TextOptions restyles the box in `selectedTextId`, and clicks inside `[data-tool-panel]` don't deselect it); their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
+Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. Redact, Add Text, Comment, Select, and Screenshot have their own panels in `components/toolOptions/` (text boxes have no floating style bar: TextOptions restyles the box in `selectedTextId`, and clicks inside `[data-tool-panel]` don't deselect it; a new `PlacedText` style field must be drawn the same way in PDFViewer, `screenshot.ts`, and `textRender.ts`, and superscript/subscript share `SCRIPT_SCALE` / `SCRIPT_SHIFT` from `stores/textTool.ts`); their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
 
 The bottom toolbar is positioned by App.svelte, centred on the area right of the page sidebar including the panel, so it doesn't move when the panel opens (it only slides left if it would otherwise overlap the panel).
 
@@ -162,7 +162,7 @@ When Export PDF is pressed:
 
 original_filename_signed.pdf
 
-Also available: save the current page only, each page as a separate PDF (ZIP), all documents (ZIP), merge documents in a chosen order, and print. Optional: strip embedded JavaScript, lock copying.
+Also available: save compressed (`lib/pdf/compress.ts`: re-encodes images as smaller JPEGs, deflates raw streams; runs on the exported bytes, with copy-locking applied after it), save the current page only, each page as a separate PDF (ZIP), all documents (ZIP), merge documents in a chosen order, and print. Optional: strip embedded JavaScript, lock copying.
 
 Every export embeds a small verification record in the PDF metadata (`lib/pdf/verification.ts`).
 
@@ -232,7 +232,7 @@ Users should never need to upload their signature every time they use RayPDF.
 
 components/
 
-- UploadCard, FeatureGrid (front-page feature showcase), WatermarkIllustration, SignatureCreator, SearchBar
+- UploadCard, UrlLoader, FeatureGrid (front-page feature showcase), Faq, WatermarkIllustration, SignatureCreator, SearchBar
 - PDFViewer, PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
@@ -244,7 +244,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, pageImages, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, fetchPdf, docCache, export, compress, pageImages, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange

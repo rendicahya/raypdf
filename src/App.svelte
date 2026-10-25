@@ -10,6 +10,8 @@
   import UpdateToast from './components/UpdateToast.svelte';
   import VerifyResults from './components/VerifyResults.svelte';
   import FeatureGrid from './components/FeatureGrid.svelte';
+  import Faq from './components/Faq.svelte';
+  import UrlLoader from './components/UrlLoader.svelte';
   import SearchBar from './components/SearchBar.svelte';
   import { search, openSearch, closeSearch } from './stores/search';
   import { editorStore, activeDocument } from './stores/editor';
@@ -101,6 +103,12 @@
     }
     addPdfsError = messages.length > 0 ? messages.join(' ') : null;
 
+    if (unique.length > 0) editorStore.addPdfs(unique);
+  }
+
+  function onUrlFile(file: File) {
+    const { unique } = dedupeFiles([file], editor.documents.map((d) => d.file));
+    addPdfsError = null;
     if (unique.length > 0) editorStore.addPdfs(unique);
   }
 
@@ -346,9 +354,15 @@
             maxSizeBytes={MAX_PDF_SIZE_BYTES}
             onFiles={onPdfFiles}
           />
+          <div class="mt-4">
+            <UrlLoader onFile={(file) => onPdfFiles([file])} />
+          </div>
         </div>
         <div class="mt-4 w-full">
           <FeatureGrid />
+        </div>
+        <div class="w-full max-w-3xl">
+          <Faq />
         </div>
       {:else if choice === 'verify'}
         <!-- Verify: every added PDF is checked in place, no editor needed. -->
@@ -421,6 +435,9 @@
                 </li>
               {/each}
             </ul>
+            <div class="border-t border-neutral-200 pt-3 dark:border-neutral-800">
+              <UrlLoader onFile={onUrlFile} />
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">

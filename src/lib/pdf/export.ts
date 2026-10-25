@@ -73,7 +73,7 @@ function randomOwnerPassword(): string {
  * last step before a document is saved — encrypting earlier would block any
  * further edits (drawing, page copying, etc.) pdf-lib needs to perform.
  */
-function applyCopyProtection(pdfDoc: PDFDocument): void {
+export function applyCopyProtection(pdfDoc: PDFDocument): void {
   pdfDoc.encrypt({
     ownerPassword: randomOwnerPassword(),
     permissions: { copying: false },
@@ -227,6 +227,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       const x = Math.min(x1, x2);
       const topY = Math.max(y1, y2);
       const boxWidth = Math.abs(x2 - x1);
+      const boxHeight = Math.abs(y2 - y1);
       // Canvas-px-to-PDF-point scale factor for this page/rotation, derived
       // from the box itself rather than a fixed constant so it stays correct
       // across zoom levels and rotations.
@@ -238,11 +239,18 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
         x,
         topY,
         width: boxWidth,
+        height: boxHeight,
         font,
         fontSize: t.fontSize * pxToPt,
         color: hexToRgb(t.color),
+        background: t.background ? hexToRgb(t.background) : null,
+        opacity: t.opacity,
         letterSpacing: t.letterSpacing * pxToPt,
+        wordSpacing: t.wordSpacing * pxToPt,
+        lineHeight: t.lineHeight,
         underline: t.underline,
+        strikethrough: t.strikethrough,
+        script: t.script,
         align: t.align,
       });
     }
@@ -330,6 +338,15 @@ function downloadBlob(blob: Blob, fileName: string): void {
 
 export function downloadSignedPdf(bytes: Uint8Array, originalFileName: string): void {
   downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), signedFileName(originalFileName));
+}
+
+export function compressedFileName(originalFileName: string): string {
+  const base = originalFileName.replace(/\.pdf$/i, '');
+  return `${base}_compressed.pdf`;
+}
+
+export function downloadCompressedPdf(bytes: Uint8Array, originalFileName: string): void {
+  downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), compressedFileName(originalFileName));
 }
 
 export function downloadPageOnlyPdf(bytes: Uint8Array, originalFileName: string, pageNumber: number): void {

@@ -6,7 +6,8 @@ import {
   type PDFPage,
   type RGB,
 } from '@cantoo/pdf-lib';
-import type { TextAlign, TextFontFamily } from '../../stores/editor';
+import type { TextAlign, TextFontFamily, TextScript } from '../../stores/editor';
+import { SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
 
 type BasePdfFamily = 'helvetica' | 'times' | 'courier';
 
@@ -64,15 +65,24 @@ export function hexToRgb(hex: string): RGB {
   return rgb(parseInt(r, 16) / 255, parseInt(g, 16) / 255, parseInt(b, 16) / 255);
 }
 
-/** Width of a string drawn with per-character letter spacing (spacing applies between glyphs, not after the last one). */
-function measureLine(font: PDFFont, text: string, fontSize: number, letterSpacing: number): number {
+interface Spacing {
+  letterSpacing: number;
+  wordSpacing: number;
+}
+
+/**
+ * Width of a string drawn with per-character letter spacing (between glyphs,
+ * not after the last one) plus extra word spacing on every space.
+ */
+function measureLine(font: PDFFont, text: string, fontSize: number, spacing: Spacing): number {
   if (text.length === 0) return 0;
   const glyphWidth = font.widthOfTextAtSize(text, fontSize);
-  return glyphWidth + letterSpacing * (text.length - 1);
+  const spaces = text.split(' ').length - 1;
+  return glyphWidth + spacing.letterSpacing * (text.length - 1) + spacing.wordSpacing * spaces;
 }
 
 /** Wraps `text` (already split on explicit newlines by the caller) to fit within `maxWidth`, breaking on spaces. */
-function wrapParagraph(font: PDFFont, paragraph: string, fontSize: number, letterSpacing: number, maxWidth: number): string[] {
+function wrapParagraph(font: PDFFont, paragraph: string, fontSize: number, spacing: Spacing, maxWidth: number): string[] {
   if (paragraph.length === 0) return [''];
 
   const words = paragraph.split(' ');
@@ -81,7 +91,7 @@ function wrapParagraph(font: PDFFont, paragraph: string, fontSize: number, lette
 
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
-    if (current && measureLine(font, candidate, fontSize, letterSpacing) > maxWidth) {
+    if (current && measureLine(font, candidate, fontSize, spacing) > maxWidth) {
       lines.push(current);
       current = word;
     } else {
@@ -101,48 +111,75 @@ export interface DrawTextBoxOptions {
   topY: number;
   /** Box width, in PDF points — text wraps to fit. */
   width: number;
+  /** Box height, in PDF points — only used for the background. */
+  height: number;
   font: PDFFont;
   fontSize: number;
   color: RGB;
+  /** Filled behind the whole box, if set. */
+  background: RGB | null;
+  opacity: number;
   letterSpacing: number;
+  wordSpacing: number;
+  /** Multiple of the font size. */
+  lineHeight: number;
   underline: boolean;
+  strikethrough: boolean;
+  script: TextScript;
   align: TextAlign;
 }
 
 /**
- * Draws word-wrapped, letter-spaced (and optionally underlined) text into a
- * box on a pdf-lib page. pdf-lib's own drawText has no letter-spacing
- * support, so each line is drawn glyph-by-glyph with a manually accumulated
- * x offset instead of a single drawText call.
+ * Draws word-wrapped, letter- and word-spaced (and optionally underlined or
+ * struck through) text into a box on a pdf-lib page. pdf-lib's own drawText
+ * has no spacing support, so each line is drawn glyph-by-glyph with a
+ * manually accumulated x offset instead of a single drawText call.
+ *
+ * Superscript/subscript text is drawn smaller and shifted from the normal
+ * baseline, while lines keep the full font size's height, like the editor.
  */
 export function drawTextBox(page: PDFPage, opts: DrawTextBoxOptions): void {
-  const { text, x, topY, width, font, fontSize, color, letterSpacing, underline, align } = opts;
-  const lineHeight = fontSize * 1.2;
-  const ascent = fontSize * 0.8;
+  const { text, x, topY, width, height, font, color, background, opacity, underline, strikethrough, script, align } =
+    opts;
+  const lineHeight = opts.fontSize * opts.lineHeight;
+  // CSS centres each line's glyphs in its line box: the half-leading above
+  // the text grows with the line height.
+  const ascent = opts.fontSize * 0.8 + (lineHeight - opts.fontSize * 1.2) / 2;
+  const fontSize = script === 'normal' ? opts.fontSize : opts.fontSize * SCRIPT_SCALE;
+  const shift = SCRIPT_SHIFT[script] * opts.fontSize;
+  const spacing = { letterSpacing: opts.letterSpacing, wordSpacing: opts.wordSpacing };
+
+  if (background) {
+    page.drawRectangle({ x, y: topY - height, width, height, color: background, opacity });
+  }
 
   const lines = text
     .split('\n')
-    .flatMap((paragraph) => wrapParagraph(font, paragraph, fontSize, letterSpacing, width));
+    .flatMap((paragraph) => wrapParagraph(font, paragraph, fontSize, spacing, width));
 
   lines.forEach((line, i) => {
-    const baselineY = topY - ascent - i * lineHeight;
-    const lineWidth = measureLine(font, line, fontSize, letterSpacing);
+    const baselineY = topY - ascent - i * lineHeight - shift;
+    const lineWidth = measureLine(font, line, fontSize, spacing);
     const lineStartX = align === 'center' ? x + (width - lineWidth) / 2 : align === 'right' ? x + width - lineWidth : x;
     let cursorX = lineStartX;
 
     for (const char of line) {
-      page.drawText(char, { x: cursorX, y: baselineY, size: fontSize, font, color });
-      cursorX += font.widthOfTextAtSize(char, fontSize) + letterSpacing;
+      page.drawText(char, { x: cursorX, y: baselineY, size: fontSize, font, color, opacity });
+      cursorX += font.widthOfTextAtSize(char, fontSize) + spacing.letterSpacing;
+      if (char === ' ') cursorX += spacing.wordSpacing;
     }
 
-    if (underline && line.length > 0) {
-      const underlineY = baselineY - fontSize * 0.12;
+    if (line.length === 0) return;
+    const thickness = Math.max(0.5, fontSize * 0.05);
+    const drawRule = (y: number) =>
       page.drawLine({
-        start: { x: lineStartX, y: underlineY },
-        end: { x: lineStartX + lineWidth, y: underlineY },
-        thickness: Math.max(0.5, fontSize * 0.05),
+        start: { x: lineStartX, y },
+        end: { x: lineStartX + lineWidth, y },
+        thickness,
         color,
+        opacity,
       });
-    }
+    if (underline) drawRule(baselineY - fontSize * 0.12);
+    if (strikethrough) drawRule(baselineY + fontSize * 0.3);
   });
 }

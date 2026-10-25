@@ -28,8 +28,9 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Getting started
 
-- The front page shows the upload area at the top and a quick tour of every feature below it, led by the protected signature (with an illustration of a copied signature giving itself away).
+- The front page shows the upload area at the top, a quick tour of every feature below it, led by the protected signature (with an illustration of a copied signature giving itself away), and a short FAQ at the bottom.
 - Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
+- **Open a PDF from a link**: paste a URL and the file is downloaded straight into the browser, with no server in between. GitHub file pages and Dropbox share links are turned into their direct-download form. This only works for sites that allow other websites to fetch their files (CORS); for the rest, RayPDF says so and suggests downloading the file instead.
 - Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
 - **Keep several signatures**, say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.
@@ -54,7 +55,7 @@ It is **not** a replacement for PKI-based digital signatures.
     - **Move**: drag placed items around; drag the page background to pan. Resting the pointer on text switches to text selection, which stays on while the pointer moves over text and turns back into the hand once it leaves.
     - **Signature**: opens the signature panel on the right (your signatures, placement helpers, watermark). The page still behaves like Move, so placed signatures can be dragged and resized. Turning the tool off, or `Esc`, closes the panel.
     - **Redact**: draw boxes; the content underneath is permanently removed from the exported PDF. Its options list every box by page: click to jump, remove one box, a whole page's, or all of them, or copy a box to the same spot on every other page. When several PDFs are open, **Apply to All Documents** makes every other open document's redactions match this one.
-    - **Add Text**: click to place a text box. Its options (font, size, style, color, spacing, alignment, with a live sample) restyle the selected box, or set the style for new ones when none is selected.
+    - **Add Text**: click to place a text box. Its options restyle the selected box, or set the style for new ones when none is selected: font, size, bold, italic, underline, strikethrough, superscript and subscript (for the whole box), alignment, color, a background color (handy for covering text), letter spacing, word spacing, line spacing, and opacity, with a live sample. The saved PDF and screenshots match the editor.
     - **Comment**: click to leave a sticky note, exported as a real PDF annotation. Its options list every comment in the document; click one to jump to its page, or delete it.
     - **Zoom**: click to zoom in at that spot, right-click to zoom out.
     - **Select**: select and copy the PDF's real text. After selecting, a small toolbar appears below the selection to **highlight, underline, or strike through** the text permanently. Highlights come in five colors; underlines and strikethroughs are always black. Each is exported as a real PDF markup annotation (Highlight, Underline, StrikeOut). Click a markup to remove it (also `Delete`), or a highlight to recolor it. Its options pick the color for the next highlight.
@@ -80,8 +81,9 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Export
 
-- **Save** and **Print** sit at the right end of the top bar. The arrow next to Save opens **Save this page only**, **Save each page as a separate PDF (ZIP)**, **Save all (ZIP)**, **Save all as one PDF** (choose the order), and the export options below.
+- **Save** and **Print** sit at the right end of the top bar. The arrow next to Save opens **Save compressed**, **Save each page as a separate PDF (ZIP)**, **Save all (ZIP)**, **Save all as one PDF** (choose the order), and the export options below.
 - Exported as `original_filename_signed.pdf`.
+- **Save compressed** saves everything you added, then shrinks the file in the browser: images are scaled down (at most 1800 px on the long side) and re-encoded as JPEG, uncompressed streams are deflated, and objects are packed into object streams. Text, vector graphics, and fonts are untouched, an image is only replaced when the result is clearly smaller, and the file is never made bigger. It works on an unedited PDF too, and reports the size before and after. Saved as `original_filename_compressed.pdf`.
 - Optional: strip embedded JavaScript carried over from the source PDF, and lock text/content copying.
 - Each export embeds a small RayPDF record (document ID, name, export time, watermark text) in the PDF's metadata.
 
@@ -120,7 +122,7 @@ Project guidelines (product vision, principles, UX rules, code structure, and wo
 
 - `src/components/`: UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyResults`, …)
 - `src/stores/`: app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
-- `src/lib/pdf/`: loading, rendering, export, redaction, page operations, form filling, screenshots, verification
+- `src/lib/pdf/`: loading (including from a link), rendering, export, compression, redaction, page operations, form filling, screenshots, verification
 - `src/lib/watermark/`: visible watermark layout and rendering
 - `src/lib/signature/`: signature storage and sizing
 - `src/lib/utils/`: persistence, file validation, tooltip and other Svelte actions

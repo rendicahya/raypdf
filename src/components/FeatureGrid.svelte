@@ -44,7 +44,7 @@
     },
     {
       title: 'Save your way',
-      description: 'Save one page, split into separate pages, zip several PDFs, merge them in any order, or print.',
+      description: 'Save one page, split into pages, compress, zip several PDFs, merge them in any order, or print.',
       paths: ['M12 4v11m0 0-4-4m4 4 4-4', 'M5 20h14'],
     },
     {

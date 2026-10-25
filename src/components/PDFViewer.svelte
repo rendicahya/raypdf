@@ -54,7 +54,16 @@
     defaultTextColor,
     defaultTextLetterSpacing,
     defaultTextAlign,
+    defaultTextStrikethrough,
+    defaultTextBackground,
+    defaultTextOpacity,
+    defaultTextWordSpacing,
+    defaultTextLineHeight,
+    defaultTextScript,
     FONT_FAMILY_CSS,
+    SCRIPT_SCALE,
+    SCRIPT_SHIFT,
+    textDecoration,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
@@ -1269,7 +1278,7 @@
 
     const rect = canvasEl.getBoundingClientRect();
     const width = Math.min(TEXT_DEFAULT_WIDTH, rect.width);
-    const height = $defaultTextFontSize * 1.6;
+    const height = $defaultTextFontSize * Math.max(1.6, $defaultTextLineHeight + 0.4);
     // The click point becomes the box's left-center, not its center — text
     // starts growing to the right from where the user clicked, matching how
     // a cursor placement works in most text editors.
@@ -1291,6 +1300,12 @@
       color: $defaultTextColor,
       letterSpacing: $defaultTextLetterSpacing,
       align: $defaultTextAlign,
+      strikethrough: $defaultTextStrikethrough,
+      background: $defaultTextBackground,
+      opacity: $defaultTextOpacity,
+      wordSpacing: $defaultTextWordSpacing,
+      lineHeight: $defaultTextLineHeight,
+      script: $defaultTextScript,
     });
     $selectedTextId = id;
     startEditingText(id, '');
@@ -2121,30 +2136,38 @@
           class="h-full w-full resize-none border border-dashed border-blue-400 bg-white/70 p-0
             outline-none dark:bg-neutral-900/70"
           style:font-family={FONT_FAMILY_CSS[t.fontFamily]}
-          style:font-size="{t.fontSize}px"
+          style:font-size="{t.script === 'normal' ? t.fontSize : t.fontSize * SCRIPT_SCALE}px"
           style:font-weight={t.bold ? 700 : 400}
           style:font-style={t.italic ? 'italic' : 'normal'}
-          style:text-decoration={t.underline ? 'underline' : 'none'}
+          style:text-decoration-line={textDecoration(t)}
           style:color={t.color}
           style:letter-spacing="{t.letterSpacing}px"
-          style:line-height="1.2"
+          style:word-spacing="{t.wordSpacing}px"
+          style:line-height={t.lineHeight}
           style:text-align={t.align}
         ></textarea>
       {:else}
+        <!-- The span carries superscript/subscript: smaller and shifted
+             within lines that keep the full font size's height. -->
         <div
           class="h-full w-full select-none overflow-hidden whitespace-pre-wrap break-words"
           style:font-family={FONT_FAMILY_CSS[t.fontFamily]}
           style:font-size="{t.fontSize}px"
           style:font-weight={t.bold ? 700 : 400}
           style:font-style={t.italic ? 'italic' : 'normal'}
-          style:text-decoration={t.underline ? 'underline' : 'none'}
           style:color={t.color}
+          style:background-color={t.background}
+          style:opacity={t.opacity}
           style:letter-spacing="{t.letterSpacing}px"
-          style:line-height="1.2"
+          style:word-spacing="{t.wordSpacing}px"
+          style:line-height={t.lineHeight}
           style:text-align={t.align}
-        >
-          {t.text}
-        </div>
+        ><span
+            class="relative"
+            style:font-size={t.script === 'normal' ? null : `${SCRIPT_SCALE}em`}
+            style:top="{SCRIPT_SHIFT[t.script] * t.fontSize}px"
+            style:text-decoration-line={textDecoration(t)}>{t.text}</span
+          ></div>
       {/if}
 
       {#if isSelected}

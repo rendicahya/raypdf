@@ -37,6 +37,7 @@ export interface RedactionBox {
 export type TextFontFamily = 'helvetica' | 'times' | 'courier' | 'arial' | 'consolas';
 
 export type TextAlign = 'left' | 'center' | 'right';
+export type TextScript = 'normal' | 'superscript' | 'subscript';
 
 /** A typed text box placed on the page, in canvas pixel coordinates. */
 export interface PlacedText {
@@ -54,10 +55,21 @@ export interface PlacedText {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  strikethrough: boolean;
   /** CSS hex color. */
   color: string;
+  /** CSS hex color filled behind the box, or null for none. */
+  background: string | null;
+  /** 0.1 to 1. */
+  opacity: number;
   /** In canvas pixels at the current render scale. */
   letterSpacing: number;
+  /** Extra space added to each space character, in canvas pixels at the current render scale. */
+  wordSpacing: number;
+  /** Line height as a multiple of the font size. */
+  lineHeight: number;
+  /** Superscript and subscript apply to the whole box: smaller text, raised or lowered within each line. */
+  script: TextScript;
   align: TextAlign;
 }
 
@@ -201,6 +213,7 @@ function rescale(state: EditorState, nextScale: number): EditorState {
       height: t.height * factor,
       fontSize: t.fontSize * factor,
       letterSpacing: t.letterSpacing * factor,
+      wordSpacing: t.wordSpacing * factor,
     })),
     comments: doc.comments.map((c) => ({
       ...c,

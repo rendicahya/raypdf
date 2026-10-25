@@ -15,11 +15,18 @@
     downloadMergedPdf,
     hasDocumentEdits,
     printPdfBytes,
+    applyCopyProtection,
+    downloadCompressedPdf,
   } from '../lib/pdf/export';
+  import { compressPdf } from '../lib/pdf/compress';
+  import { formatFileSize } from '../lib/utils/fileValidation';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
   import { tooltip } from '../lib/utils/tooltip';
 
   let exportingOne = $state(false);
+  let compressing = $state(false);
+  let compressNote: string | null = $state(null);
+  let compressNoteTimeout: ReturnType<typeof setTimeout> | undefined;
   let exportingPageOnly = $state(false);
   let exportingPagesZip = $state(false);
   let exportingAll = $state(false);
@@ -28,10 +35,6 @@
   let showSaveMenu = $state(false);
   let merging = $state(false);
   let error: string | null = $state(null);
-
-  const hasMoreSaveOptions = $derived(
-    ($activeDocument?.pageCount ?? 1) > 1 || $editorStore.documents.length > 1,
-  );
 
   const currentWatermark = currentWatermarkOptions;
 
@@ -85,6 +88,54 @@
       error = e instanceof Error ? e.message : 'Export failed';
     } finally {
       exportingOne = false;
+    }
+  }
+
+  // Saves everything added, like Save, then shrinks the result. Unlike Save it
+  // also works on an untouched PDF, since making a file smaller is reason
+  // enough to save it.
+  async function onExportCompressed() {
+    const doc = $activeDocument;
+    if (!doc) return;
+
+    compressing = true;
+    error = null;
+    compressNote = null;
+    clearTimeout(compressNoteTimeout);
+    try {
+      const placements = $signatureStore.signature ? doc.placedSignatures : [];
+      const bytes = await exportSignedPdf({
+        pdfFile: doc.file,
+        documentId: doc.id,
+        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
+        placements: placements.length > 0 ? placements : undefined,
+        renderScale: $editorStore.renderScale,
+        rotation: doc.rotation,
+        watermark: currentWatermark(),
+        stripScripts: $stripEmbeddedScripts,
+        redactions: doc.redactions,
+        texts: doc.texts,
+        comments: doc.comments,
+        highlights: doc.highlights,
+        formValues: doc.formValues,
+        // Locked after compressing: an encrypted file can't be rewritten.
+        securePdf: false,
+      });
+      const result = await compressPdf(bytes, $securePdf ? applyCopyProtection : undefined);
+      downloadCompressedPdf(result.bytes, doc.file.name);
+      editorStore.markDocumentExported(doc.id);
+
+      const before = doc.file.size;
+      const saved = 1 - result.compressedSize / before;
+      compressNote =
+        saved >= 0.01
+          ? `${formatFileSize(before)} → ${formatFileSize(result.compressedSize)} (${Math.round(saved * 100)}% smaller)`
+          : `Already compact: ${formatFileSize(result.compressedSize)}`;
+      compressNoteTimeout = setTimeout(() => (compressNote = null), 6000);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Compression failed';
+    } finally {
+      compressing = false;
     }
   }
 
@@ -334,6 +385,22 @@
       class="absolute right-0 top-full z-40 mt-1 w-64 rounded-lg border border-neutral-200 bg-white py-1
         shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
     >
+      <button
+        type="button"
+        role="menuitem"
+        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
+          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+          dark:text-neutral-200 dark:hover:bg-neutral-800"
+        disabled={compressing}
+        onclick={() => {
+          showSaveMenu = false;
+          onExportCompressed();
+        }}
+      >
+        <span class="block">{compressing ? 'Compressing…' : 'Save compressed'}</span>
+        <span class="block text-xs text-neutral-400">Smaller file: images are scaled down and re-encoded</span>
+      </button>
+
       {#if ($activeDocument?.pageCount ?? 1) > 1}
         <button
           type="button"
@@ -395,10 +462,7 @@
         </button>
       {/if}
 
-      <div
-        class="flex flex-col gap-2 px-3 py-2
-          {hasMoreSaveOptions ? 'mt-1 border-t border-neutral-200 pt-3 dark:border-neutral-700' : ''}"
-      >
+      <div class="mt-1 flex flex-col gap-2 border-t border-neutral-200 px-3 py-2 pt-3 dark:border-neutral-700">
         <label class="flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">
           <input
             type="checkbox"
@@ -419,6 +483,22 @@
           <span>Secure PDF (disable text/content copying)</span>
         </label>
       </div>
+    </div>
+  {/if}
+
+  {#if compressNote && !error}
+    <div
+      role="status"
+      class="absolute right-0 top-full z-30 mt-1 flex w-72 items-start gap-2 rounded-lg border border-emerald-200
+        bg-emerald-50 px-3 py-2 text-xs text-emerald-700 shadow dark:border-emerald-900 dark:bg-emerald-950
+        dark:text-emerald-300"
+    >
+      <span class="flex-1">Saved compressed. {compressNote}</span>
+      <button type="button" aria-label="Dismiss" class="shrink-0" onclick={() => (compressNote = null)}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
+          <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
     </div>
   {/if}
 

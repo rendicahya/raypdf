@@ -2,7 +2,7 @@ import { renderPageToCanvas, type PdfDocument } from './loader';
 import type { FormWidgetKind } from './forms';
 import type { MarkupPaint } from './highlight';
 import type { PlacedText } from '../../stores/editor';
-import { FONT_FAMILY_CSS } from '../../stores/textTool';
+import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
 
 /** An area of the page as fractions (0–1) of its width/height, so it's independent of zoom. */
 export interface CaptureArea {
@@ -131,10 +131,11 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
   ctx.restore();
 }
 
-function setLetterSpacing(ctx: CanvasRenderingContext2D, px: number): void {
-  // Not in every browser yet; without it, text is drawn with normal spacing.
-  const withSpacing = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
-  if ('letterSpacing' in withSpacing) withSpacing.letterSpacing = `${px}px`;
+function setSpacing(ctx: CanvasRenderingContext2D, letterPx: number, wordPx: number): void {
+  // Not in every browser yet; without them, text is drawn with normal spacing.
+  const withSpacing = ctx as CanvasRenderingContext2D & { letterSpacing?: string; wordSpacing?: string };
+  if ('letterSpacing' in withSpacing) withSpacing.letterSpacing = `${letterPx}px`;
+  if ('wordSpacing' in withSpacing) withSpacing.wordSpacing = `${wordPx}px`;
 }
 
 /** Splits text into lines that fit `maxWidth`, wrapping at spaces (or mid-word if a word alone is too wide). */
@@ -162,6 +163,17 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number
   return lines;
 }
 
+interface LineOptions {
+  /** Multiple of `lineSize`. */
+  lineHeight?: number;
+  /** Font size that sets the line pitch, if the glyphs are drawn smaller (superscript/subscript). */
+  lineSize?: number;
+  /** Vertical offset of the glyphs from each line's centre, in pixels. */
+  shift?: number;
+  underline?: boolean;
+  strikethrough?: boolean;
+}
+
 function drawLines(
   ctx: CanvasRenderingContext2D,
   lines: string[],
@@ -169,33 +181,50 @@ function drawLines(
   fontSize: number,
   align: 'left' | 'center' | 'right',
   top: number,
-  underline = false,
+  { lineHeight = LINE_HEIGHT, lineSize = fontSize, shift = 0, underline = false, strikethrough = false }: LineOptions = {},
 ): void {
-  const lineHeight = fontSize * LINE_HEIGHT;
+  const pitch = lineSize * lineHeight;
   ctx.textBaseline = 'middle';
   ctx.textAlign = align;
   const x = align === 'left' ? box.x : align === 'center' ? box.x + box.width / 2 : box.x + box.width;
+  const thickness = Math.max(1, fontSize / 15);
   lines.forEach((line, i) => {
-    const y = top + lineHeight * (i + 0.5);
+    const y = top + pitch * (i + 0.5) + shift;
     ctx.fillText(line, x, y);
-    if (underline && line) {
+    if ((underline || strikethrough) && line) {
       const width = ctx.measureText(line).width;
       const left = align === 'left' ? x : align === 'center' ? x - width / 2 : x - width;
-      ctx.fillRect(left, y + fontSize * 0.45, width, Math.max(1, fontSize / 15));
+      if (underline) ctx.fillRect(left, y + fontSize * 0.45, width, thickness);
+      if (strikethrough) ctx.fillRect(left, y - thickness / 2, width, thickness);
     }
   });
 }
 
 function drawTextBox(ctx: CanvasRenderingContext2D, t: PlacedText): void {
-  if (!t.text.trim()) return;
+  if (!t.text.trim() && !t.background) return;
   ctx.save();
   ctx.beginPath();
   ctx.rect(t.x, t.y, t.width, t.height);
   ctx.clip();
-  ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? 700 : 400} ${t.fontSize}px ${FONT_FAMILY_CSS[t.fontFamily]}`;
+  ctx.globalAlpha = t.opacity;
+  if (t.background) {
+    ctx.fillStyle = t.background;
+    ctx.fillRect(t.x, t.y, t.width, t.height);
+  }
+  const size = t.script === 'normal' ? t.fontSize : t.fontSize * SCRIPT_SCALE;
+  ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? 700 : 400} ${size}px ${FONT_FAMILY_CSS[t.fontFamily]}`;
   ctx.fillStyle = t.color;
-  setLetterSpacing(ctx, t.letterSpacing);
-  drawLines(ctx, wrapLines(ctx, t.text, t.width), t, t.fontSize, t.align, t.y, t.underline);
+  setSpacing(ctx, t.letterSpacing, t.wordSpacing);
+  // Smaller glyphs drawn centred sit higher than the normal baseline, so
+  // they're first brought down onto it, then shifted like the editor does.
+  const shift = (t.fontSize - size) * 0.3 + SCRIPT_SHIFT[t.script] * t.fontSize;
+  drawLines(ctx, wrapLines(ctx, t.text, t.width), t, size, t.align, t.y, {
+    lineHeight: t.lineHeight,
+    lineSize: t.fontSize,
+    shift,
+    underline: t.underline,
+    strikethrough: t.strikethrough,
+  });
   ctx.restore();
 }
 
