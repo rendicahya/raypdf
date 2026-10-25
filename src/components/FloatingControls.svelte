@@ -9,7 +9,6 @@
   import { textSelectMode } from '../stores/textSelect';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation } from '../lib/pdf/loader';
-  import { boxToRatio, boxFromRatioForDocument } from '../lib/pdf/placement';
   import { tooltip } from '../lib/utils/tooltip';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { downloadBlob } from '../lib/pdf/screenshot';
@@ -190,73 +189,10 @@
       fitting = false;
     }
   }
-
-  const canApplyRedactionToAll = $derived(
-    $editorStore.documents.length > 1 && ($activeDocument?.redactions.length ?? 0) > 0,
-  );
-
-  let applyingRedactionToAll = $state(false);
-  let applyRedactionError: string | null = $state(null);
-  let applyRedactionSuccess: string | null = $state(null);
-  let applyRedactionSuccessTimeout: ReturnType<typeof setTimeout> | undefined;
-
-  // Makes every other open document's redactions match the active document's
-  // exactly — not a merge: each target's whole redaction set is replaced with
-  // a converted copy of the active document's boxes, so re-running this after
-  // moving/resizing/adding/removing boxes on the active document always
-  // leaves the others in sync rather than accumulating leftovers. A box whose
-  // page doesn't exist on a given target is simply dropped for that target.
-  async function applyRedactionsToAll() {
-    const active = $activeDocument;
-    const documents = $editorStore.documents;
-    if (!active || active.redactions.length === 0) return;
-
-    applyingRedactionToAll = true;
-    applyRedactionError = null;
-    applyRedactionSuccess = null;
-    clearTimeout(applyRedactionSuccessTimeout);
-    try {
-      const activePdf = await getCachedPdf(active.id, active.file);
-      const ratios = await Promise.all(
-        active.redactions.map(async (box) => ({
-          page: box.page,
-          ratio: await boxToRatio(activePdf, box.page, $editorStore.renderScale, active.rotation, box),
-        })),
-      );
-
-      const partiallySynced: string[] = [];
-
-      for (const doc of documents) {
-        if (doc.id === active.id) continue;
-
-        const applicable = ratios.filter((r) => r.page <= doc.pageCount);
-        if (applicable.length < ratios.length) partiallySynced.push(doc.file.name);
-
-        const pdfjsDoc = await getCachedPdf(doc.id, doc.file);
-        const newBoxes = await Promise.all(
-          applicable.map((r) =>
-            boxFromRatioForDocument(pdfjsDoc, r.page, $editorStore.renderScale, doc.rotation, r.ratio),
-          ),
-        );
-        editorStore.setRedactionsForDocument(doc.id, newBoxes);
-      }
-
-      if (partiallySynced.length > 0) {
-        applyRedactionError = `Not fully synced (fewer pages there): ${partiallySynced.join(', ')}`;
-      } else {
-        const count = documents.length - 1;
-        applyRedactionSuccess = `Applied to ${count} other document${count > 1 ? 's' : ''}`;
-        applyRedactionSuccessTimeout = setTimeout(() => (applyRedactionSuccess = null), 2500);
-      }
-    } catch (e) {
-      applyRedactionError = e instanceof Error ? e.message : 'Failed to apply redaction to all documents';
-    } finally {
-      applyingRedactionToAll = false;
-    }
-  }
 </script>
 
-<div class="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex flex-col items-center gap-1.5 px-4">
+<!-- Placed by App.svelte, which keeps it still when the tool panel opens. -->
+<div class="pointer-events-none flex flex-col items-center gap-1.5">
   {#if $screenshotResult}
     {@const result = $screenshotResult}
     <div
@@ -645,41 +581,5 @@
         <circle cx="12" cy="12" r="3" />
       </svg>
     </button>
-
-    {#if canApplyRedactionToAll}
-      <button
-        type="button"
-        aria-label="Apply redaction to all {$editorStore.documents.length} documents"
-        use:tooltip={applyingRedactionToAll
-          ? 'Applying…'
-          : `Apply redaction to all ${$editorStore.documents.length} documents. Makes every other open document's redactions match this one exactly`}
-        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-200
-          text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
-          dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-        disabled={applyingRedactionToAll}
-        onclick={applyRedactionsToAll}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-          <rect x="8" y="8" width="12" height="12" rx="2" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-          <path stroke-linecap="round" d="M11 14h6" />
-        </svg>
-      </button>
-    {/if}
   </div>
-
-  {#if applyRedactionError}
-    <p class="pointer-events-auto mt-1 max-w-full rounded-full bg-white/90 px-3 py-1 text-center text-xs
-      text-red-600 shadow dark:bg-neutral-900/90 dark:text-red-400">
-      {applyRedactionError}
-    </p>
-  {:else if applyRedactionSuccess}
-    <p class="pointer-events-auto mt-1 flex max-w-full items-center gap-1.5 rounded-full bg-white/90 px-3 py-1
-      text-center text-xs text-emerald-600 shadow dark:bg-neutral-900/90 dark:text-emerald-400">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-      </svg>
-      {applyRedactionSuccess}
-    </p>
-  {/if}
 </div>

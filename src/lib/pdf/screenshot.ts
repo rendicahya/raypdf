@@ -12,8 +12,9 @@ export interface CaptureArea {
   height: number;
 }
 
-// Captures are rendered fresh at a fixed, generous scale rather than copied
-// off the on-screen canvas, so a screenshot taken while zoomed out is still crisp.
+// Captures are rendered fresh at their own scale (3 unless the user picks
+// another) rather than copied off the on-screen canvas, so a screenshot taken
+// while zoomed out is still crisp.
 const CAPTURE_SCALE = 3;
 
 interface Box {
@@ -63,10 +64,11 @@ export async function capturePage(
   rotation: number,
   area: CaptureArea | null,
   overlays: CaptureOverlays | null = null,
+  scale = CAPTURE_SCALE,
 ): Promise<Blob> {
   const pageCanvas = document.createElement('canvas');
-  await renderPageToCanvas(pdfDoc, pageNumber, pageCanvas, CAPTURE_SCALE, rotation);
-  if (overlays) await drawOverlays(pageCanvas, overlays);
+  await renderPageToCanvas(pdfDoc, pageNumber, pageCanvas, scale, rotation);
+  if (overlays) await drawOverlays(pageCanvas, overlays, scale);
 
   let output = pageCanvas;
   if (area) {
@@ -89,12 +91,12 @@ export async function capturePage(
 
 const LINE_HEIGHT = 1.2; // matches the editor's text boxes
 
-async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays): Promise<void> {
+async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays, scale: number): Promise<void> {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
   ctx.save();
   // Everything below is drawn in the editor's own on-screen pixel units.
-  ctx.scale(CAPTURE_SCALE / overlays.renderScale, CAPTURE_SCALE / overlays.renderScale);
+  ctx.scale(scale / overlays.renderScale, scale / overlays.renderScale);
 
   // Highlights are multiplied over the page like a highlighter, so the text stays readable.
   for (const m of overlays.markups) {

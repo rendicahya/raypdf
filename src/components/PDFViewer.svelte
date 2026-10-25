@@ -4,7 +4,7 @@
   import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
-  import { capturePage, copyImageToClipboard, type CaptureOverlays } from '../lib/pdf/screenshot';
+  import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
   import {
@@ -21,7 +21,13 @@
   import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
-  import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
+  import {
+    screenshotToolMode,
+    screenshotResult,
+    screenshotScale,
+    screenshotIncludeEdits,
+    screenshotDestination,
+  } from '../stores/screenshotTool';
   import {
     editorStore,
     activeDocument,
@@ -1054,11 +1060,15 @@
     const area = isArea
       ? { x: box.x / rect.width, y: box.y / rect.height, width: box.width / rect.width, height: box.height / rect.height }
       : null;
-    captureToClipboard(area);
+    capturePageImage(area, $screenshotDestination);
   }
 
-  /** Captures the page (or an area of it, as fractions) to the clipboard, reporting through the screenshot toast. */
-  function captureToClipboard(area: Parameters<typeof capturePage>[3]) {
+  /**
+   * Captures the page (or an area of it, as fractions) at the Screenshot
+   * tool's chosen scale, then copies it to the clipboard (reporting through
+   * the screenshot toast) or downloads it straight away.
+   */
+  function capturePageImage(area: Parameters<typeof capturePage>[3], destination: 'clipboard' | 'download') {
     const doc = $activeDocument;
     if (!doc || !pdfDoc || capturing) return;
 
@@ -1066,7 +1076,24 @@
     const fileName = `${baseName}_page${doc.pageNumber}${area ? '_area' : ''}.png`;
 
     capturing = true;
-    const png = captureWithEdits(pdfDoc, doc, area);
+    const png = $screenshotIncludeEdits
+      ? captureWithEdits(pdfDoc, doc, area)
+      : capturePage(pdfDoc, doc.pageNumber, doc.rotation, area, null, $screenshotScale);
+    if (destination === 'download') {
+      png
+        .then((blob) => {
+          downloadBlob(blob, fileName);
+          screenshotResult.set(null);
+        })
+        .catch((err) =>
+          screenshotResult.set({
+            ok: false,
+            message: err instanceof Error ? err.message : 'Failed to take the screenshot',
+          }),
+        )
+        .finally(() => (capturing = false));
+      return;
+    }
     // Started synchronously, while the click still counts as a user gesture.
     const copied = copyImageToClipboard(png);
     Promise.all([png, copied])
@@ -1126,7 +1153,7 @@
       signatures,
       texts: textsOnCurrentPage,
     };
-    return capturePage(loaded, doc.pageNumber, doc.rotation, area, overlays);
+    return capturePage(loaded, doc.pageNumber, doc.rotation, area, overlays, $screenshotScale);
   }
 
   // Move an existing box. Looks the box up fresh by id on every step (rather
@@ -1709,7 +1736,7 @@
         icon: MENU_ICONS.camera,
         separatorBefore: true,
         disabled: capturing,
-        onSelect: () => captureToClipboard(null),
+        onSelect: () => capturePageImage(null, 'clipboard'),
       },
     ];
   }

@@ -2,7 +2,7 @@
   import UploadCard from './components/UploadCard.svelte';
   import DocumentThumbnail from './components/DocumentThumbnail.svelte';
   import PDFViewer from './components/PDFViewer.svelte';
-  import SignaturePanel from './components/SignaturePanel.svelte';
+  import ToolPanel from './components/ToolPanel.svelte';
   import PageSidebar from './components/PageSidebar.svelte';
   import FloatingControls from './components/FloatingControls.svelte';
   import Toolbar from './components/Toolbar.svelte';
@@ -21,6 +21,8 @@
   import { screenshotToolMode } from './stores/screenshotTool';
   import { textSelectMode } from './stores/textSelect';
   import { signatureToolMode } from './stores/signatureTool';
+  import { activePanelTool, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
+  import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf } from './lib/pdf/docCache';
 
@@ -52,6 +54,26 @@
   });
 
   const readyForEditor = $derived(editor.documents.length > 0 && choice === 'sign');
+
+  // The bottom toolbar is centred on the whole area right of the page
+  // sidebar, tool panel included, so opening or closing the panel doesn't
+  // move it. Only when the panel is open and the toolbar is too wide to stay
+  // centred without running into it does it slide left, just enough.
+  const TOOLBAR_GUTTER = 16;
+  let editorAreaWidth = $state(0);
+  let toolbarWidth = $state(0);
+  const toolbarAreaLeft = $derived($pageSidebarOpen ? $pageSidebarWidth : 0);
+  const toolbarAreaRight = $derived(editorAreaWidth - ($shownPanelTool ? TOOL_PANEL_WIDTH : 0));
+  const toolbarMaxWidth = $derived(Math.max(0, toolbarAreaRight - toolbarAreaLeft - 2 * TOOLBAR_GUTTER));
+  const toolbarLeft = $derived(
+    Math.max(
+      toolbarAreaLeft + TOOLBAR_GUTTER,
+      Math.min(
+        (toolbarAreaLeft + editorAreaWidth - toolbarWidth) / 2,
+        toolbarAreaRight - TOOLBAR_GUTTER - toolbarWidth,
+      ),
+    ),
+  );
 
   function onPdfFiles(files: File[]) {
     const { unique } = dedupeFiles(files);
@@ -437,7 +459,7 @@
     </div>
   {:else if active}
     <Toolbar />
-    <div class="relative flex flex-1 overflow-hidden">
+    <div class="relative flex flex-1 overflow-hidden" bind:clientWidth={editorAreaWidth}>
       <PageSidebar />
       <button
         type="button"
@@ -468,17 +490,49 @@
             <PDFViewer />
           {/key}
         </div>
-        <FloatingControls />
       </div>
-      <!-- Only while the Signature tool is on (FloatingControls). -->
-      {#if $signatureToolMode}
-        <aside class="flex w-72 shrink-0 flex-col border-l border-neutral-200 bg-white
-          dark:border-neutral-800 dark:bg-neutral-950">
+      <!-- The active tool's options (stores/toolPanel.ts). -->
+      {#if $shownPanelTool}
+        <aside class="flex shrink-0 flex-col border-l border-neutral-200 bg-white
+          dark:border-neutral-800 dark:bg-neutral-950" style:width="{TOOL_PANEL_WIDTH}px">
           <div class="flex-1 overflow-y-auto p-4">
-            <SignaturePanel onClose={() => signatureToolMode.set(false)} />
+            <ToolPanel tool={$shownPanelTool} />
           </div>
         </aside>
       {/if}
+      {#if $activePanelTool && $activePanelTool !== 'signature'}
+        <button
+          type="button"
+          aria-label={$toolPanelOpen ? 'Hide tool options' : 'Show tool options'}
+          use:tooltip={$toolPanelOpen ? 'Hide tool options' : 'Show tool options'}
+          class="absolute top-1/2 z-20 flex h-10 w-4 -translate-y-1/2 items-center justify-center rounded-l-md
+            border border-r-0 border-neutral-200 bg-white text-neutral-400 shadow-sm hover:bg-neutral-100
+            hover:text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500
+            dark:hover:bg-neutral-800"
+          style:right={$toolPanelOpen ? `${TOOL_PANEL_WIDTH}px` : '0'}
+          onclick={() => toolPanelOpen.update((open) => !open)}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            class="h-3.5 w-3.5 transition-transform"
+            class:rotate-180={!$toolPanelOpen}
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      {/if}
+      <!-- Positioned by toolbarLeft (see the script): it doesn't move when the tool panel opens. -->
+      <div
+        class="pointer-events-none absolute bottom-4 z-20 w-max"
+        style:left="{toolbarLeft}px"
+        style:max-width="{toolbarMaxWidth}px"
+        bind:offsetWidth={toolbarWidth}
+      >
+        <FloatingControls />
+      </div>
     </div>
   {/if}
 </main>

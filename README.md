@@ -53,13 +53,13 @@ It is **not** a replacement for PKI-based digital signatures.
   - Tools (`Esc` returns to Move):
     - **Move**: drag placed items around; drag the page background to pan. Resting the pointer on text switches to text selection, which stays on while the pointer moves over text and turns back into the hand once it leaves.
     - **Signature**: opens the signature panel on the right (your signatures, placement helpers, watermark). The page still behaves like Move, so placed signatures can be dragged and resized. Turning the tool off, or `Esc`, closes the panel.
-    - **Redact**: draw boxes; the content underneath is permanently removed from the exported PDF.
-    - **Add Text**: click to place a text box (font, size, style, color, spacing, alignment).
-    - **Comment**: click to leave a sticky note, exported as a real PDF annotation.
+    - **Redact**: draw boxes; the content underneath is permanently removed from the exported PDF. Its options list the pages that have redactions (click to jump) and, when several PDFs are open, **Apply to All Documents**, which makes every other open document's redactions match this one.
+    - **Add Text**: click to place a text box (font, size, style, color, spacing, alignment). Its options set the style for new text boxes, with a live sample.
+    - **Comment**: click to leave a sticky note, exported as a real PDF annotation. Its options list every comment in the document; click one to jump to its page, or delete it.
     - **Zoom**: click to zoom in at that spot, right-click to zoom out.
-    - **Select**: select and copy the PDF's real text. After selecting, a small toolbar appears below the selection to **highlight, underline, or strike through** the text permanently, in one of five colors. Each is exported as a real PDF markup annotation (Highlight, Underline, StrikeOut). Click a markup to recolor it or remove it (also `Delete`).
-    - **Screenshot**: click a page to capture all of it, or drag a rectangle to capture an area. The image is copied to the clipboard, with a **Save PNG** option. Captures include placed signatures (with their watermark), text, highlights, redactions, and form values, but not comments, which are notes rather than page content.
-  - **Apply redaction to all documents** (when several PDFs are open).
+    - **Select**: select and copy the PDF's real text. After selecting, a small toolbar appears below the selection to **highlight, underline, or strike through** the text permanently, in one of five colors. Each is exported as a real PDF markup annotation (Highlight, Underline, StrikeOut). Click a markup to recolor it or remove it (also `Delete`). Its options pick the color for the next markup.
+    - **Screenshot**: click a page to capture all of it, or drag a rectangle to capture an area. By default the image is copied to the clipboard, with a **Save PNG** option. Captures include placed signatures (with their watermark), text, highlights, redactions, and form values, but not comments, which are notes rather than page content. Its options choose copy or download, the resolution (1× to 4×), and whether to include what you've added.
+  - **Tool options panel**: Redact, Add Text, Comment, Select, and Screenshot show their options in a panel on the right while they're on. Its × (or the tab on its edge) hides it without turning the tool off, and the choice is remembered. The bottom toolbar stays where it is when the panel opens.
 - Dark mode (follows the OS by default) and fullscreen.
 
 ### Placing the signature

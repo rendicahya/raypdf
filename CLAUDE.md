@@ -120,7 +120,9 @@ Left sidebar: page thumbnails, rendered lazily as they scroll into view. Click t
 
 The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 
-Right sidebar (SignaturePanel): shown only while the Signature tool is on (`stores/signatureTool.ts`). It holds the saved signatures, placement helpers (Find Signature Spot, Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls. On the canvas the Signature tool behaves like Move; click-to-place is its sub-mode and turns off with it.
+Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Find Signature Spot, Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. Redact, Add Text, Comment, Select, and Screenshot have their own panels in `components/toolOptions/`; their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
+
+The bottom toolbar is positioned by App.svelte, centred on the area right of the page sidebar including the panel, so it doesn't move when the panel opens (it only slides left if it would otherwise overlap the panel).
 
 Save / Print (ExportButton) sit at the right end of the top Toolbar; the chevron menu holds the other save options and the export toggles.
 
@@ -234,7 +236,7 @@ components/
 - PDFViewer, PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
-- SignaturePanel
+- ToolPanel, SignaturePanel, toolOptions/ (PanelHeader, RedactOptions, TextOptions, CommentOptions, SelectOptions, ScreenshotOptions)
 - ExportButton, MergeOrderDialog, StartOverButton
 - VerifyResults (the Verify choice on the front page; checks every added PDF in place)
 - ThemeToggle, FullscreenToggle, UpdateToast
