@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { editorStore, activeDocument } from '../../stores/editor';
+  import { editorStore, activeDocument, type RedactionBox } from '../../stores/editor';
   import { getCachedPdf } from '../../lib/pdf/docCache';
   import { boxToRatio, boxFromRatioForDocument } from '../../lib/pdf/placement';
+  import { tooltip } from '../../lib/utils/tooltip';
   import PanelHeader from './PanelHeader.svelte';
 
   interface Props {
@@ -11,14 +12,66 @@
   let { onClose }: Props = $props();
 
   const redactions = $derived($activeDocument?.redactions ?? []);
+  const pageCount = $derived($activeDocument?.pageCount ?? 1);
   const otherDocumentCount = $derived($editorStore.documents.length - 1);
 
-  // Boxes counted per page, in page order, for the jump list.
+  // Boxes grouped by page, in page order, each page's boxes top to bottom.
   const pages = $derived(
     Array.from(
-      redactions.reduce((counts, box) => counts.set(box.page, (counts.get(box.page) ?? 0) + 1), new Map<number, number>()),
-    ).sort(([a], [b]) => a - b),
+      redactions.reduce(
+        (groups, box) => groups.set(box.page, [...(groups.get(box.page) ?? []), box]),
+        new Map<number, RedactionBox[]>(),
+      ),
+    )
+      .sort(([a], [b]) => a - b)
+      .map(([page, boxes]) => ({ page, boxes: boxes.sort((a, b) => a.y - b.y || a.x - b.x) })),
   );
+
+  let copying = $state(false);
+  let copyMessage: string | null = $state(null);
+  let copyMessageTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  // Copies one box to the same spot (as a fraction of the page, so pages of
+  // another size still get it in the matching place) on every other page.
+  // Pages that already have a box there are skipped, so pressing it twice
+  // doesn't stack duplicates.
+  async function copyToAllPages(box: RedactionBox) {
+    const doc = $activeDocument;
+    if (!doc || copying) return;
+    copying = true;
+    clearTimeout(copyMessageTimeout);
+    try {
+      const pdf = await getCachedPdf(doc.id, doc.file);
+      const scale = $editorStore.renderScale;
+      const ratio = await boxToRatio(pdf, box.page, scale, doc.rotation, box);
+      const targets = Array.from({ length: doc.pageCount }, (_, i) => i + 1).filter((p) => p !== box.page);
+      const candidates = await Promise.all(
+        targets.map((page) => boxFromRatioForDocument(pdf, page, scale, doc.rotation, ratio)),
+      );
+      const near = (a: number, b: number) => Math.abs(a - b) < 1;
+      const added = candidates.filter(
+        (c) =>
+          !doc.redactions.some(
+            (r) =>
+              r.page === c.page && near(r.x, c.x) && near(r.y, c.y) && near(r.width, c.width) && near(r.height, c.height),
+          ),
+      );
+      editorStore.addRedactions(added);
+      copyMessage =
+        added.length > 0
+          ? `Copied to ${added.length} page${added.length > 1 ? 's' : ''}`
+          : 'Every page already has this box';
+    } catch (e) {
+      copyMessage = e instanceof Error ? e.message : 'Failed to copy the box';
+    } finally {
+      copying = false;
+      copyMessageTimeout = setTimeout(() => (copyMessage = null), 2500);
+    }
+  }
+
+  const iconButtonClass =
+    'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors ' +
+    'disabled:pointer-events-none disabled:opacity-40';
 
   let applying = $state(false);
   let applyError: string | null = $state(null);
@@ -80,6 +133,16 @@
   }
 </script>
 
+{#snippet trashIcon()}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"
+    />
+  </svg>
+{/snippet}
+
 <div>
   <PanelHeader title="Redact" {onClose} />
 
@@ -92,22 +155,74 @@
     {#if pages.length === 0}
       <p class="mt-1 text-xs text-neutral-400">No redactions yet.</p>
     {:else}
-      <ul class="mt-1 space-y-0.5">
-        {#each pages as [page, count] (page)}
+      <ul class="mt-1 space-y-1">
+        {#each pages as { page, boxes } (page)}
           <li>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs
-                text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              class:font-semibold={page === $activeDocument?.pageNumber}
-              onclick={() => editorStore.goToPage(page)}
-            >
-              <span>Page {page}</span>
-              <span class="text-neutral-400">{count} box{count > 1 ? 'es' : ''}</span>
-            </button>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 items-center justify-between rounded-md px-2 py-1 text-left text-xs
+                  text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                class:font-semibold={page === $activeDocument?.pageNumber}
+                onclick={() => editorStore.goToPage(page)}
+              >
+                <span>Page {page}</span>
+                <span class="text-neutral-400">{boxes.length} box{boxes.length > 1 ? 'es' : ''}</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Remove the redactions on page {page}"
+                use:tooltip={`Remove the redactions on page ${page}`}
+                class={iconButtonClass + ' hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/50'}
+                onclick={() => editorStore.removeRedactionsOnPage(page)}
+              >
+                {@render trashIcon()}
+              </button>
+            </div>
+            <ul class="ml-3 border-l border-neutral-200 pl-2 dark:border-neutral-700">
+              {#each boxes as box, i (box.id)}
+                <li class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="min-w-0 flex-1 rounded-md px-2 py-0.5 text-left text-xs text-neutral-500
+                      hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                    onclick={() => editorStore.goToPage(page)}
+                  >
+                    Box {i + 1}
+                  </button>
+                  {#if pageCount > 1}
+                    <button
+                      type="button"
+                      aria-label="Copy this box to every other page"
+                      use:tooltip={'Copy to the same spot on every other page'}
+                      class={iconButtonClass + ' hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'}
+                      disabled={copying}
+                      onclick={() => copyToAllPages(box)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                        <rect x="8" y="8" width="12" height="12" rx="2" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+                      </svg>
+                    </button>
+                  {/if}
+                  <button
+                    type="button"
+                    aria-label="Remove this box"
+                    use:tooltip={'Remove this box'}
+                    class={iconButtonClass + ' hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/50'}
+                    onclick={() => editorStore.removeRedaction(box.id)}
+                  >
+                    {@render trashIcon()}
+                  </button>
+                </li>
+              {/each}
+            </ul>
           </li>
         {/each}
       </ul>
+      {#if copyMessage}
+        <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{copyMessage}</p>
+      {/if}
     {/if}
   </div>
 

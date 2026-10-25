@@ -639,6 +639,31 @@ function createEditorStore() {
     );
   }
 
+  /** Adds several boxes to the active document as one undo step (e.g. copying a box to every page). */
+  function addRedactions(boxes: Omit<RedactionBox, 'id'>[]) {
+    if (boxes.length === 0) return;
+    recordActiveHistory(`add-redactions-${crypto.randomUUID()}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        redactions: [...doc.redactions, ...boxes.map((box) => ({ ...box, id: crypto.randomUUID() }))],
+        exported: false,
+      })),
+    );
+  }
+
+  /** Removes every box on one page of the active document, as one undo step. */
+  function removeRedactionsOnPage(page: number) {
+    recordActiveHistory(`remove-page-redactions-${page}-${Date.now()}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({
+        ...doc,
+        redactions: doc.redactions.filter((box) => box.page !== page),
+        exported: false,
+      })),
+    );
+  }
+
   /** Replaces an arbitrary document's entire redaction set (not just the active one) — used by "Apply to All" to make every other document match the active one exactly. */
   function setRedactionsForDocument(id: string, boxes: Omit<RedactionBox, 'id'>[]) {
     update((state) => ({
@@ -1140,6 +1165,8 @@ function createEditorStore() {
     addRedaction,
     updateRedaction,
     removeRedaction,
+    addRedactions,
+    removeRedactionsOnPage,
     setRedactionsForDocument,
     addText,
     updateText,

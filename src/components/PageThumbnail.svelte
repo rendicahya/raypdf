@@ -15,9 +15,27 @@
     scale: number;
     /** Gets the click, so Ctrl/Shift can extend the selection instead of just navigating. */
     onSelect: (e: MouseEvent) => void;
+    /** This page's redaction boxes, in editor pixels at `renderScale`, drawn black over the thumbnail. */
+    redactions: { x: number; y: number; width: number; height: number }[];
+    renderScale: number;
   }
 
-  let { pdfDoc, pageNumber, rotation, isActive, isSelected, placeholderAspect, scale, onSelect }: Props = $props();
+  let {
+    pdfDoc,
+    pageNumber,
+    rotation,
+    isActive,
+    isSelected,
+    placeholderAspect,
+    scale,
+    onSelect,
+    redactions,
+    renderScale,
+  }: Props = $props();
+
+  // The page's size in editor pixels, worked out from the last finished
+  // render, so the boxes can be placed as percentages of the thumbnail.
+  let pageSize: { width: number; height: number } | null = $state(null);
 
   let buttonEl: HTMLButtonElement;
   let canvasEl: HTMLCanvasElement;
@@ -56,6 +74,7 @@
       .then(() => {
         rendered = true;
         error = false;
+        pageSize = { width: canvasEl.width / s, height: canvasEl.height / s };
       })
       .catch(() => {
         drawn = null;
@@ -82,11 +101,26 @@
   aria-pressed={isSelected}
   onclick={onSelect}
 >
-  <canvas
-    bind:this={canvasEl}
-    class="w-full rounded bg-white shadow-sm"
-    style:aspect-ratio={rendered ? null : String(placeholderAspect)}
-  ></canvas>
+  <div class="relative w-full overflow-hidden rounded">
+    <canvas
+      bind:this={canvasEl}
+      class="block w-full rounded bg-white shadow-sm"
+      style:aspect-ratio={rendered ? null : String(placeholderAspect)}
+    ></canvas>
+    {#if rendered && pageSize}
+      {@const w = pageSize.width * renderScale}
+      {@const h = pageSize.height * renderScale}
+      {#each redactions as box}
+        <div
+          class="pointer-events-none absolute bg-black"
+          style:left="{(box.x / w) * 100}%"
+          style:top="{(box.y / h) * 100}%"
+          style:width="{(box.width / w) * 100}%"
+          style:height="{(box.height / h) * 100}%"
+        ></div>
+      {/each}
+    {/if}
+  </div>
   {#if error}
     <span class="text-[10px] text-red-500">Failed to render</span>
   {/if}

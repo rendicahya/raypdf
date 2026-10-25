@@ -14,6 +14,7 @@
   import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
   import { exportSignedPdf, downloadSelectedPagesPdf } from '../lib/pdf/export';
+  import { downloadPagesAsImages, type PageImageFormat } from '../lib/pdf/pageImages';
   import { tooltip } from '../lib/utils/tooltip';
   import PageThumbnail from './PageThumbnail.svelte';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
@@ -63,6 +64,15 @@
   );
   const activePageNumber = $derived($activeDocument?.pageNumber ?? 1);
   const activeRotation = $derived($activeDocument?.rotation ?? 0);
+
+  // Each page's redaction boxes, so the thumbnails show them blacked out.
+  const NO_BOXES: never[] = [];
+  const redactionsByPage = $derived(
+    ($activeDocument?.redactions ?? []).reduce(
+      (groups, box) => groups.set(box.page, [...(groups.get(box.page) ?? []), box]),
+      new Map<number, { x: number; y: number; width: number; height: number }[]>(),
+    ),
+  );
 
   // Space reserved for thumbnails that haven't rendered yet (see PageThumbnail),
   // using the first page's shape — most documents use one page size throughout.
@@ -170,8 +180,9 @@
     runPageEdit(() => editorStore.rotatePages(pages, delta), 'Failed to rotate the pages');
   }
 
-  // Saves just the given pages, with everything placed on them, as one PDF.
-  async function exportPages(pages: number[]) {
+  // Saves just the given pages, with everything placed on them, as one PDF,
+  // or as images (one per page, zipped when there are several).
+  async function exportPages(pages: number[], format: 'pdf' | PageImageFormat = 'pdf') {
     const doc = $activeDocument;
     if (!doc || pages.length === 0 || busy) return;
     const signatureFor = signatureStore.lookup();
@@ -190,14 +201,17 @@
         stripScripts: $stripEmbeddedScripts,
         redactions: doc.redactions,
         texts: doc.texts,
-        comments: doc.comments,
+        // Comments are notes, not page content, so images leave them out (like screenshots).
+        comments: format === 'pdf' ? doc.comments : [],
         highlights: doc.highlights,
         formValues: doc.formValues,
         onlyPages: pages,
-        securePdf: $securePdf,
+        securePdf: format === 'pdf' && $securePdf,
       });
-      downloadSelectedPagesPdf(bytes, doc.file.name, pages);
-      editorStore.markExported();
+      if (format === 'pdf') downloadSelectedPagesPdf(bytes, doc.file.name, pages);
+      else await downloadPagesAsImages(bytes, doc.file.name, pages, format);
+      // An image isn't a saved copy of the PDF, so the tab still warns before closing.
+      if (format === 'pdf') editorStore.markExported();
     } catch (err) {
       pageError = err instanceof Error ? err.message : 'Failed to export the pages';
     } finally {
@@ -292,10 +306,14 @@
             },
           ]),
       {
-        label: many ? `Save ${count} as PDF` : 'Save page as PDF',
+        label: many ? `Save ${count} as` : 'Save page as',
         icon: MENU_ICONS.save,
         separatorBefore: true,
-        onSelect: () => exportPages(pages),
+        children: [
+          { label: 'PDF', onSelect: () => exportPages(pages, 'pdf') },
+          { label: many ? 'PNG (ZIP)' : 'PNG', onSelect: () => exportPages(pages, 'png') },
+          { label: many ? 'JPG (ZIP)' : 'JPG', onSelect: () => exportPages(pages, 'jpg') },
+        ],
       },
       many
         ? { label: 'Clear selection', icon: MENU_ICONS.clear, hint: 'Esc', separatorBefore: true, onSelect: clearSelection }
@@ -528,6 +546,8 @@
             {placeholderAspect}
             scale={thumbScale}
             onSelect={(e) => onThumbnailClick(e, pageNumber)}
+            redactions={redactionsByPage.get(pageNumber) ?? NO_BOXES}
+            renderScale={$editorStore.renderScale}
           />
 
           <!-- Selection checkbox: on hover, and on every page once a selection exists. -->

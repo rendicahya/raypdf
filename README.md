@@ -28,7 +28,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Getting started
 
-- The front page shows the upload area at the top and a quick tour of every feature below it, led by the protected signature.
+- The front page shows the upload area at the top and a quick tour of every feature below it, led by the protected signature (with an illustration of a copied signature giving itself away).
 - Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
 - Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
@@ -37,10 +37,10 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Editor
 
 - **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Drag tabs to reorder them (or use Ctrl+Shift+←/→, or Move left/right in the tab menu). Add more PDFs any time.
-- **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page, rendered as they scroll into view so long documents open quickly. Click to jump; **drag and drop to reorder pages**.
+- **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page, rendered as they scroll into view so long documents open quickly. Redaction boxes show on the thumbnails as you draw them. Click to jump; **drag and drop to reorder pages**.
 - **Page tools** on each thumbnail (on hover, and always on the current page): rotate that page left/right, duplicate it, insert a blank page after it, or delete it. These change the PDF itself; signatures, redactions, text, highlights, and comments follow their page, and every edit can be undone.
 - **Select several pages** with Ctrl/⌘-click, Shift-click for a range, the checkbox on each thumbnail, or Ctrl+A. A bar at the top of the sidebar then rotates, saves (as one PDF with just those pages), or deletes them all at once; `Delete` and `Esc` work too.
-- **Right-click a thumbnail** for a menu with the same actions: on the whole selection if the page is part of it, otherwise on just that page (rotate, duplicate, insert a blank page after, save as PDF, select, delete).
+- **Right-click a thumbnail** for a menu with the same actions: on the whole selection if the page is part of it, otherwise on just that page (rotate, duplicate, insert a blank page after, save as PDF, PNG, or JPG, select, delete). Images include everything added to the page except comments; several pages download as a ZIP.
 - **Resize the sidebar** by dragging its right edge (or focusing it and using the arrow keys); double-click the edge to reset. The width is remembered, and thumbnails render sharper as it grows.
 - **Right-click the document** for a menu that fits what's under the pointer: on the page, place the signature, add text or a comment right there, zoom, rotate the page, or copy it as an image; on selected text, copy, highlight, underline, or strike it through; on a markup, change its color or remove it; on a placed signature, redaction, text box, or comment, edit or delete it.
 - **Find in the document** with Ctrl+F (⌘F) or the search button: matches on every page are counted, highlighted on the page, and stepped through with Enter / Shift+Enter. Matching ignores case and treats line breaks as spaces.
@@ -53,7 +53,7 @@ It is **not** a replacement for PKI-based digital signatures.
   - Tools (`Esc` returns to Move):
     - **Move**: drag placed items around; drag the page background to pan. Resting the pointer on text switches to text selection, which stays on while the pointer moves over text and turns back into the hand once it leaves.
     - **Signature**: opens the signature panel on the right (your signatures, placement helpers, watermark). The page still behaves like Move, so placed signatures can be dragged and resized. Turning the tool off, or `Esc`, closes the panel.
-    - **Redact**: draw boxes; the content underneath is permanently removed from the exported PDF. Its options list the pages that have redactions (click to jump) and, when several PDFs are open, **Apply to All Documents**, which makes every other open document's redactions match this one.
+    - **Redact**: draw boxes; the content underneath is permanently removed from the exported PDF. Its options list every box by page: click to jump, remove one box or a whole page's, or copy a box to the same spot on every other page. When several PDFs are open, **Apply to All Documents** makes every other open document's redactions match this one.
     - **Add Text**: click to place a text box (font, size, style, color, spacing, alignment). Its options set the style for new text boxes, with a live sample.
     - **Comment**: click to leave a sticky note, exported as a real PDF annotation. Its options list every comment in the document; click one to jump to its page, or delete it.
     - **Zoom**: click to zoom in at that spot, right-click to zoom out.
@@ -81,7 +81,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Export
 
-- **Save** and **Print** sit at the right end of the top bar. The arrow next to Save opens **Save This Page Only**, **Save Each Page as Separate PDF (ZIP)**, **Save All (ZIP)**, **Merge** (choose the order), and the export options below.
+- **Save** and **Print** sit at the right end of the top bar. The arrow next to Save opens **Save this page only**, **Save each page as a separate PDF (ZIP)**, **Save all (ZIP)**, **Save all as one PDF** (choose the order), and the export options below.
 - Exported as `original_filename_signed.pdf`.
 - Optional: strip embedded JavaScript carried over from the source PDF, and lock text/content copying.
 - Each export embeds a small RayPDF record (document ID, name, export time, watermark text) in the PDF's metadata.

@@ -347,7 +347,7 @@
             onExportPageOnly();
           }}
         >
-          {exportingPageOnly ? 'Saving…' : `Save This Page Only (${$activeDocument?.pageNumber ?? 1})`}
+          {exportingPageOnly ? 'Saving…' : `Save this page only (${$activeDocument?.pageNumber ?? 1})`}
         </button>
 
         <button
@@ -362,7 +362,7 @@
             onExportPagesZip();
           }}
         >
-          {exportingPagesZip ? 'Zipping…' : 'Save Each Page as Separate PDF (ZIP)'}
+          {exportingPagesZip ? 'Zipping…' : 'Save each page as a separate PDF (ZIP)'}
         </button>
       {/if}
 
@@ -379,7 +379,7 @@
             onExportAll();
           }}
         >
-          {exportingAll ? 'Zipping…' : 'Save All (ZIP)'}
+          {exportingAll ? 'Zipping…' : 'Save all (ZIP)'}
         </button>
 
         <button
@@ -391,7 +391,7 @@
           disabled={merging}
           onclick={onOpenMergeDialog}
         >
-          Save All as One PDF
+          Save all as one PDF
         </button>
       {/if}
 

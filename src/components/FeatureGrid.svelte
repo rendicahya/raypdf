@@ -1,4 +1,6 @@
 <script lang="ts">
+  import WatermarkIllustration from './WatermarkIllustration.svelte';
+
   // The front page's feature showcase. Purely informational: everything here
   // happens in the editor (or the Verify choice) once a PDF is added.
 
@@ -73,13 +75,16 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 13c1-2 2-2 3 0s2 2 3 0" />
       </svg>
     </div>
-    <div>
+    <div class="flex-1">
       <h2 class="text-lg font-semibold">Signatures that are hard to reuse</h2>
       <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
         RayPDF weaves a watermark into your signature image, such as your name, the document name, and the date.
         A signature copied out of one PDF carries that document's details with it, so it's harder to paste into
         another.
       </p>
+    </div>
+    <div class="w-full max-w-sm shrink-0 self-center sm:w-72 lg:w-80">
+      <WatermarkIllustration />
     </div>
   </div>
 
