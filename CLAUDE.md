@@ -85,12 +85,9 @@ Toolbar buttons are icon-only, with instant tooltips (`lib/utils/tooltip.ts`) in
 
 ## First Visit
 
-Display two large upload cards.
+Display a large Add PDF upload card (one or more files), with the feature showcase (`FeatureGrid`) below it; the watermarked signature leads as a wide card. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
 
-- Upload PDF (one or more)
-- Upload Signature
-
-Both support:
+The upload card supports:
 
 - Drag & Drop
 - Click to Browse
@@ -233,7 +230,7 @@ Users should never need to upload their signature every time they use RayPDF.
 
 components/
 
-- UploadCard, SignatureCreator, SearchBar
+- UploadCard, FeatureGrid (front-page feature showcase), SignatureCreator, SearchBar
 - PDFViewer, PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)

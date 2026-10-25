@@ -9,6 +9,7 @@
   import ThemeToggle from './components/ThemeToggle.svelte';
   import UpdateToast from './components/UpdateToast.svelte';
   import VerifyResults from './components/VerifyResults.svelte';
+  import FeatureGrid from './components/FeatureGrid.svelte';
   import SearchBar from './components/SearchBar.svelte';
   import { search, openSearch, closeSearch } from './stores/search';
   import { editorStore, activeDocument } from './stores/editor';
@@ -36,7 +37,7 @@
 
   // Step 2 asks what to do with the added PDFs rather than jumping straight
   // into the editor, so the user can review the batch (remove one, add more)
-  // and pick between signing (the editor) and verifying (checked in place).
+  // and pick between the editor ('sign') and verifying (checked in place).
   let choice: 'sign' | 'verify' | null = $state(null);
 
   $effect(() => {
@@ -286,7 +287,7 @@
         bg-blue-200/50 blur-3xl dark:bg-blue-900/25"></div>
     </div>
 
-    <div class="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-8 px-6 py-16">
+    <div class="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center gap-8 px-6 py-16">
       <div class="text-center">
         <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600
           text-white shadow-lg shadow-blue-600/25">
@@ -297,8 +298,8 @@
           </svg>
         </div>
         <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">RayPDF</h1>
-        <p class="mx-auto mt-3 max-w-sm text-neutral-500 dark:text-neutral-400">
-          Add a PDF, then sign it or verify it, entirely in your browser.
+        <p class="mx-auto mt-3 max-w-md text-neutral-500 dark:text-neutral-400">
+          Sign, fill, mark up, and redact PDFs, entirely in your browser.
         </p>
         <div class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50
           px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950
@@ -324,6 +325,9 @@
             onFiles={onPdfFiles}
           />
         </div>
+        <div class="mt-4 w-full">
+          <FeatureGrid />
+        </div>
       {:else if choice === 'verify'}
         <!-- Verify: every added PDF is checked in place, no editor needed. -->
         <div class="flex w-full max-w-md flex-col gap-4">
@@ -342,7 +346,7 @@
               class="text-blue-600 hover:underline dark:text-blue-400"
               onclick={() => (choice = 'sign')}
             >
-              Sign instead →
+              Open in editor instead →
             </button>
           </div>
         </div>
@@ -409,7 +413,7 @@
                   d="M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
               </svg>
-              <span class="font-semibold">Sign</span>
+              <span class="font-semibold">Open in editor</span>
               <span class="text-xs text-blue-100">Sign, fill, mark up, or redact</span>
             </button>
             <button
