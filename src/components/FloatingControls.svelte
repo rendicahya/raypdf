@@ -380,6 +380,43 @@
       fitting = false;
     }
   }
+
+  // The zoom percentage opens a menu of common levels and the fit options.
+  const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200, 250];
+
+  let zoomMenu: { x: number; y: number } | null = $state(null);
+  const zoomMenuItems: ContextMenuItem[] = $derived([
+    ...ZOOM_LEVELS.map((level) => ({
+      label: `${level}%`,
+      icon: level === zoomPercent ? MENU_ICONS.check : undefined,
+      onSelect: () => editorStore.setRenderScale((level / 100) * DEFAULT_RENDER_SCALE),
+    })),
+    {
+      label: 'Fit page width',
+      icon: MENU_ICONS.fitWidth,
+      separatorBefore: true,
+      disabled: fitting,
+      onSelect: () => fitTo('width'),
+    },
+    { label: 'Fit whole page', icon: MENU_ICONS.fitPage, disabled: fitting, onSelect: () => fitTo('page') },
+  ]);
+
+  // Same reopening guard as the Recognize text menu.
+  let zoomMenuClosedAt = 0;
+
+  function closeZoomMenu() {
+    zoomMenu = null;
+    zoomMenuClosedAt = performance.now();
+  }
+
+  function toggleZoomMenu(e: MouseEvent) {
+    if (zoomMenu || performance.now() - zoomMenuClosedAt < 400) {
+      zoomMenu = null;
+      return;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    zoomMenu = { x: rect.left, y: rect.top - 4 };
+  }
 </script>
 
 <!-- Placed by App.svelte, which keeps it still when the tool panel opens. -->
@@ -515,14 +552,19 @@
       </button>
       <button
         type="button"
-        aria-label="Reset zoom"
-        use:tooltip={'Reset zoom'}
+        aria-label="Zoom level"
+        aria-haspopup="menu"
+        aria-expanded={zoomMenu !== null}
+        use:tooltip={'Zoom level and fit'}
         class="w-12 rounded-full px-1 py-0.5 text-center text-xs tabular-nums text-neutral-500 hover:bg-neutral-100
           dark:text-neutral-400 dark:hover:bg-neutral-800"
-        onclick={() => editorStore.resetZoom()}
+        onclick={toggleZoomMenu}
       >
         {zoomPercent}%
       </button>
+      {#if zoomMenu}
+        <ContextMenu x={zoomMenu.x} y={zoomMenu.y} items={zoomMenuItems} onClose={closeZoomMenu} above />
+      {/if}
       <button
         type="button"
         aria-label="Zoom in"
@@ -532,36 +574,6 @@
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
           <path stroke-linecap="round" d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
-    </div>
-
-    <div class={groupClass}>
-      <button
-        type="button"
-        aria-label="Fit width"
-        use:tooltip={'Fit page width to the window'}
-        class={iconButtonClass}
-        disabled={fitting}
-        onclick={() => fitTo('width')}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7l-5 5 5 5" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M16 7l5 5-5 5" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        aria-label="Fit page"
-        use:tooltip={'Fit the whole page to the window'}
-        class={iconButtonClass}
-        disabled={fitting}
-        onclick={() => fitTo('page')}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-          <rect x="6" y="4" width="12" height="16" rx="1" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 2v2M18 2v2M6 20v2M18 20v2" />
         </svg>
       </button>
     </div>

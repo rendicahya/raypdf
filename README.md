@@ -48,7 +48,7 @@ It is **not** a replacement for PKI-based digital signatures.
 - **Floating toolbar** (icon-only, with instant tooltips):
   - Undo / Redo (`Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y`)
   - Previous / next page and a page picker (`←` / `→`; `Ctrl+←` / `Ctrl+→` switches documents)
-  - Zoom out / reset / in, fit width, fit page
+  - Zoom out / in; the zoom percentage opens a menu of common levels (50% to 250%), fit page width, and fit whole page
   - Rotate left / right
   - Tools (`Esc` returns to Move):
     - **Move**: drag placed items around; drag the page background to pan. Resting the pointer on text switches to text selection, which stays on while the pointer moves over text and turns back into the hand once it leaves.

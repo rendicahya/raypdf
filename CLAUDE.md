@@ -137,7 +137,7 @@ Supported interactions:
 
 A placed signature's `angle` (degrees clockwise as shown, about the box's centre; the box itself is unturned) is drawn the same way by PDFViewer, `screenshot.ts`, and export (fitted in its box, upright on rotated pages, then turned). When the page view turns, `convertGeometry` keeps a signature's size and turns it with the page instead of reshaping its box.
 
-Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot, Page numbers (with header & footer), Watermark, Shapes, Crop, Recognize text (a menu; pressed while waiting for an area), and the Add image button.
+Floating toolbar (bottom): undo/redo, page navigation, zoom (the percentage is a menu of common levels plus fit width / fit page), rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot, Page numbers (with header & footer), Watermark, Shapes, Crop, Recognize text (a menu; pressed while waiting for an area), and the Add image button.
 
 Selecting text shows a markup toolbar (highlight in five colors, underline / strikethrough always black via `markupColorFor`); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`). The toolbar's Comment button adds a highlight and a `PlacedComment` with that `groupId` in one step; such a comment is removed with its markup, follows it to duplicated pages, and is exported as the markup annotation's Contents instead of a sticky note.
 

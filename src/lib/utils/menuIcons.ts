@@ -26,6 +26,8 @@ export const MENU_ICONS = {
   zoomIn: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3 M11 8v6 M8 11h6',
   zoomOut: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z M21 21l-4.3-4.3 M8 11h6',
   fit: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
+  fitWidth: 'M3 12h18 M8 7l-5 5 5 5 M16 7l5 5-5 5',
+  fitPage: 'M7 4h10a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z M6 2v2 M18 2v2 M6 20v2 M18 20v2',
   recognize: 'M4 8V5a1 1 0 0 1 1-1h3 M16 4h3a1 1 0 0 1 1 1v3 M20 16v3a1 1 0 0 1-1 1h-3 M8 20H5a1 1 0 0 1-1-1v-3 M8 9h8 M8 12h8 M8 15h5',
   recognizeArea: 'M4 8V4h4 M11 4h2 M16 4h4v4 M20 11v2 M20 16v4h-4 M13 20h-2 M8 20H4v-4 M4 13v-2 M8 10h8 M8 14h5',
   camera:'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z M12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
