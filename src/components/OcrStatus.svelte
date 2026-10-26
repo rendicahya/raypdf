@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ocrStatus, cancelOcr, dismissOcrStatus, isOcrRunning } from '../stores/ocr';
+  import { ocrStatus, ocrLanguage, cancelOcr, dismissOcrStatus, isOcrRunning } from '../stores/ocr';
+  import { ocrLanguageLabel } from '../lib/pdf/ocrLanguages';
   import { search } from '../stores/search';
 
   // Progress and outcome of Recognize text (stores/ocr.ts), over the top of
@@ -15,7 +16,7 @@
       case 'checking':
         return 'Looking for scanned pages…';
       case 'loading':
-        return 'Getting text recognition ready…';
+        return `Getting ${ocrLanguageLabel($ocrLanguage)} text recognition ready…`;
       case 'recognizing':
         return s.total === 1 ? 'Recognizing text…' : `Recognizing text, page ${s.done + 1} of ${s.total}…`;
       case 'finished':
@@ -68,7 +69,7 @@
       </p>
       {#if $ocrStatus.state === 'loading'}
         <p class="text-xs text-neutral-500 dark:text-neutral-400">
-          The first time, this downloads about 4.5 MB. Your files stay on this device.
+          The first time, this downloads about 1.5 MB, plus 1 to 3 MB for each language you use. Your files stay on this device.
         </p>
       {/if}
       {#if progress !== null}

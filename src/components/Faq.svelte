@@ -60,8 +60,9 @@
     {
       q: 'Can RayPDF read the text in a scanned PDF?',
       a: [
-        'Yes, in English for now. Click Recognize text in the bottom toolbar, or right-click a page. You can recognize the current page, every scanned page, or drag a rectangle around just the text you want and copy it. RayPDF reads the words on the scanned pages and adds them as invisible text, so you can search, select, and copy them, and the saved PDF is searchable in other readers too.',
-        'It runs entirely in your browser. The first time, about 4.5 MB is downloaded to do it; after that it works offline. Pages that already have text are left as they are.',
+        'Yes. Click Recognize text in the bottom toolbar, or right-click a page. You can recognize the current page, every scanned page, or drag a rectangle around just the text you want and copy it. RayPDF reads the words on the scanned pages and adds them as invisible text, so you can search, select, and copy them, and the saved PDF is searchable in other readers too.',
+        'It reads English, Indonesian, Malay, Dutch, French, German, Italian, Portuguese, and Spanish; pick the language under Language in the same menu.',
+        'It runs entirely in your browser. The first time, about 1.5 MB is downloaded to do it, plus 1 to 3 MB for each language you use; after that it works offline. Pages that already have text are left as they are.',
       ],
     },
     {

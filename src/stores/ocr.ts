@@ -3,6 +3,8 @@ import { editorStore, getActiveDocument } from './editor';
 import { getCachedPdf } from '../lib/pdf/docCache';
 import { pageHasText, recognizePages, recognizeArea, type OcrProgress } from '../lib/pdf/ocr';
 import type { CaptureArea } from '../lib/pdf/screenshot';
+import { OCR_LANGUAGES, type OcrLanguage } from '../lib/pdf/ocrLanguages';
+import { persistedWritable } from '../lib/utils/persist';
 import { redactMode } from './redact';
 import { textToolMode } from './textTool';
 import { commentToolMode } from './commentTool';
@@ -33,6 +35,11 @@ export type OcrStatus =
   | { state: 'finished'; message: string; error?: boolean; text?: string };
 
 export const ocrStatus = writable<OcrStatus>({ state: 'idle' });
+
+/** The language pages are read in, remembered for next time. */
+export const ocrLanguage = persistedWritable<OcrLanguage>('ocrLanguage', 'eng');
+// A language that's no longer offered falls back to English.
+if (!OCR_LANGUAGES.some((l) => l.code === get(ocrLanguage))) ocrLanguage.set('eng');
 
 /** Whether the page is waiting for an area to be dragged. It works like a tool: turning on another tool ends it. */
 export const ocrAreaMode = derived(ocrStatus, (s) => s.state === 'selecting');
@@ -114,7 +121,7 @@ export async function recognizeText(pages?: number[]): Promise<void> {
       return;
     }
 
-    const results = await recognizePages(pdf, todo, rotation, showProgress(cancelled), cancelled);
+    const results = await recognizePages(pdf, todo, rotation, get(ocrLanguage), showProgress(cancelled), cancelled);
     if (cancelled()) return;
 
     const found = results.filter((r) => r.words.length > 0);
@@ -163,7 +170,7 @@ export async function recognizeTextInArea(page: number, area: CaptureArea): Prom
   try {
     const { id, file, rotation } = doc;
     const pdf = await getCachedPdf(id, file);
-    const { text, newWords } = await recognizeArea(pdf, page, rotation, area, showProgress(cancelled));
+    const { text, newWords } = await recognizeArea(pdf, page, rotation, area, get(ocrLanguage), showProgress(cancelled));
     if (cancelled()) return;
     if (!text) {
       finish('No text was found in this area.');

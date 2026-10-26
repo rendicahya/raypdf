@@ -2,12 +2,14 @@ import * as pdfjsLib from 'pdfjs-dist';
 import type { Page as TesseractPage, Worker as TesseractWorker } from 'tesseract.js';
 import { getTotalRotation, type PdfDocument } from './loader';
 import type { CaptureArea } from './screenshot';
+import type { OcrLanguage } from './ocrLanguages';
 
 /**
  * Text recognition (OCR) for scanned pages, with tesseract.js running in a
- * worker. Nothing leaves the browser: the engine and the English language
- * data are served with RayPDF itself (see `ocrFiles` in vite.config.ts) and
- * only downloaded the first time text is recognized. The words found are
+ * worker. Nothing leaves the browser: the engine and the language data
+ * (`OCR_LANGUAGES`) are served with RayPDF itself (see `ocrFiles` in
+ * vite.config.ts), the engine downloaded the first time text is recognized
+ * and each language the first time it's used. The words found are
  * written into the PDF as invisible text (`addInvisibleText` in pageOps.ts),
  * so pdf.js's text layer, Find, and copying work on them like any other text.
  */
@@ -45,9 +47,9 @@ const ASCENT = 0.75;
 
 const OCR_BASE = new URL(`${import.meta.env.BASE_URL}ocr/`, location.href).href;
 
-async function createOcrWorker(): Promise<TesseractWorker> {
+async function createOcrWorker(language: OcrLanguage): Promise<TesseractWorker> {
   const { createWorker, OEM } = await import('tesseract.js');
-  return createWorker('eng', OEM.LSTM_ONLY, {
+  return createWorker(language, OEM.LSTM_ONLY, {
     workerPath: `${OCR_BASE}worker.min.js`,
     corePath: `${OCR_BASE}tesseract-core-simd-lstm.wasm.js`,
     langPath: OCR_BASE.replace(/\/$/, ''),
@@ -183,11 +185,12 @@ export async function recognizePages(
   pdf: PdfDocument,
   pages: number[],
   extraRotation: number,
+  language: OcrLanguage,
   onProgress: (progress: OcrProgress) => void,
   isCancelled: () => boolean = () => false,
 ): Promise<OcrPage[]> {
   onProgress({ phase: 'loading' });
-  const worker = await createOcrWorker();
+  const worker = await createOcrWorker(language);
   const results: OcrPage[] = [];
   try {
     for (const [i, pageNumber] of pages.entries()) {
@@ -222,10 +225,11 @@ export async function recognizeArea(
   pageNumber: number,
   extraRotation: number,
   area: CaptureArea,
+  language: OcrLanguage,
   onProgress: (progress: OcrProgress) => void,
 ): Promise<OcrAreaResult> {
   onProgress({ phase: 'loading' });
-  const worker = await createOcrWorker();
+  const worker = await createOcrWorker(language);
   try {
     onProgress({ phase: 'recognizing', done: 0, total: 1 });
     const { page, canvas, viewport } = await renderForOcr(pdf, pageNumber, extraRotation, area);

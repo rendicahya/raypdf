@@ -22,7 +22,9 @@
     recognizeText,
     startAreaSelection,
     stopAreaSelection,
+    ocrLanguage,
   } from '../stores/ocr';
+  import { OCR_LANGUAGES, ocrLanguageLabel } from '../lib/pdf/ocrLanguages';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
   import { addImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
@@ -251,7 +253,7 @@
   // Recognize text: on the current page, on every page without text, or in
   // an area the user drags (which then behaves like a tool).
   let ocrMenu: { x: number; y: number } | null = $state(null);
-  const ocrMenuItems: ContextMenuItem[] = [
+  const ocrMenuItems: ContextMenuItem[] = $derived([
     {
       label: 'Recognize text on this page',
       icon: MENU_ICONS.recognize,
@@ -261,7 +263,17 @@
     },
     { label: 'Recognize text on every page', icon: MENU_ICONS.recognize, onSelect: () => recognizeText() },
     { label: 'Recognize text in an area', icon: MENU_ICONS.recognizeArea, onSelect: startAreaSelection },
-  ];
+    {
+      label: `Language: ${ocrLanguageLabel($ocrLanguage)}`,
+      icon: MENU_ICONS.language,
+      separatorBefore: true,
+      children: OCR_LANGUAGES.map(({ code, label }) => ({
+        label,
+        icon: code === $ocrLanguage ? MENU_ICONS.check : undefined,
+        onSelect: () => ocrLanguage.set(code),
+      })),
+    },
+  ]);
 
   // The menu closes on any pointerdown outside it, including the button's
   // own, so a click right after that closing mustn't open it again.

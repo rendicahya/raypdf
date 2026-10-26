@@ -127,7 +127,7 @@
         'Recognize every scanned page at once, or only the pages you pick.',
         'Or drag a rectangle around any text, even a photo in a typed page, and copy what it reads.',
         'The text is saved into the PDF, so other PDF readers can search it too.',
-        'English for now. About 4.5 MB is downloaded the first time, and after that it works offline.',
+        'Reads English, Indonesian, Malay, Dutch, French, German, Italian, Portuguese, and Spanish. A few MB is downloaded the first time, and after that it works offline.',
       ],
       illustration: 'A scanned page read from top to bottom, then the same page with its text selected, ready to find or copy',
       paths: [

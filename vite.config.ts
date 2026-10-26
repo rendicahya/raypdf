@@ -3,6 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 import { createReadStream, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { OCR_LANGUAGES } from './src/lib/pdf/ocrLanguages';
 
 // GitHub Pages serves project sites from /<repo-name>/, so the base path
 // must match the repository name. Adjust REPO_NAME if the repo is renamed.
@@ -16,7 +17,13 @@ const OCR_FILES: Record<string, string> = {
   'worker.min.js': 'node_modules/tesseract.js/dist/worker.min.js',
   // The build with the WebAssembly inside, so there's no second file to locate.
   'tesseract-core-simd-lstm.wasm.js': 'node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js',
-  'eng.traineddata.gz': 'node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz',
+  // One language's data each, fetched only when that language is first used.
+  ...Object.fromEntries(
+    OCR_LANGUAGES.map(({ code }) => [
+      `${code}.traineddata.gz`,
+      `node_modules/@tesseract.js-data/${code}/4.0.0_best_int/${code}.traineddata.gz`,
+    ]),
+  ),
 };
 
 function ocrFiles(): Plugin {
