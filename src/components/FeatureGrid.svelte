@@ -92,10 +92,11 @@
       kind: 'pages',
       title: 'Edit pages',
       description:
-        'Drag thumbnails to reorder pages. Rotate, move, duplicate, insert a blank page, or delete, one page at a time or a whole selection, and crop pages. Add page numbers, a header, and a footer in the position and style you like.',
+        'Drag thumbnails to reorder pages. Rotate, move, duplicate, insert a blank page, or delete, one page at a time or a whole selection, and crop pages. Add page numbers, a header, and a footer in the position and style you like, or stamp a watermark across every page.',
       points: [
         'Page numbers can skip a cover page and start at any number.',
         'Headers and footers can show the page number, page count, date, and file name.',
+        'Watermark with a word like CONFIDENTIAL or your logo, once in the middle or tiled.',
         'Crop to a frame you draw, or to the content without its blank margins.',
         'Everything you placed moves with its page.',
         'Every edit can be undone.',

@@ -24,6 +24,7 @@
   import { textSelectMode } from './stores/textSelect';
   import { signatureToolMode } from './stores/signatureTool';
   import { pageNumbersToolMode } from './stores/pageNumbersTool';
+  import { pageWatermarkToolMode } from './stores/pageWatermarkTool';
   import { shapeToolMode } from './stores/shapeTool';
   import { cropToolMode } from './stores/cropTool';
   import { ocrAreaMode, stopAreaSelection } from './stores/ocr';
@@ -249,6 +250,11 @@
       if ($pageNumbersToolMode) {
         e.preventDefault();
         pageNumbersToolMode.set(false);
+        return;
+      }
+      if ($pageWatermarkToolMode) {
+        e.preventDefault();
+        pageWatermarkToolMode.set(false);
         return;
       }
       if ($shapeToolMode) {
@@ -538,7 +544,7 @@
           </div>
         </aside>
       {/if}
-      {#if $activePanelTool && $activePanelTool !== 'signature' && $activePanelTool !== 'pageNumbers'}
+      {#if $activePanelTool && $activePanelTool !== 'signature' && $activePanelTool !== 'pageNumbers' && $activePanelTool !== 'watermark'}
         <button
           type="button"
           aria-label={$toolPanelOpen ? 'Hide tool options' : 'Show tool options'}

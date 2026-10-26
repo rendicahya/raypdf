@@ -121,7 +121,7 @@ Left sidebar: page thumbnails, rendered lazily as they scroll into view, with re
 
 The PDF's own form fields are drawn as HTML inputs over the page (`lib/pdf/forms.ts`); values are stored per document by field name and written into the real fields on export.
 
-Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. The Page numbers tool (`stores/pageNumbersTool.ts`, PageTextOptions with a Page numbers tab, PageNumberOptions, and a Header & footer tab, HeaderFooterOptions) works the same way: its settings live on the document (`pageNumbers`, `headerFooter`, undoable; `headerFooter` is null when every slot is empty). `pageLabels` in `lib/pdf/headerFooter.ts` turns both into the `PageLabel`s of a page (placeholders `{page}` `{pages}` `{date}` `{file}` filled in), which PDFViewer previews, `screenshot.ts` draws, and `drawPageLabels` in `lib/pdf/pageNumbers.ts` draws on export (positioned on the page as shown, so rotated pages stay upright). Shapes (`stores/shapeTool.ts`, ShapeOptions) draws `PlacedShape`s by dragging on the page; images (`PlacedImage`, the picture itself kept in memory in `stores/images.ts`, by `imageId`) come from the toolbar's Add image (via `pendingImage`, placed by the page in view), a dropped image file, or the page menu. Both are moved and resized by PlacedBox, drawn by ShapeGraphic / `<img>` on screen, `lib/pdf/shapes.ts` on export (shared geometry, images upright on rotated pages), and `screenshot.ts`; a new item list on the document goes in `PageItems` / `mapPageItems` in `stores/editor.ts` so rotation and page edits carry it. Crop (`stores/cropTool.ts`, CropOptions, CropOverlay) frames the area to keep as fractions of the page as shown; `cropPages` / `uncropPages` in the editor store set the pages' crop box through `editPages` (`reshapesPages`, so placed items stay over the same content). Anything drawn over a whole page on export must use the visible area (pdf.js `page.view`), not the media box, as `redact.ts` does. Like Signature and Page numbers, Crop's panel can't be hidden: its × turns the tool off. Redact, Add Text, Comment, Select, Screenshot, and Shapes have their own panels in `components/toolOptions/` (text boxes have no floating style bar: TextOptions restyles the box in `selectedTextId`, and clicks inside `[data-tool-panel]` don't deselect it; a new `PlacedText` style field must be drawn the same way in PDFViewer, `screenshot.ts`, and `textRender.ts`, and superscript/subscript share `SCRIPT_SCALE` / `SCRIPT_SHIFT` from `stores/textTool.ts`); their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
+Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). For the Signature tool (`stores/signatureTool.ts`) it's SignaturePanel: the saved signatures, placement helpers (Use last position, Apply Signature to All Pages, Apply to All Documents), and watermark controls; on the canvas the Signature tool behaves like Move, click-to-place is its sub-mode and turns off with it, and closing the panel turns the tool off. The Page numbers tool (`stores/pageNumbersTool.ts`, PageTextOptions with a Page numbers tab, PageNumberOptions, and a Header & footer tab, HeaderFooterOptions) works the same way: its settings live on the document (`pageNumbers`, `headerFooter`, undoable; `headerFooter` is null when every slot is empty). `pageLabels` in `lib/pdf/headerFooter.ts` turns both into the `PageLabel`s of a page (placeholders `{page}` `{pages}` `{date}` `{file}` filled in), which PDFViewer previews, `screenshot.ts` draws, and `drawPageLabels` in `lib/pdf/pageNumbers.ts` draws on export (positioned on the page as shown, so rotated pages stay upright). Watermark (`stores/pageWatermarkTool.ts`, PageWatermarkOptions) works like Page numbers too: the document's `pageWatermark` (undoable, null for none) is a word or a picture (`imageId` in `stores/images.ts`), once in the middle or tiled, turned by `angle`; `lib/pdf/pageWatermark.ts` lays the stamps out in points on the page as shown (`watermarkSize`, `watermarkCenters`, text measured by the browser everywhere) for PDFViewer's preview, `screenshot.ts`, and export (`drawPageWatermark`, right after redaction, under everything placed). It's a deliberate stamp on the pages, unrelated to the signature's visible watermark. Shapes (`stores/shapeTool.ts`, ShapeOptions) draws `PlacedShape`s by dragging on the page; images (`PlacedImage`, the picture itself kept in memory in `stores/images.ts`, by `imageId`) come from the toolbar's Add image (via `pendingImage`, placed by the page in view), a dropped image file, or the page menu. Both are moved and resized by PlacedBox, drawn by ShapeGraphic / `<img>` on screen, `lib/pdf/shapes.ts` on export (shared geometry, images upright on rotated pages), and `screenshot.ts`; a new item list on the document goes in `PageItems` / `mapPageItems` in `stores/editor.ts` so rotation and page edits carry it. Crop (`stores/cropTool.ts`, CropOptions, CropOverlay) frames the area to keep as fractions of the page as shown; `cropPages` / `uncropPages` in the editor store set the pages' crop box through `editPages` (`reshapesPages`, so placed items stay over the same content). Anything drawn over a whole page on export must use the visible area (pdf.js `page.view`), not the media box, as `redact.ts` does. Like Signature, Page numbers, and Watermark, Crop's panel can't be hidden: its × turns the tool off. Redact, Add Text, Comment, Select, Screenshot, and Shapes have their own panels in `components/toolOptions/` (text boxes have no floating style bar: TextOptions restyles the box in `selectedTextId`, and clicks inside `[data-tool-panel]` don't deselect it; a new `PlacedText` style field must be drawn the same way in PDFViewer, `screenshot.ts`, and `textRender.ts`, and superscript/subscript share `SCRIPT_SCALE` / `SCRIPT_SHIFT` from `stores/textTool.ts`); their × only hides the panel (`toolPanelOpen`, persisted) and an edge tab brings it back. A new tool with options needs a case in `activePanelTool` and in ToolPanel.
 
 The bottom toolbar is positioned by App.svelte, centred on the area right of the page sidebar including the panel, so it doesn't move when the panel opens (it only slides left if it would otherwise overlap the panel).
 
@@ -134,7 +134,7 @@ Supported interactions:
 - Move
 - Resize
 
-Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot, Page numbers (with header & footer), Shapes, Crop, Recognize text (a menu; pressed while waiting for an area), and the Add image button.
+Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot, Page numbers (with header & footer), Watermark, Shapes, Crop, Recognize text (a menu; pressed while waiting for an area), and the Add image button.
 
 Selecting text shows a markup toolbar (highlight in five colors, underline / strikethrough always black via `markupColorFor`); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`).
 
@@ -175,7 +175,7 @@ Every export embeds a small verification record in the PDF metadata (`lib/pdf/ve
 
 Visible watermark is part of the signature image.
 
-Never draw the watermark directly onto the PDF.
+Never draw the watermark directly onto the PDF. (This is the signature's watermark. The Watermark tool's page watermark is a separate feature and is drawn onto the pages on purpose.)
 
 The protected signature should become a single image.
 
@@ -239,7 +239,7 @@ components/
 - PDFPages (the scrolling page column), PDFViewer (one page), PageSidebar, PageThumbnail
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
-- ToolPanel, SignaturePanel, toolOptions/ (PanelHeader, RedactOptions, TextOptions, CommentOptions, SelectOptions, ScreenshotOptions, PageTextOptions, PageNumberOptions, HeaderFooterOptions, ShapeOptions, CropOptions)
+- ToolPanel, SignaturePanel, toolOptions/ (PanelHeader, RedactOptions, TextOptions, CommentOptions, SelectOptions, ScreenshotOptions, PageTextOptions, PageNumberOptions, HeaderFooterOptions, PageWatermarkOptions, ShapeOptions, CropOptions)
 - ExportButton, MergeOrderDialog, StartOverButton
 - VerifyResults (the Verify choice on the front page; checks every added PDF in place)
 - ThemeToggle, FullscreenToggle, UpdateToast
@@ -248,7 +248,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, compress, pageImages, pageNumbers, headerFooter, contentBounds, password, shapes, forms, highlight, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, compress, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange
@@ -256,7 +256,7 @@ lib/
 stores/
 
 - editor.ts — documents, placements, page order, per-document undo/redo history
-- one small store per tool or preference (redact, textTool, commentTool, zoomTool, textSelect, screenshotTool, shapeTool, cropTool, images, ocr, clickToPlace, watermark, exportOptions, layout, theme, …)
+- one small store per tool or preference (redact, textTool, commentTool, zoomTool, textSelect, screenshotTool, pageNumbersTool, pageWatermarkTool, shapeTool, cropTool, images, ocr, clickToPlace, watermark, exportOptions, layout, theme, …)
 
 ---
 

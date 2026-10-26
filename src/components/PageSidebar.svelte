@@ -210,6 +210,7 @@
         formValues: doc.formValues,
         pageNumbers: doc.pageNumbers,
         headerFooter: doc.headerFooter,
+        pageWatermark: doc.pageWatermark,
         onlyPages: pages,
         protection: format === 'pdf' ? currentSaveProtection() : {},
       });

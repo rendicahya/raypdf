@@ -10,6 +10,7 @@
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
   import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { headerFooterDate, pageLabels } from '../lib/pdf/headerFooter';
+  import { watermarkCenters, watermarkSize } from '../lib/pdf/pageWatermark';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
   import {
@@ -536,6 +537,35 @@
         )
       : [],
   );
+  // The watermark, previewed as lib/pdf/pageWatermark.ts lays it out (in
+  // points on the page as shown).
+  let pagePoints: { width: number; height: number } | null = $state(null);
+  $effect(() => {
+    const rotation = viewRotation;
+    if (!pageExists) return;
+    let cancelled = false;
+    pdfDoc
+      .getPage(pageNumber)
+      .then((page) => {
+        if (cancelled) return;
+        const viewport = page.getViewport({ scale: 1, rotation: getTotalRotation(page, rotation) });
+        pagePoints = { width: viewport.width, height: viewport.height };
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  });
+  const watermark = $derived($activeDocument?.pageWatermark ?? null);
+  const watermarkImage = $derived(
+    watermark?.kind === 'image' && watermark.imageId ? imageFor(watermark.imageId) : undefined,
+  );
+  const watermarkStamps = $derived.by(() => {
+    if (!watermark || !pagePoints) return [];
+    const size = watermarkSize(watermark, pagePoints.width, watermarkImage);
+    if (!size) return [];
+    return watermarkCenters(watermark, size, pagePoints.width, pagePoints.height).map(([x, y]) => ({ x, y, ...size }));
+  });
   const commentsOnCurrentPage = $derived($activeDocument?.comments.filter((c) => c.page === pageNumber) ?? []);
   const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
   const shapesOnCurrentPage = $derived($activeDocument?.shapes.filter((s) => s.page === pageNumber) ?? []);
@@ -1368,6 +1398,7 @@
         return stored ? [{ ...img, image: stored.blob }] : [];
       }),
       labels: edgeLabels,
+      watermark: watermark ? { settings: watermark, image: watermarkImage } : null,
     };
     return capturePage(loaded, pageNumber, doc.rotation, area, overlays, $screenshotScale);
   }
@@ -2037,6 +2068,43 @@
        never steals clicks/drags meant for the canvas or the other overlays
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
+
+  <!-- Watermark preview: lib/pdf/pageWatermark.ts draws the same on export,
+       each stamp turned around its centre. -->
+  {#if watermark && watermarkStamps.length > 0}
+    {@const unit = $editorStore.renderScale}
+    <div class="pointer-events-none absolute inset-0 select-none overflow-hidden rounded-lg" aria-hidden="true">
+      {#each watermarkStamps as stamp}
+        {#if watermarkImage}
+          <img
+            src={watermarkImage.url}
+            alt=""
+            class="absolute max-w-none"
+            style:left="{stamp.x * unit}px"
+            style:top="{stamp.y * unit}px"
+            style:width="{stamp.width * unit}px"
+            style:height="{stamp.height * unit}px"
+            style:opacity={watermark.opacity}
+            style:transform="translate(-50%, -50%) rotate({-watermark.angle}deg)"
+          />
+        {:else}
+          <div
+            class="absolute whitespace-nowrap leading-none"
+            style:left="{stamp.x * unit}px"
+            style:top="{stamp.y * unit}px"
+            style:font-family={FONT_FAMILY_CSS[watermark.font]}
+            style:font-weight={watermark.bold ? 700 : 400}
+            style:font-size="{watermark.fontSize * unit}px"
+            style:color={watermark.color}
+            style:opacity={watermark.opacity}
+            style:transform="translate(-50%, -50%) rotate({-watermark.angle}deg)"
+          >
+            {watermark.text.trim()}
+          </div>
+        {/if}
+      {/each}
+    </div>
+  {/if}
 
   <!-- Page number, header, and footer preview: lib/pdf/pageNumbers.ts draws
        the same on export. With line-height 1 the baseline sits about 0.85em

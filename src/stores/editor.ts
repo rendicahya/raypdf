@@ -15,6 +15,7 @@ import type { OcrPage } from '../lib/pdf/ocr';
 import type { FormValues } from '../lib/pdf/forms';
 import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
 import type { HeaderFooterSettings } from '../lib/pdf/headerFooter';
+import type { PageWatermarkSettings } from '../lib/pdf/pageWatermark';
 
 /** Signature instance placed on the page, in canvas pixel coordinates. */
 export interface PlacedSignature {
@@ -176,6 +177,8 @@ export interface PdfDocumentState {
   pageNumbers: PageNumberSettings | null;
   /** Text along the top and bottom of the pages, or null for none. */
   headerFooter: HeaderFooterSettings | null;
+  /** Text or a picture stamped across the pages, or null for none. */
+  pageWatermark: PageWatermarkSettings | null;
   /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
   rotation: number;
   /** Whether the current placement/redactions have been saved/printed — cleared whenever either changes. Used to warn before closing an unsaved tab. */
@@ -217,6 +220,7 @@ function createDocumentState(file: File): PdfDocumentState {
     formValues: {},
     pageNumbers: null,
     headerFooter: null,
+    pageWatermark: null,
     rotation: 0,
     exported: false,
   };
@@ -395,6 +399,7 @@ interface DocSnapshot {
   formValues: FormValues;
   pageNumbers: PageNumberSettings | null;
   headerFooter: HeaderFooterSettings | null;
+  pageWatermark: PageWatermarkSettings | null;
   rotation: number;
 }
 
@@ -488,6 +493,7 @@ function createEditorStore() {
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       headerFooter: doc.headerFooter,
+      pageWatermark: doc.pageWatermark,
       rotation: doc.rotation,
     };
   }
@@ -1039,6 +1045,14 @@ function createEditorStore() {
     );
   }
 
+  /** Sets the watermark stamped across the active document's pages, or removes it (null). */
+  function setPageWatermark(settings: PageWatermarkSettings | null) {
+    recordActiveHistory('page-watermark');
+    update((state) =>
+      updateActiveDocument(state, (doc) => ({ ...doc, pageWatermark: settings, exported: false })),
+    );
+  }
+
   /** Marks a specific document as saved/printed in its current placement — clears the "signed but not downloaded" warning for that tab. */
   function markDocumentExported(id: string) {
     update((state) => ({
@@ -1416,6 +1430,7 @@ function createEditorStore() {
     setFormValue,
     setPageNumbers,
     setHeaderFooter,
+    setPageWatermark,
     markDocumentExported,
     setRenderScale,
     zoomIn,

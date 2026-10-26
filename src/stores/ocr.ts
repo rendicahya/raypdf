@@ -12,6 +12,7 @@ import { zoomToolMode } from './zoomTool';
 import { textSelectMode } from './textSelect';
 import { screenshotToolMode } from './screenshotTool';
 import { pageNumbersToolMode } from './pageNumbersTool';
+import { pageWatermarkToolMode } from './pageWatermarkTool';
 import { shapeToolMode } from './shapeTool';
 import { cropToolMode } from './cropTool';
 
@@ -46,6 +47,7 @@ const OTHER_TOOLS: Writable<boolean>[] = [
   textSelectMode,
   screenshotToolMode,
   pageNumbersToolMode,
+  pageWatermarkToolMode,
   shapeToolMode,
   cropToolMode,
 ];

@@ -6,10 +6,12 @@
   import SelectOptions from './toolOptions/SelectOptions.svelte';
   import ScreenshotOptions from './toolOptions/ScreenshotOptions.svelte';
   import PageTextOptions from './toolOptions/PageTextOptions.svelte';
+  import PageWatermarkOptions from './toolOptions/PageWatermarkOptions.svelte';
   import ShapeOptions from './toolOptions/ShapeOptions.svelte';
   import CropOptions from './toolOptions/CropOptions.svelte';
   import { signatureToolMode } from '../stores/signatureTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
+  import { pageWatermarkToolMode } from '../stores/pageWatermarkTool';
   import { cropToolMode } from '../stores/cropTool';
   import { toolPanelOpen, type PanelTool } from '../stores/toolPanel';
 
@@ -19,7 +21,7 @@
 
   let { tool }: Props = $props();
 
-  // The Signature, Page numbers, and Crop tools can't do without their panel, so
+  // The Signature, Page numbers, Watermark, and Crop tools can't do without their panel, so
   // closing it turns the tool off; for the others the × only hides the options.
   const hide = () => toolPanelOpen.set(false);
 </script>
@@ -38,6 +40,8 @@
   <ScreenshotOptions onClose={hide} />
 {:else if tool === 'pageNumbers'}
   <PageTextOptions onClose={() => pageNumbersToolMode.set(false)} />
+{:else if tool === 'watermark'}
+  <PageWatermarkOptions onClose={() => pageWatermarkToolMode.set(false)} />
 {:else if tool === 'shapes'}
   <ShapeOptions onClose={hide} />
 {:else if tool === 'crop'}

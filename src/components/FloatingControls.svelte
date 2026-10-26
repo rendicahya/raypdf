@@ -12,6 +12,7 @@
   import { tooltip } from '../lib/utils/tooltip';
   import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
+  import { pageWatermarkToolMode } from '../stores/pageWatermarkTool';
   import { shapeToolMode } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
   import {
@@ -50,6 +51,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -65,6 +67,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -81,6 +84,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -97,6 +101,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -113,6 +118,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -129,6 +135,7 @@
       zoomToolMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -150,6 +157,7 @@
       !$textSelectMode &&
       !$screenshotToolMode &&
       !$pageNumbersToolMode &&
+      !$pageWatermarkToolMode &&
       !$shapeToolMode &&
       !$cropToolMode &&
       !$ocrAreaMode,
@@ -166,6 +174,7 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -182,6 +191,24 @@
       zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
+      pageWatermarkToolMode.set(false);
+      shapeToolMode.set(false);
+      cropToolMode.set(false);
+    }
+  }
+
+  function togglePageWatermarkToolMode() {
+    pageWatermarkToolMode.update((v) => !v);
+    if ($pageWatermarkToolMode) {
+      redactMode.set(false);
+      textToolMode.set(false);
+      commentToolMode.set(false);
+      clickToPlaceMode.set(false);
+      signatureToolMode.set(false);
+      zoomToolMode.set(false);
+      textSelectMode.set(false);
+      screenshotToolMode.set(false);
+      pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
       cropToolMode.set(false);
     }
@@ -199,6 +226,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       cropToolMode.set(false);
     }
   }
@@ -215,6 +243,7 @@
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
+      pageWatermarkToolMode.set(false);
       shapeToolMode.set(false);
     }
   }
@@ -301,6 +330,7 @@
     textSelectMode.set(false);
     screenshotToolMode.set(false);
     pageNumbersToolMode.set(false);
+    pageWatermarkToolMode.set(false);
     shapeToolMode.set(false);
     cropToolMode.set(false);
     stopAreaSelection();
@@ -761,6 +791,29 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
         <rect x="5" y="3" width="14" height="18" rx="1.5" />
         <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      aria-label="Watermark"
+      aria-pressed={$pageWatermarkToolMode}
+      use:tooltip={'Watermark: stamp a word or a picture across every page'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$pageWatermarkToolMode}
+      class:text-neutral-600={!$pageWatermarkToolMode}
+      class:hover:bg-neutral-100={!$pageWatermarkToolMode}
+      class:dark:border-neutral-800={!$pageWatermarkToolMode}
+      class:dark:text-neutral-300={!$pageWatermarkToolMode}
+      class:dark:hover:bg-neutral-800={!$pageWatermarkToolMode}
+      class:border-amber-600={$pageWatermarkToolMode}
+      class:bg-amber-600={$pageWatermarkToolMode}
+      class:text-white={$pageWatermarkToolMode}
+      onclick={togglePageWatermarkToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="5" y="3" width="14" height="18" rx="1.5" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 15.5l7-7M8.5 11.5l3-3M12.5 15.5l3-3" />
       </svg>
     </button>
 

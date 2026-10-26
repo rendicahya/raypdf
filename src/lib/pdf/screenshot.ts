@@ -5,6 +5,8 @@ import type { PlacedShape, PlacedText } from '../../stores/editor';
 import { insetBox, lineGeometry } from './shapes';
 import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
 import { pageNumberAnchor, type PageLabel } from './pageNumbers';
+import { drawWatermarkOnCanvas, type PageWatermarkSettings } from './pageWatermark';
+import type { StoredImage } from '../../stores/images';
 
 /** An area of the page as fractions (0–1) of its width/height, so it's independent of zoom. */
 export interface CaptureArea {
@@ -56,6 +58,8 @@ export interface CaptureOverlays {
   images?: (Box & { opacity: number; image: Blob })[];
   /** This page's number and header and footer text (`pageLabels`). */
   labels?: PageLabel[];
+  /** The document's watermark, with its picture if it has one. */
+  watermark?: { settings: PageWatermarkSettings; image?: StoredImage } | null;
 }
 
 /**
@@ -117,6 +121,12 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
 
   ctx.fillStyle = '#000';
   for (const box of overlays.redactions) ctx.fillRect(box.x, box.y, box.width, box.height);
+
+  // The watermark, over the page and under everything placed on it, as export draws it.
+  if (overlays.watermark) {
+    const { settings, image } = overlays.watermark;
+    await drawWatermarkOnCanvas(ctx, settings, image, canvas.width / scale, canvas.height / scale, overlays.renderScale);
+  }
 
   // Images, then shapes, under signatures and text, in the order export draws them.
   for (const placed of overlays.images ?? []) {

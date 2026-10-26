@@ -10,6 +10,7 @@ import { embedVerificationRecord } from './verification';
 import { embedHighlightAnnotations } from './highlight';
 import { drawPageLabels, type PageNumberSettings } from './pageNumbers';
 import { headerFooterDate, pageLabels, type HeaderFooterSettings } from './headerFooter';
+import { drawPageWatermark, type PageWatermarkSettings } from './pageWatermark';
 import { applyProtection, loadEditablePdf, type SaveProtection } from './password';
 import { drawImages, drawShapes } from './shapes';
 import { imageFor } from '../../stores/images';
@@ -62,6 +63,8 @@ export interface ExportParams {
   pageNumbers?: PageNumberSettings | null;
   /** Header and footer text, if any — see `lib/pdf/headerFooter.ts`. */
   headerFooter?: HeaderFooterSettings | null;
+  /** Text or a picture stamped across the pages, if any (see `lib/pdf/pageWatermark.ts`). */
+  pageWatermark?: PageWatermarkSettings | null;
 }
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
@@ -147,6 +150,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     formValues = {},
     pageNumbers = null,
     headerFooter = null,
+    pageWatermark = null,
   } = params;
 
   const pdfBytes = await blobToBytes(pdfFile);
@@ -156,6 +160,9 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
   // drawing signatures, so each signature ends up as a normal image on top of
   // the flattened page rather than being wiped out by it.
   await applyRedactions(pdfDoc, pdfjsDoc, redactions, renderScale, rotation);
+
+  // The watermark goes right over the page's own content, under everything placed on it.
+  if (pageWatermark) await drawPageWatermark(pdfDoc, pdfjsDoc, pageWatermark, imageFor, rotation);
 
   if (images.length > 0) await drawImages(pdfDoc, pdfjsDoc, images, imageFor, renderScale, rotation);
   if (shapes.length > 0) await drawShapes(pdfDoc, pdfjsDoc, shapes, renderScale, rotation);
@@ -449,6 +456,7 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
     Object.keys(doc.formValues).length > 0 ||
     doc.pageNumbers !== null ||
     doc.headerFooter !== null ||
+    doc.pageWatermark !== null ||
     doc.file !== doc.originalFile ||
     doc.rotation !== 0
   );
@@ -493,6 +501,7 @@ export async function exportPagesAsZip(
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       headerFooter: doc.headerFooter,
+      pageWatermark: doc.pageWatermark,
       onlyPages: [page],
       protection,
     });
@@ -551,6 +560,7 @@ export async function exportAllAsZip(
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       headerFooter: doc.headerFooter,
+      pageWatermark: doc.pageWatermark,
       protection,
     });
 
@@ -612,6 +622,7 @@ export async function exportMergedPdf(
       formValues: doc.formValues,
       pageNumbers: doc.pageNumbers,
       headerFooter: doc.headerFooter,
+      pageWatermark: doc.pageWatermark,
     });
 
     const sourceDoc = await PDFDocument.load(bytes);
