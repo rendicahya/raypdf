@@ -14,7 +14,16 @@
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { shapeToolMode } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
-  import { ocrAreaMode, stopAreaSelection } from '../stores/ocr';
+  import {
+    ocrAreaMode,
+    ocrStatus,
+    isOcrRunning,
+    recognizeText,
+    startAreaSelection,
+    stopAreaSelection,
+  } from '../stores/ocr';
+  import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
+  import { MENU_ICONS } from '../lib/utils/menuIcons';
   import { addImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
   import { downloadBlob } from '../lib/pdf/screenshot';
 
@@ -208,6 +217,44 @@
       pageNumbersToolMode.set(false);
       shapeToolMode.set(false);
     }
+  }
+
+  // Recognize text: on the current page, on every page without text, or in
+  // an area the user drags (which then behaves like a tool).
+  let ocrMenu: { x: number; y: number } | null = $state(null);
+  const ocrMenuItems: ContextMenuItem[] = [
+    {
+      label: 'Recognize text on this page',
+      icon: MENU_ICONS.recognize,
+      onSelect: () => {
+        if ($activeDocument) recognizeText([$activeDocument.pageNumber]);
+      },
+    },
+    { label: 'Recognize text on every page', icon: MENU_ICONS.recognize, onSelect: () => recognizeText() },
+    { label: 'Recognize text in an area', icon: MENU_ICONS.recognizeArea, onSelect: startAreaSelection },
+  ];
+
+  // The menu closes on any pointerdown outside it, including the button's
+  // own, so a click right after that closing mustn't open it again.
+  let ocrMenuClosedAt = 0;
+
+  function closeOcrMenu() {
+    ocrMenu = null;
+    ocrMenuClosedAt = performance.now();
+  }
+
+  function toggleOcrMenu(e: MouseEvent) {
+    // While waiting for an area, the button turns it off like any other tool.
+    if ($ocrAreaMode) {
+      stopAreaSelection();
+      return;
+    }
+    if (ocrMenu || performance.now() - ocrMenuClosedAt < 400) {
+      ocrMenu = null;
+      return;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    ocrMenu = { x: rect.left, y: rect.top - 4 };
   }
 
   // Add image: the picked image is placed on the current page (PDFViewer
@@ -761,6 +808,34 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
       </svg>
     </button>
+
+    <button
+      type="button"
+      aria-label="Recognize text"
+      aria-haspopup="menu"
+      aria-expanded={ocrMenu !== null}
+      aria-pressed={$ocrAreaMode}
+      use:tooltip={'Recognize text (OCR): make scanned text searchable and copyable, on this page, every page, or an area'}
+      disabled={isOcrRunning($ocrStatus)}
+      class="{toolButtonClass} disabled:cursor-not-allowed disabled:opacity-30"
+      class:border-neutral-200={!$ocrAreaMode}
+      class:text-neutral-600={!$ocrAreaMode}
+      class:hover:bg-neutral-100={!$ocrAreaMode}
+      class:dark:border-neutral-800={!$ocrAreaMode}
+      class:dark:text-neutral-300={!$ocrAreaMode}
+      class:dark:hover:bg-neutral-800={!$ocrAreaMode}
+      class:border-cyan-600={$ocrAreaMode}
+      class:bg-cyan-600={$ocrAreaMode}
+      class:text-white={$ocrAreaMode}
+      onclick={toggleOcrMenu}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.recognize} />
+      </svg>
+    </button>
+    {#if ocrMenu}
+      <ContextMenu x={ocrMenu.x} y={ocrMenu.y} items={ocrMenuItems} onClose={closeOcrMenu} above />
+    {/if}
 
     <label
       aria-label="Add image"

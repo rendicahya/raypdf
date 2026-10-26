@@ -27,9 +27,11 @@
     y: number;
     items: ContextMenuItem[];
     onClose: () => void;
+    /** Opens upward, with `y` as the menu's bottom edge (for buttons near the bottom of the window). */
+    above?: boolean;
   }
 
-  let { x, y, items, onClose }: Props = $props();
+  let { x, y, items, onClose, above = false }: Props = $props();
 
   let menuEl: HTMLDivElement;
   let left = $state(0);
@@ -44,6 +46,7 @@
     top = y;
     await tick();
     const rect = menuEl.getBoundingClientRect();
+    if (above) top = Math.max(MARGIN, y - rect.height);
     if (left + rect.width > window.innerWidth - MARGIN) left = Math.max(MARGIN, x - rect.width);
     if (top + rect.height > window.innerHeight - MARGIN) top = Math.max(MARGIN, window.innerHeight - rect.height - MARGIN);
     focusItem(0);
