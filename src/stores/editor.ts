@@ -90,6 +90,12 @@ export interface PlacedComment {
   /** 1-indexed page this comment belongs to. */
   page: number;
   text: string;
+  /**
+   * The text markup (PlacedHighlight.groupId) this note is about, for a
+   * comment on selected text. Removing the markup removes the note; the note
+   * is saved as the markup annotation's own text rather than a sticky note.
+   */
+  groupId?: string;
 }
 
 export type MarkupKind = 'highlight' | 'underline' | 'strikeout';
@@ -937,10 +943,21 @@ function createEditorStore() {
     }));
   }
 
-  /** Marks up a text selection on the active document — one rectangle per line, removed together. */
-  function addHighlight(page: number, rects: Geometry[], kind: MarkupKind, color: string) {
+  /**
+   * Marks up a text selection on the active document — one rectangle per
+   * line, removed together. With `note`, an empty comment marker attached to
+   * the markup is added in the same step; its id is returned.
+   */
+  function addHighlight(
+    page: number,
+    rects: Geometry[],
+    kind: MarkupKind,
+    color: string,
+    note?: Geometry,
+  ): string | undefined {
     if (rects.length === 0) return;
     const groupId = crypto.randomUUID();
+    const commentId = note ? crypto.randomUUID() : undefined;
     recordActiveHistory(`add-highlight-${groupId}`);
     update((state) =>
       updateActiveDocument(state, (doc) => ({
@@ -949,9 +966,12 @@ function createEditorStore() {
           ...doc.highlights,
           ...rects.map((r) => ({ ...r, page, groupId, kind, color, id: crypto.randomUUID() })),
         ],
+        comments:
+          note && commentId ? [...doc.comments, { ...note, page, text: '', groupId, id: commentId }] : doc.comments,
         exported: false,
       })),
     );
+    return commentId;
   }
 
   /** Changes the color of every rectangle of one markup. */
@@ -972,6 +992,7 @@ function createEditorStore() {
       updateActiveDocument(state, (doc) => ({
         ...doc,
         highlights: doc.highlights.filter((h) => h.groupId !== groupId),
+        comments: doc.comments.filter((c) => c.groupId !== groupId),
         exported: false,
       })),
     );
@@ -1156,13 +1177,14 @@ function createEditorStore() {
     };
 
     // A duplicated page's highlights get their own group, so removing one
-    // copy's highlight leaves the other's alone.
-    const regroupCopies = (items: PlacedHighlight[]): PlacedHighlight[] => {
-      if (edit.copiesPage === undefined) return items;
+    // copy's highlight leaves the other's alone. The copy's notes follow
+    // their markup's new group.
+    const regroupCopies = (items: PageItems): void => {
+      if (edit.copiesPage === undefined) return;
       const copyPage = edit.mapPage(edit.copiesPage);
-      if (copyPage === null) return items;
+      if (copyPage === null) return;
       const newGroups = new Map<string, string>();
-      return items.map((h) => {
+      items.highlights = items.highlights.map((h) => {
         if (h.page !== copyPage + 1) return h;
         let groupId = newGroups.get(h.groupId);
         if (!groupId) {
@@ -1171,6 +1193,9 @@ function createEditorStore() {
         }
         return { ...h, groupId };
       });
+      items.comments = items.comments.map((c) =>
+        c.page === copyPage + 1 && c.groupId && newGroups.has(c.groupId) ? { ...c, groupId: newGroups.get(c.groupId) } : c,
+      );
     };
 
     // The rewrite is async — work from the document as it is now (the user
@@ -1181,7 +1206,7 @@ function createEditorStore() {
     if (!current || current.file !== doc.file) return;
 
     const items = await mapPageItems(current, remap);
-    items.highlights = regroupCopies(items.highlights);
+    regroupCopies(items);
 
     const latest = findLatest();
     if (!latest || latest.file !== doc.file) return;

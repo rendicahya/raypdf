@@ -268,12 +268,21 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     );
   }
 
-  if (comments.length > 0) {
-    await embedCommentAnnotations(pdfDoc, pdfjsDoc, comments, renderScale, rotation);
+  // A comment on marked-up text becomes the markup annotation's own note,
+  // the way readers save one; any other comment is a sticky note.
+  const marked = new Set(highlights.map((h) => `${h.page}:${h.groupId}`));
+  const attached = (c: PlacedComment) => !!c.groupId && marked.has(`${c.page}:${c.groupId}`);
+  const notes = new Map(
+    comments.filter((c) => attached(c) && c.text.trim()).map((c) => [`${c.page}:${c.groupId}`, c.text]),
+  );
+  const stickyNotes = comments.filter((c) => !attached(c));
+
+  if (stickyNotes.length > 0) {
+    await embedCommentAnnotations(pdfDoc, pdfjsDoc, stickyNotes, renderScale, rotation);
   }
 
   if (highlights.length > 0) {
-    await embedHighlightAnnotations(pdfDoc, pdfjsDoc, highlights, renderScale, rotation);
+    await embedHighlightAnnotations(pdfDoc, pdfjsDoc, highlights, renderScale, rotation, notes);
   }
 
   fillFormFields(pdfDoc, formValues);

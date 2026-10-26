@@ -1,4 +1,4 @@
-import { PDFDocument } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFString } from '@cantoo/pdf-lib';
 import { getTotalRotation, type PdfDocument } from './loader';
 import type { MarkupKind, PlacedHighlight } from '../../stores/editor';
 
@@ -137,6 +137,8 @@ const ANNOT_SUBTYPE: Record<MarkupKind, string> = {
  * page, a line for the others), so it looks the same in readers that don't
  * draw markups themselves. Lines assume upright text in the page's own
  * (unrotated) coordinates, which is how nearly every PDF is laid out.
+ * `notes` (by `page:groupId`) are comments on the marked text, saved as the
+ * annotation's Contents, which readers show when it's hovered or opened.
  */
 export async function embedHighlightAnnotations(
   pdfDoc: PDFDocument,
@@ -144,6 +146,7 @@ export async function embedHighlightAnnotations(
   highlights: PlacedHighlight[],
   renderScale: number,
   rotation: number,
+  notes: Map<string, string> = new Map(),
 ): Promise<void> {
   const groups = new Map<string, PlacedHighlight[]>();
   for (const h of highlights) {
@@ -151,7 +154,8 @@ export async function embedHighlightAnnotations(
     groups.set(key, [...(groups.get(key) ?? []), h]);
   }
 
-  for (const group of groups.values()) {
+  for (const [key, group] of groups) {
+    const note = notes.get(key);
     const { page, kind, color } = group[0];
     const [r, g, b] = hexToUnitRgb(markupColorFor(kind, color));
     const pdfjsPage = await pdfjsDoc.getPage(page);
@@ -205,6 +209,7 @@ export async function embedHighlightAnnotations(
       C: [r, g, b],
       F: 4, // Print
       AP: { N: pdfDoc.context.register(appearance) },
+      ...(note && { Contents: PDFString.of(note) }),
     });
     pdfDoc.getPage(page - 1).node.addAnnot(pdfDoc.context.register(annot));
   }

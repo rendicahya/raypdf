@@ -243,6 +243,59 @@
     window.getSelection()?.removeAllRanges();
   }
 
+  // Comment on selected text: the text is highlighted in the chosen color
+  // and a note marker, attached to the highlight, opens beside it.
+  function applyPendingComment(e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (pendingHighlight) commentOnText(pendingHighlight.boxes);
+  }
+
+  function commentOnText(boxes: Box[]) {
+    if (!$activeDocument || boxes.length === 0) return;
+    if (editingCommentId) commitCommentEdit();
+    const id = editorStore.addHighlight(pageNumber, boxes, 'highlight', $markupColor, noteBeside(boxes));
+    pendingHighlight = null;
+    window.getSelection()?.removeAllRanges();
+    if (!id) return;
+    newTextCommentId = id;
+    selectedCommentId = id;
+    startEditingComment(id, '');
+  }
+
+  /** Opens the note of a markup, adding one beside it if it has none. */
+  function commentOnMarkup(groupId: string) {
+    const doc = $activeDocument;
+    if (!doc) return;
+    if (editingCommentId) commitCommentEdit();
+    selectedHighlightGroup = null;
+    const existing = doc.comments.find((c) => c.groupId === groupId);
+    if (existing) {
+      selectedCommentId = existing.id;
+      startEditingComment(existing.id, existing.text);
+      return;
+    }
+    const boxes = doc.highlights.filter((h) => h.groupId === groupId);
+    if (boxes.length === 0) return;
+    const id = editorStore.addComment({ ...noteBeside(boxes), page: boxes[0].page, text: '', groupId });
+    selectedCommentId = id;
+    startEditingComment(id, '');
+  }
+
+  /** Where a markup's note marker goes: just past the end of its last line. */
+  function noteBeside(boxes: Box[]): Box {
+    const last = boxes[boxes.length - 1];
+    const rect = canvasEl.getBoundingClientRect();
+    const x = pageVertical ? last.x + last.width / 2 - COMMENT_SIZE / 2 : last.x + last.width + 4;
+    const y = pageVertical ? last.y + last.height + 4 : last.y + last.height / 2 - COMMENT_SIZE / 2;
+    return {
+      x: clamp(x, 0, rect.width - COMMENT_SIZE),
+      y: clamp(y, 0, rect.height - COMMENT_SIZE),
+      width: COMMENT_SIZE,
+      height: COMMENT_SIZE,
+    };
+  }
+
   // Picking a color keeps the selection, so a markup button can follow.
   function pickMarkupColor(e: Event, color: string) {
     e.preventDefault();
@@ -1681,6 +1734,12 @@
   let selectedCommentId: string | null = $state(null);
   let editingCommentId: string | null = $state(null);
   let commentEditValue = $state('');
+  // A comment on selected text that hasn't been written yet: left empty, its
+  // highlight goes too, since both came from the same button.
+  let newTextCommentId: string | null = null;
+  const selectedCommentGroup = $derived(
+    selectedCommentId ? ($activeDocument?.comments.find((c) => c.id === selectedCommentId)?.groupId ?? null) : null,
+  );
 
   function autofocusNote(node: HTMLTextAreaElement) {
     node.focus();
@@ -1699,9 +1758,13 @@
     const id = editingCommentId;
     const value = commentEditValue;
     editingCommentId = null;
+    const isNewTextComment = newTextCommentId === id;
+    newTextCommentId = null;
     // An empty note is just clutter — drop it rather than leaving a blank marker.
     if (!value.trim()) {
-      editorStore.removeComment(id);
+      const groupId = $activeDocument?.comments.find((c) => c.id === id)?.groupId;
+      if (isNewTextComment && groupId) removeHighlight(groupId);
+      else editorStore.removeComment(id);
       if (selectedCommentId === id) selectedCommentId = null;
     } else {
       editorStore.updateComment(id, { text: value });
@@ -1932,6 +1995,12 @@
           disabled: boxes.length === 0,
           onSelect: () => addMarkup(boxes, kind),
         })),
+        {
+          label: 'Comment',
+          icon: MENU_ICONS.comment,
+          disabled: boxes.length === 0,
+          onSelect: () => commentOnText(boxes),
+        },
       ];
     }
 
@@ -1941,9 +2010,14 @@
     const markup = groupId ? doc.highlights.find((h) => h.groupId === groupId) : undefined;
     if (groupId && markup) {
       selectedHighlightGroup = groupId;
+      const note = {
+        label: doc.comments.some((c) => c.groupId === groupId) ? 'Edit comment' : 'Add comment',
+        icon: MENU_ICONS.comment,
+        onSelect: () => commentOnMarkup(groupId),
+      };
       // Only highlights can be recolored; lines are always black.
       const remove = deleteItem(`Remove ${MARKUP_LABELS[markup.kind].toLowerCase()}`, () => removeHighlight(groupId));
-      if (markup.kind !== 'highlight') return [remove];
+      if (markup.kind !== 'highlight') return [note, { ...remove, separatorBefore: true }];
       return [
         ...MARKUP_COLORS.map((c) => ({
           label: c.label,
@@ -1951,6 +2025,7 @@
           disabled: markup.color === c.value,
           onSelect: () => editorStore.recolorHighlight(groupId, c.value),
         })),
+        { ...note, separatorBefore: true },
         { ...remove, separatorBefore: true },
       ];
     }
@@ -2149,7 +2224,7 @@
        clickable box is the whole marked text; only the paint inside differs
        by kind — the full box for a highlight, a thin line for the others. -->
   {#each highlightsOnCurrentPage as h, i (h.id)}
-    {@const isSelected = selectedHighlightGroup === h.groupId}
+    {@const isSelected = selectedHighlightGroup === h.groupId || selectedCommentGroup === h.groupId}
     {@const isFirstOfGroup = highlightsOnCurrentPage.findIndex((x) => x.groupId === h.groupId) === i}
     {@const paint = markupPaint(h, pageRotation)}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -2191,6 +2266,7 @@
   <!-- The selected markup's own toolbar: recolor or remove. Kept outside the
        markup boxes, whose multiplied paint would tint anything inside them. -->
   {#each highlightsOnCurrentPage.filter((h) => h.groupId === selectedHighlightGroup).slice(0, 1) as h (h.id)}
+    {@const hasNote = commentsOnCurrentPage.some((c) => c.groupId === h.groupId)}
     <div
       data-highlight-group={h.groupId}
       role="toolbar"
@@ -2218,6 +2294,18 @@
         {/each}
         <span class="mx-0.5 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
       {/if}
+      <button
+        type="button"
+        aria-label={hasNote ? 'Edit comment' : 'Add comment'}
+        use:tooltip={hasNote ? 'Edit comment' : 'Add a comment to this text'}
+        class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-500 transition-colors
+          hover:bg-amber-50 hover:text-amber-700 dark:text-neutral-400 dark:hover:bg-amber-950 dark:hover:text-amber-300"
+        onclick={() => commentOnMarkup(h.groupId)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.comment} />
+        </svg>
+      </button>
       <button
         type="button"
         aria-label="Remove {MARKUP_LABELS[h.kind].toLowerCase()}"
@@ -2681,7 +2769,7 @@
       data-placed-comment={c.id}
       role="group"
       tabindex="0"
-      aria-label="Comment marker. Double-click to edit, drag to move, Delete to remove."
+      aria-label="{c.groupId ? 'Comment on marked text' : 'Comment marker'}. Double-click to edit, drag to move, Delete to remove."
       title={c.text || 'Empty note. Double-click to edit.'}
       class="absolute flex touch-none items-center justify-center rounded-full bg-amber-400 text-amber-950
         shadow-md cursor-move {isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : 'hover:bg-amber-300'}"
@@ -2789,6 +2877,19 @@
           </svg>
         </button>
       {/each}
+      <button
+        type="button"
+        aria-label="Comment"
+        use:tooltip={'Comment: highlight this text and add a note to it'}
+        class="flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-neutral-100
+          dark:hover:bg-neutral-800"
+        onpointerdown={applyPendingComment}
+        onclick={applyPendingComment}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.comment} />
+        </svg>
+      </button>
       <span class="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
       {#each MARKUP_COLORS as c}
         <button
