@@ -27,6 +27,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
   let compressing = $state(false);
   let compressNote: string | null = $state(null);
   let compressNoteTimeout: ReturnType<typeof setTimeout> | undefined;
+  let convertingDocx = $state(false);
   let exportingPageOnly = $state(false);
   let exportingPagesZip = $state(false);
   let exportingAll = $state(false);
@@ -151,6 +152,46 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       error = e instanceof Error ? e.message : 'Compression failed';
     } finally {
       compressing = false;
+    }
+  }
+
+  // Saves everything added, like Save, then rebuilds it as a Word document.
+  // Works on an untouched PDF too; no password, since Word can't open one.
+  async function onExportDocx() {
+    const doc = $activeDocument;
+    if (!doc) return;
+
+    convertingDocx = true;
+    error = null;
+    try {
+      const placements = $signatureStore.signature ? doc.placedSignatures : [];
+      const bytes = await exportSignedPdf({
+        pdfFile: doc.file,
+        documentId: doc.id,
+        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
+        placements: placements.length > 0 ? placements : undefined,
+        renderScale: $editorStore.renderScale,
+        rotation: doc.rotation,
+        watermark: currentWatermark(),
+        stripScripts: $stripEmbeddedScripts,
+        redactions: doc.redactions,
+        texts: doc.texts,
+        comments: doc.comments,
+        highlights: doc.highlights,
+        shapes: doc.shapes,
+        images: doc.images,
+        formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
+        pageWatermark: doc.pageWatermark,
+      });
+      // Loaded on first use, so the Word writer isn't in the main bundle.
+      const { downloadPdfAsDocx } = await import('../lib/pdf/docx');
+      await downloadPdfAsDocx(bytes, doc.file.name);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Conversion failed';
+    } finally {
+      convertingDocx = false;
     }
   }
 
@@ -445,6 +486,22 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       >
         <span class="block">{compressing ? 'Compressing…' : 'Save compressed'}</span>
         <span class="block text-xs text-neutral-400">Smaller file: images are scaled down and re-encoded</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
+          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+          dark:text-neutral-200 dark:hover:bg-neutral-800"
+        disabled={convertingDocx}
+        onclick={() => {
+          showSaveMenu = false;
+          onExportDocx();
+        }}
+      >
+        <span class="block">{convertingDocx ? 'Converting…' : 'Save as Word (.docx)'}</span>
+        <span class="block text-xs text-neutral-400">Editable text and pictures; tables and columns may shift</span>
       </button>
 
       {#if ($activeDocument?.pageCount ?? 1) > 1}

@@ -50,6 +50,7 @@ Other
 
 - `idb` — IndexedDB for the saved signature
 - JSZip — multi-file downloads
+- docx — Save as Word, loaded on first use
 - tesseract.js — text recognition in scans, loaded on first use
 - `vite-plugin-pwa` — offline support (prompt-to-update, never auto-reload)
 
@@ -167,7 +168,7 @@ When Export PDF is pressed:
 
 original_filename_signed.pdf
 
-Also available: save compressed (`lib/pdf/compress.ts`: re-encodes images as smaller JPEGs, deflates raw streams; runs on the exported bytes, with copy-locking applied after it), save the current page only, each page as a separate PDF (ZIP), all documents (ZIP), merge documents in a chosen order, and print. Optional: strip embedded JavaScript, lock copying, require a password to open (`lib/pdf/password.ts`: `applyProtection`, the last step before saving; the password lives in `stores/exportOptions.ts`, memory only). Load PDFs for editing with `loadEditablePdf` (it decrypts permission-only encryption); a PDF that needs a password to open is unlocked by UnlockPdf (shown by PDFPages, the front-page file list, and VerifyResults), which swaps in a decrypted copy via `editorStore.unlockDocument`.
+Also available: save compressed (`lib/pdf/compress.ts`: re-encodes images as smaller JPEGs, deflates raw streams; runs on the exported bytes, with copy-locking applied after it), save as Word (`lib/pdf/docx.ts`, imported dynamically: runs on the exported bytes like the page images; rebuilds lines, paragraphs, headings, alignment, and tab stops from pdf.js text positions, cuts pictures from the rendered page by following the operator list's transforms, adds form field values as text, one section per page), save the current page only, each page as a separate PDF (ZIP), all documents (ZIP), merge documents in a chosen order, and print. Optional: strip embedded JavaScript, lock copying, require a password to open (`lib/pdf/password.ts`: `applyProtection`, the last step before saving; the password lives in `stores/exportOptions.ts`, memory only). Load PDFs for editing with `loadEditablePdf` (it decrypts permission-only encryption); a PDF that needs a password to open is unlocked by UnlockPdf (shown by PDFPages, the front-page file list, and VerifyResults), which swaps in a decrypted copy via `editorStore.unlockDocument`.
 
 Every export embeds a small verification record in the PDF metadata (`lib/pdf/verification.ts`).
 
@@ -250,7 +251,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, compress, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, compress, docx, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange
