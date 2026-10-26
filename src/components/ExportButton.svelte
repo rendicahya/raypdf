@@ -263,6 +263,13 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
     }
   }
 
+  // Ctrl/Cmd+P prints the PDF with everything added, not the editor page.
+  function onKeydown(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'p') return;
+    e.preventDefault();
+    if (!printing) onPrint();
+  }
+
   async function onExportAll() {
     const documents = $editorStore.documents;
 
@@ -342,6 +349,8 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
 <!-- Lives in the top Toolbar: Save is always one click away, whether or not
      the Signature panel is open. The chevron menu holds the other ways to
      save plus the two export options. -->
+<svelte:window onkeydown={onKeydown} />
+
 <div class="relative flex items-center gap-1">
   <div class="flex overflow-hidden rounded-lg">
     <button
@@ -384,7 +393,8 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
   <button
     type="button"
     aria-label="Print this PDF"
-    use:tooltip={'Print this PDF'}
+    aria-keyshortcuts="Control+P"
+    use:tooltip={'Print this PDF (Ctrl+P)'}
     class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors
       hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-50
       dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"

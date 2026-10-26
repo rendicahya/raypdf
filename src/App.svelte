@@ -14,7 +14,7 @@
   import SearchBar from './components/SearchBar.svelte';
   import OcrStatus from './components/OcrStatus.svelte';
   import { search, openSearch, closeSearch } from './stores/search';
-  import { editorStore, activeDocument } from './stores/editor';
+  import { editorStore, activeDocument, DEFAULT_RENDER_SCALE } from './stores/editor';
   import { theme } from './stores/theme';
   import { pageSidebarOpen, pageSidebarWidth, togglePageSidebar } from './stores/layout';
   import { redactMode } from './stores/redact';
@@ -195,6 +195,7 @@
   //  - Ctrl/Cmd+Z: undo. Ctrl/Cmd+Shift+Z (or Ctrl+Y): redo.
   //  - Left/Right: previous/next page.
   //  - Ctrl/Cmd+Left/Right: previous/next document.
+  //  - Ctrl/Cmd+P (ExportButton): print the edited PDF.
   function onGlobalKeydown(e: KeyboardEvent) {
     if (!readyForEditor) return;
 
@@ -203,6 +204,16 @@
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
       e.preventDefault();
       openSearch();
+      return;
+    }
+
+    // Ctrl/Cmd with +, -, or 0 zooms the document instead of the browser
+    // (as Ctrl+wheel does in PDFPages).
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && ['=', '+', '-', '0'].includes(e.key)) {
+      e.preventDefault();
+      if (e.key === '-') editorStore.zoomOut();
+      else if (e.key === '0') editorStore.setRenderScale(DEFAULT_RENDER_SCALE);
+      else editorStore.zoomIn();
       return;
     }
 

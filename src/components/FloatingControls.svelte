@@ -542,7 +542,7 @@
       <button
         type="button"
         aria-label="Zoom out"
-        use:tooltip={'Zoom out'}
+        use:tooltip={'Zoom out (Ctrl+−, or Ctrl+scroll)'}
         class={iconButtonClass}
         onclick={() => editorStore.zoomOut()}
       >
@@ -555,7 +555,7 @@
         aria-label="Zoom level"
         aria-haspopup="menu"
         aria-expanded={zoomMenu !== null}
-        use:tooltip={'Zoom level and fit'}
+        use:tooltip={'Zoom level and fit (Ctrl+0: 100%)'}
         class="w-12 rounded-full px-1 py-0.5 text-center text-xs tabular-nums text-neutral-500 hover:bg-neutral-100
           dark:text-neutral-400 dark:hover:bg-neutral-800"
         onclick={toggleZoomMenu}
@@ -568,7 +568,7 @@
       <button
         type="button"
         aria-label="Zoom in"
-        use:tooltip={'Zoom in'}
+        use:tooltip={'Zoom in (Ctrl+=, or Ctrl+scroll)'}
         class={iconButtonClass}
         onclick={() => editorStore.zoomIn()}
       >

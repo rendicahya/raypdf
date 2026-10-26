@@ -125,7 +125,7 @@ Right sidebar (ToolPanel): the active tool's options (`stores/toolPanel.ts`). Fo
 
 The bottom toolbar is positioned by App.svelte, centred on the area right of the page sidebar including the panel, so it doesn't move when the panel opens (it only slides left if it would otherwise overlap the panel).
 
-Save / Print (ExportButton) sit at the right end of the top Toolbar; the chevron menu holds the other save options and the export toggles.
+Save / Print (ExportButton) sit at the right end of the top Toolbar; the chevron menu holds the other save options and the export toggles. Ctrl+P (ExportButton) prints the edited PDF; Ctrl+wheel (PDFPages, zooming around the pointer) and Ctrl+= / − / 0 (App) zoom the document instead of the browser.
 
 The user drags the signature from the panel onto the document.
 

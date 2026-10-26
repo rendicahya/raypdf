@@ -151,23 +151,49 @@
   }
 
   // Zooming or rotating resizes every page: keep the same spot of the
-  // current page at the top of the view. (The Zoom tool then corrects
-  // further, to keep the clicked point under the pointer.)
-  let anchor: { page: number; ratio: number; xRatio: number } | null = null;
+  // current page at the top of the view, or, for Ctrl+wheel, the spot under
+  // the pointer where it was. (The Zoom tool then corrects further, to keep
+  // the clicked point under the pointer.)
+  type Anchor = {
+    page: number;
+    // The spot as a fraction of its page, and where it sits in the view.
+    yRatio: number;
+    viewY: number;
+    // Null keeps the view centred horizontally (`xRatio` of the scroll width).
+    xRatio: number;
+    viewX: number | null;
+  };
+  let anchor: Anchor | null = null;
   let lastLayout = '';
+  let zoomPoint: { x: number; y: number } | null = null;
 
   $effect.pre(() => {
     const layout = `${scale}:${rotation}`;
     if (layout === lastLayout) return;
     const el = container();
-    const slot = slotOf(currentPage);
+    const point = zoomPoint;
+    zoomPoint = null;
+    const pointSlot = point ? slotAt(point.y) : null;
+    const slot = pointSlot ?? slotOf(currentPage);
     if (lastLayout && el && slot) {
-      const top = slot.getBoundingClientRect().top - el.getBoundingClientRect().top;
-      anchor = {
-        page: currentPage,
-        ratio: -top / slot.offsetHeight,
-        xRatio: el.scrollWidth > el.clientWidth ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth : 0.5,
-      };
+      const view = el.getBoundingClientRect();
+      const rect = slot.getBoundingClientRect();
+      anchor =
+        point && pointSlot
+          ? {
+              page: Number(slot.dataset.pageSlot),
+              yRatio: (point.y - rect.top) / rect.height,
+              viewY: point.y - view.top,
+              xRatio: (point.x - rect.left) / rect.width,
+              viewX: point.x - view.left,
+            }
+          : {
+              page: currentPage,
+              yRatio: (view.top - rect.top) / rect.height,
+              viewY: 0,
+              xRatio: el.scrollWidth > el.clientWidth ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth : 0.5,
+              viewX: null,
+            };
     }
     lastLayout = layout;
   });
@@ -181,10 +207,59 @@
     const slot = slotOf(saved.page);
     if (!slot) return;
     anchor = null;
-    const top = slot.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-    el.scrollTop = top + saved.ratio * slot.offsetHeight;
-    el.scrollLeft = saved.xRatio * el.scrollWidth - el.clientWidth / 2;
+    const view = el.getBoundingClientRect();
+    const rect = slot.getBoundingClientRect();
+    el.scrollTop += rect.top - view.top + saved.yRatio * slot.offsetHeight - saved.viewY;
+    if (saved.viewX === null) el.scrollLeft = saved.xRatio * el.scrollWidth - el.clientWidth / 2;
+    else el.scrollLeft += rect.left - view.left + saved.xRatio * slot.offsetWidth - saved.viewX;
     ownScrollTop = el.scrollTop;
+  });
+
+  // The page slot level with a screen y, or the nearest one.
+  function slotAt(y: number): HTMLElement | null {
+    let best: HTMLElement | null = null;
+    let bestDistance = Infinity;
+    for (const slot of listEl?.querySelectorAll<HTMLElement>('[data-page-slot]') ?? []) {
+      const { top, bottom } = slot.getBoundingClientRect();
+      const distance = y < top ? top - y : y > bottom ? y - bottom : 0;
+      if (distance < bestDistance) {
+        best = slot;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  // Ctrl+wheel (and a touchpad pinch, which arrives as one) zooms the
+  // document instead of the browser, a step per mouse notch. Over the page
+  // column it zooms around the pointer; elsewhere in the editor, like the
+  // zoom buttons.
+  const WHEEL_STEP = 50;
+  let wheelTotal = 0;
+  let lastWheel = 0;
+
+  function onWheel(e: WheelEvent) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    if (e.timeStamp - lastWheel > 300) wheelTotal = 0;
+    lastWheel = e.timeStamp;
+    wheelTotal += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY;
+    if (Math.abs(wheelTotal) < WHEEL_STEP) return;
+    const zoomIn = wheelTotal < 0;
+    wheelTotal = 0;
+    const el = container();
+    const over = el && e.target instanceof Node && el.contains(e.target);
+    zoomPoint = over ? { x: e.clientX, y: e.clientY } : null;
+    const before = $editorStore.renderScale;
+    if (zoomIn) editorStore.zoomIn();
+    else editorStore.zoomOut();
+    // At the zoom limit nothing changes, so don't leave the point for later.
+    if ($editorStore.renderScale === before) zoomPoint = null;
+  }
+
+  $effect(() => {
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => window.removeEventListener('wheel', onWheel);
   });
 
   // Mount pages within about a screen of the view.
