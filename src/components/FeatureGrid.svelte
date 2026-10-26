@@ -108,9 +108,35 @@
       title: 'Find text',
       description:
         'Press Ctrl+F to search every page at once. Matches are counted, marked on the page, and stepped through with Enter.',
-      points: ['Matching ignores case and line breaks.', 'Select found text to copy or highlight it.'],
+      points: [
+        'Matching ignores case and line breaks.',
+        'Select found text to copy or highlight it.',
+        'A scan with nothing found? Recognize its text and search again.',
+      ],
       illustration: 'A search for "invoice" showing match 2 of 5 marked on the page',
       paths: ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4'],
+    },
+    {
+      kind: 'ocr',
+      title: 'Recognize text in scans',
+      description:
+        "A scanned page is only a picture, so there's nothing to find or copy. Recognize text reads the words on it (OCR) and adds them to the page as invisible text, right where they are. The page looks the same, but now you can search it, select the text, and copy it.",
+      points: [
+        'Runs in your browser like everything else, so the scan never leaves this device.',
+        'Recognize every scanned page at once, or only the pages you pick.',
+        'The text is saved into the PDF, so other PDF readers can search it too.',
+        'English for now. About 4.5 MB is downloaded the first time, and after that it works offline.',
+      ],
+      illustration: 'A scanned page read from top to bottom, then the same page with its text selected, ready to find or copy',
+      paths: [
+        'M4 8V5a1 1 0 0 1 1-1h3',
+        'M16 4h3a1 1 0 0 1 1 1v3',
+        'M20 16v3a1 1 0 0 1-1 1h-3',
+        'M8 20H5a1 1 0 0 1-1-1v-3',
+        'M8 9h8',
+        'M8 12h8',
+        'M8 15h5',
+      ],
     },
     {
       kind: 'screenshot',

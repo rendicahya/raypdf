@@ -39,10 +39,11 @@ It is **not** a replacement for PKI-based digital signatures.
 - **Continuous scrolling**: all pages sit in one column, so you can scroll from page to page. The page you're looking at (or last worked on) is the current page for the toolbar, the page picker, and the sidebar, and jumping to a page scrolls to it. Only pages near the view are drawn, so long documents stay quick.
 - **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page, rendered as they scroll into view so long documents open quickly. Redaction boxes show on the thumbnails as you draw them. Click to jump; **drag and drop to reorder pages**.
 - **Select several pages** with Ctrl/⌘-click, Shift-click for a range, the checkbox on each thumbnail, or Ctrl+A. A bar at the top of the sidebar then rotates, saves (as one PDF with just those pages), or deletes them all at once; `Delete` and `Esc` work too.
-- **Right-click a thumbnail** for the page tools: on the whole selection if the page is part of it, otherwise on just that page (rotate left/right, move up/down, duplicate, insert a blank page after, save as PDF, PNG, or JPG, select, delete). Page edits change the PDF itself; signatures, redactions, text, highlights, comments, shapes, and images follow their page, and every edit can be undone. Images include everything added to the page except comments; several pages download as a ZIP.
+- **Right-click a thumbnail** for the page tools: on the whole selection if the page is part of it, otherwise on just that page (rotate left/right, move up/down, duplicate, insert a blank page after, recognize text, save as PDF, PNG, or JPG, select, delete). Page edits change the PDF itself; signatures, redactions, text, highlights, comments, shapes, and images follow their page, and every edit can be undone. Images include everything added to the page except comments; several pages download as a ZIP.
 - **Resize the sidebar** by dragging its right edge (or focusing it and using the arrow keys); double-click the edge to reset. The width is remembered, and thumbnails render sharper as it grows.
-- **Right-click the document** for a menu that fits what's under the pointer: on the page, place the signature, add text or a comment right there, zoom, rotate the page, or copy it as an image; on selected text, copy, highlight, underline, or strike it through; on a markup, remove it (or change a highlight's color); on a placed signature, redaction, text box, comment, shape, or image, edit or delete it. The page menu also has Add image here.
-- **Find in the document** with Ctrl+F (⌘F) or the search button: matches on every page are counted, highlighted on the page, and stepped through with Enter / Shift+Enter. Matching ignores case and treats line breaks as spaces.
+- **Right-click the document** for a menu that fits what's under the pointer: on the page, place the signature, add text or a comment right there, zoom, rotate the page, copy it as an image, or recognize its text; on selected text, copy, highlight, underline, or strike it through; on a markup, remove it (or change a highlight's color); on a placed signature, redaction, text box, comment, shape, or image, edit or delete it. The page menu also has Add image here.
+- **Find in the document** with Ctrl+F (⌘F) or the search button: matches on every page are counted, highlighted on the page, and stepped through with Enter / Shift+Enter. Matching ignores case and treats line breaks as spaces. When nothing is found, a **Recognize text** button is offered, since a scan has no text to search yet.
+- **Recognize text (OCR)** in scanned pages, in English: the button in the top bar does every page without text, and the page or thumbnail right-click menu does just those pages. The words are written onto the page as invisible text right where they appear, so the page looks the same but can be searched, selected, and copied, here and in other PDF readers once saved. Pages that already have text are skipped, a status bar shows the progress (with Cancel), and it can be undone. It runs in the browser with tesseract.js; its files (about 4.5 MB) are only downloaded the first time it's used and are then cached for offline use.
 - **Fill in PDF forms**: a PDF's own text fields, checkboxes, radio buttons, and dropdowns can be filled in directly on the page. The values are written into the real fields on export, so the result is still a normal fillable form.
 - **Floating toolbar** (icon-only, with instant tooltips):
   - Undo / Redo (`Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y`)
@@ -97,7 +98,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Offline (PWA)
 
-- A service worker precaches the app, including the pdf.js worker. New versions wait in the background until the user clicks **Reload to update**, so work in progress is never interrupted.
+- A service worker precaches the app, including the pdf.js worker. The text recognition files are left out of the precache, so nobody downloads them without using them; they're cached the first time text is recognized. New versions wait in the background until the user clicks **Reload to update**, so work in progress is never interrupted.
 
 ## Roadmap
 
@@ -108,7 +109,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ## Development
 
-Stack: Svelte 5 + Vite + TypeScript (strict), Tailwind CSS, pdf.js, pdf-lib (`@cantoo/pdf-lib`), IndexedDB (via `idb`), JSZip.
+Stack: Svelte 5 + Vite + TypeScript (strict), Tailwind CSS, pdf.js, pdf-lib (`@cantoo/pdf-lib`), IndexedDB (via `idb`), JSZip, tesseract.js (text recognition, loaded on first use; `vite.config.ts` serves its worker, engine, and English data from `ocr/`).
 
 ```bash
 npm install
@@ -126,7 +127,7 @@ Project guidelines (product vision, principles, UX rules, code structure, and wo
 
 - `src/components/`: UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyResults`, …)
 - `src/stores/`: app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
-- `src/lib/pdf/`: loading, rendering, export, compression, redaction, page operations, form filling, screenshots, verification
+- `src/lib/pdf/`: loading, rendering, export, compression, redaction, page operations, form filling, screenshots, text recognition, verification
 - `src/lib/watermark/`: visible watermark layout and rendering
 - `src/lib/signature/`: signature storage and sizing
 - `src/lib/utils/`: persistence, file validation, tooltip and other Svelte actions

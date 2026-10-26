@@ -50,6 +50,7 @@ Other
 
 - `idb` — IndexedDB for the saved signature
 - JSZip — multi-file downloads
+- tesseract.js — text recognition in scans, loaded on first use
 - `vite-plugin-pwa` — offline support (prompt-to-update, never auto-reload)
 
 Image Processing
@@ -138,6 +139,8 @@ Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and th
 Selecting text shows a markup toolbar (highlight in five colors, underline / strikethrough always black via `markupColorFor`); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`).
 
 Ctrl+F opens SearchBar (`stores/search.ts`, `lib/pdf/search.ts`): matches are counted from pdf.js text content and boxed on screen from the text layer.
+
+Recognize text (OCR, English only for now; `stores/ocr.ts`, progress in OcrStatus) is an action, not a tool: the top bar button (every page), the page and thumbnail menus, and SearchBar's "No results". `lib/pdf/ocr.ts` renders pages without text as shown and runs tesseract.js (imported dynamically, so it's not in the main bundle); `addInvisibleText` in `pageOps.ts` writes the words into the file as invisible text (render mode 3) through `editPages`, so the text layer, Find, copying, and export need nothing extra. Its worker, engine, and language data are served from `ocr/` by the `ocrFiles` plugin in `vite.config.ts`, kept out of the PWA precache and cached on first use; never load them from a CDN.
 
 Several signatures can be saved (drawn, typed, or uploaded — `SignatureCreator`, `lib/signature/create.ts`); every `PlacedSignature` has a `signatureId`, and export takes a `signatureFor` lookup rather than one image.
 
@@ -240,12 +243,12 @@ components/
 - ExportButton, MergeOrderDialog, StartOverButton
 - VerifyResults (the Verify choice on the front page; checks every added PDF in place)
 - ThemeToggle, FullscreenToggle, UpdateToast
-- PlacedBox (a movable, resizable item on a page: shapes, images), ShapeGraphic, CropOverlay, UnlockPdf
+- PlacedBox (a movable, resizable item on a page: shapes, images), ShapeGraphic, CropOverlay, UnlockPdf, OcrStatus
 - ContextMenu (reusable right-click menu; used by PageSidebar and PDFViewer, icons in `lib/utils/menuIcons.ts`)
 
 lib/
 
-- pdf/ — loader, docCache, export, compress, pageImages, pageNumbers, headerFooter, contentBounds, password, shapes, forms, highlight, search, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, compress, pageImages, pageNumbers, headerFooter, contentBounds, password, shapes, forms, highlight, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange
@@ -253,7 +256,7 @@ lib/
 stores/
 
 - editor.ts — documents, placements, page order, per-document undo/redo history
-- one small store per tool or preference (redact, textTool, commentTool, zoomTool, textSelect, screenshotTool, shapeTool, cropTool, images, clickToPlace, watermark, exportOptions, layout, theme, …)
+- one small store per tool or preference (redact, textTool, commentTool, zoomTool, textSelect, screenshotTool, shapeTool, cropTool, images, ocr, clickToPlace, watermark, exportOptions, layout, theme, …)
 
 ---
 

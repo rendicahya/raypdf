@@ -58,6 +58,13 @@
       ],
     },
     {
+      q: 'Can RayPDF read the text in a scanned PDF?',
+      a: [
+        'Yes, in English for now. Click Recognize text in the top bar, or right-click a page. RayPDF reads the words on the scanned pages and adds them as invisible text, so you can search, select, and copy them, and the saved PDF is searchable in other readers too.',
+        'It runs entirely in your browser. The first time, about 4.5 MB is downloaded to do it; after that it works offline. Pages that already have text are left as they are.',
+      ],
+    },
+    {
       q: 'How much smaller does "Save compressed" make a file?',
       a: [
         'It depends on what is inside. Scanned pages and photos usually shrink a lot, because images are scaled down and re-encoded. A PDF that is mostly text is often already compact and changes little. Text stays sharp and selectable either way.',
@@ -74,6 +81,7 @@
       q: 'Does it work offline?',
       a: [
         "Yes. After your first visit everything is saved by your browser, so RayPDF opens and works without a connection. You can also install it as an app from your browser's menu.",
+        'The one exception is Recognize text: it downloads its files the first time you use it, and works offline from then on.',
       ],
     },
   ];

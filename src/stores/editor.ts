@@ -9,7 +9,9 @@ import {
   rotatePdfPages,
   cropPdfPages,
   uncropPdfPages,
+  addInvisibleText,
 } from '../lib/pdf/pageOps';
+import type { OcrPage } from '../lib/pdf/ocr';
 import type { FormValues } from '../lib/pdf/forms';
 import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
 import type { HeaderFooterSettings } from '../lib/pdf/headerFooter';
@@ -1101,10 +1103,13 @@ function createEditorStore() {
    * Applies a page-level edit to the active document. The PDF file itself is
    * rewritten, so rendering, thumbnails, and export all keep working on plain
    * page numbers; every placement/redaction/text/comment follows its page (or
-   * is dropped with it), and the old file stays in the undo history.
+   * is dropped with it), and the old file stays in the undo history. Edits
+   * the document `docId` instead, if given.
    */
-  async function editPages(edit: PageEdit) {
-    const doc = getActiveDocument(currentState());
+  async function editPages(edit: PageEdit, docId?: string) {
+    const doc = docId
+      ? currentState().documents.find((d) => d.id === docId)
+      : getActiveDocument(currentState());
     if (!doc) return;
     const { renderScale } = currentState();
 
@@ -1296,6 +1301,22 @@ function createEditorStore() {
     });
   }
 
+  /**
+   * Writes recognized text (lib/pdf/ocr.ts) into a document's pages, as one
+   * undo step. Recognition takes a while, so it's only applied if the file
+   * is still `basedOn`, the one recognized; resolves to whether it was.
+   */
+  async function addRecognizedText(docId: string, basedOn: File, pages: OcrPage[]): Promise<boolean> {
+    const doc = currentState().documents.find((d) => d.id === docId);
+    if (!doc || doc.file !== basedOn) return false;
+    await editPages(
+      { rewrite: (file) => addInvisibleText(file, pages), mapPage: (p) => p, mapCurrent: (p) => p },
+      docId,
+    );
+    const latest = currentState().documents.find((d) => d.id === docId);
+    return !!latest && latest.file !== basedOn;
+  }
+
   function rotateLeft() {
     rotateBy(-90);
   }
@@ -1411,6 +1432,7 @@ function createEditorStore() {
     rotatePages,
     cropPages,
     uncropPages,
+    addRecognizedText,
     markExported,
     undo,
     redo,

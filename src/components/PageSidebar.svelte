@@ -19,6 +19,7 @@
   import PageThumbnail from './PageThumbnail.svelte';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
+  import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
 
   let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
@@ -328,9 +329,15 @@
             },
           ]),
       {
+        label: many ? `Recognize text on ${count}` : 'Recognize text',
+        icon: MENU_ICONS.recognize,
+        separatorBefore: true,
+        disabled: isOcrRunning($ocrStatus),
+        onSelect: () => recognizeText(pages),
+      },
+      {
         label: many ? `Save ${count} as` : 'Save page as',
         icon: MENU_ICONS.save,
-        separatorBefore: true,
         children: [
           { label: 'PDF', onSelect: () => exportPages(pages, 'pdf') },
           { label: many ? 'PNG (ZIP)' : 'PNG', onSelect: () => exportPages(pages, 'png') },

@@ -5,6 +5,7 @@
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { findMatches } from '../lib/pdf/search';
   import { tooltip } from '../lib/utils/tooltip';
+  import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
 
   let inputEl: HTMLInputElement | undefined = $state();
 
@@ -124,6 +125,18 @@
     >
       {status}
     </span>
+    {#if status === 'No results' && !isOcrRunning($ocrStatus)}
+      <!-- A scan has no text to find until it's recognized. -->
+      <button
+        type="button"
+        class="ml-1 shrink-0 rounded-md px-1.5 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50
+          dark:text-blue-400 dark:hover:bg-blue-950"
+        use:tooltip={'Recognize the text in scanned pages (OCR), then search again'}
+        onclick={() => recognizeText()}
+      >
+        Recognize text
+      </button>
+    {/if}
     <span class="mx-0.5 h-5 w-px bg-neutral-200 dark:bg-neutral-700"></span>
     <button
       type="button"

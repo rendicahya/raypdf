@@ -1,5 +1,18 @@
-import { PDFDocument, degrees } from '@cantoo/pdf-lib';
+import {
+  PDFDocument,
+  StandardFonts,
+  TextRenderingMode,
+  beginText,
+  degrees,
+  endText,
+  setFontAndSize,
+  setTextMatrix,
+  setTextRenderingMode,
+  showText,
+  type PDFFont,
+} from '@cantoo/pdf-lib';
 import { loadEditablePdf } from './password';
+import type { OcrPage } from './ocr';
 
 /**
  * Page-level edits — move, delete, duplicate, insert a blank page, rotate or
@@ -92,6 +105,65 @@ export function uncropPdfPages(file: File, pages: number[]): Promise<File> {
       const target = pdfDoc.getPage(page - 1);
       const { x, y, width, height } = target.getMediaBox();
       target.setCropBox(x, y, width, height);
+    }
+  });
+}
+
+/** `text` without the characters the font can't encode (it only covers Latin text). */
+function encodableText(font: PDFFont, text: string): string {
+  let result = '';
+  for (const ch of text.normalize('NFKC')) {
+    try {
+      font.encodeText(ch);
+      result += ch;
+    } catch {
+      // Not in the font's encoding: leave it out.
+    }
+  }
+  return result;
+}
+
+/**
+ * Writes recognized words (lib/pdf/ocr.ts) onto their pages as invisible
+ * text, the way scanners' own OCR does: nothing changes on screen or in
+ * print, but the words can be found, selected, and copied, here and in any
+ * other PDF reader. Each word is stretched to the width it has on the page.
+ */
+export function addInvisibleText(file: File, pages: OcrPage[]): Promise<File> {
+  return editPdf(file, (pdfDoc) => {
+    const font = pdfDoc.embedStandardFont(StandardFonts.Helvetica);
+    for (const { page, words } of pages) {
+      if (words.length === 0) continue;
+      const target = pdfDoc.getPage(page - 1);
+      // The page's own content can leave its coordinate system changed;
+      // wrapped in a save/restore, the text after it starts from the page's.
+      target.node.normalize();
+      target.node.wrapContentStreams(
+        pdfDoc.context.getPushGraphicsStateContentStream(),
+        pdfDoc.context.getPopGraphicsStateContentStream(),
+      );
+      const fontKey = target.node.newFontDictionary(font.name, font.ref);
+      const operators = [beginText(), setFontAndSize(fontKey, 1), setTextRenderingMode(TextRenderingMode.Invisible)];
+      for (const word of words) {
+        const text = encodableText(font, word.text);
+        const width = text ? font.widthOfTextAtSize(text, 1) : 0;
+        if (width <= 0) continue;
+        const [x, y] = word.start;
+        operators.push(
+          setTextMatrix(
+            (word.end[0] - x) / width,
+            (word.end[1] - y) / width,
+            word.up[0] - x,
+            word.up[1] - y,
+            x,
+            y,
+          ),
+          // The trailing space keeps words apart when the text is read back.
+          showText(font.encodeText(`${text} `)),
+        );
+      }
+      operators.push(endText());
+      target.pushOperators(...operators);
     }
   });
 }

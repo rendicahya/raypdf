@@ -6,6 +6,7 @@
     | 'redact'
     | 'pages'
     | 'find'
+    | 'ocr'
     | 'screenshot'
     | 'save'
     | 'verify'
@@ -343,6 +344,50 @@
       class="fi-pop fill-orange-400/60 stroke-orange-500"
       style:--d="1.6s"
     />
+  {:else if kind === 'ocr'}
+    <!-- The scan is read top to bottom, and comes out as text that can be selected and copied. -->
+    <rect x="14" y="14" width="96" height="122" rx="6" stroke-width="1.5" class="fill-stone-100 stroke-stone-300 dark:fill-neutral-700 dark:stroke-neutral-600" />
+    <g transform="rotate(-1.5 62 75)">
+      <text x="24" y="34" font-size="9" font-family="Georgia, serif" class="fill-neutral-600 dark:fill-neutral-300">
+        Invoice 4471
+      </text>
+      {#each { length: 6 } as _, i}
+        <rect x="24" y={44 + i * 11} width={i === 5 ? 44 : 76} height="4" rx="1" class="fill-neutral-400/70 dark:fill-neutral-500" />
+      {/each}
+    </g>
+    <g class="fi-gone fi-out" style:--d="0.1s" style:--t="1.1s">
+      <g class="fi-move" style:--d="0.1s" style:--t="1s" style:--ease="ease-in-out" style:--dy="-112px">
+        <rect x="15" y="118" width="94" height="14" class="fill-blue-500/15" />
+        <line x1="15" y1="132" x2="109" y2="132" stroke-width="1.5" class="stroke-blue-500" />
+      </g>
+    </g>
+    {@render arrow('M114 75h12', 1.15)}
+    <g class="fi-slide" style:--d="1.25s" style:--dx="-14px">
+      {@render page(130, 14, 96, 122)}
+      <rect x="138" y="26" width="64" height="11" rx="2" class="fi-grow fill-blue-400/30" style:--d="1.75s" style:--t="0.35s" />
+      <text x="140" y="34" font-size="9" class={STRONG}>Invoice 4471</text>
+      {@render lines(140, 44, 76, 6, 11)}
+      <rect x="138" y="42" width="80" height="8" rx="2" class="fi-grow fill-blue-400/30" style:--d="2s" style:--t="0.35s" />
+      {#each ['Find', 'Copy'] as chip, i (chip)}
+        <g class="fi-pop" style:--d="{2.4 + i * 0.1}s">
+          <rect
+            x={140 + i * 40}
+            y="112"
+            width="34"
+            height="15"
+            rx="7.5"
+            class="fill-blue-50 stroke-blue-200 dark:fill-blue-950 dark:stroke-blue-900"
+          />
+          <text x={157 + i * 40} y="122.5" text-anchor="middle" font-size="7" class="fill-blue-700 dark:fill-blue-300">
+            {chip}
+          </text>
+        </g>
+      {/each}
+    </g>
+    <text x="62" y="147" text-anchor="middle" font-size="8" class={MUTED}>scan</text>
+    <text x="178" y="147" text-anchor="middle" font-size="8" class="fi-fade fill-emerald-600 dark:fill-emerald-400" style:--d="2.2s">
+      text you can find
+    </text>
   {:else if kind === 'screenshot'}
     <!-- An area is dragged out over the page, flashes, and lands on the clipboard. -->
     {@render page(16, 10, 110, 130)}

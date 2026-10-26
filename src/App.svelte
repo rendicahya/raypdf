@@ -12,6 +12,7 @@
   import FeatureGrid from './components/FeatureGrid.svelte';
   import Faq from './components/Faq.svelte';
   import SearchBar from './components/SearchBar.svelte';
+  import OcrStatus from './components/OcrStatus.svelte';
   import { search, openSearch, closeSearch } from './stores/search';
   import { editorStore, activeDocument } from './stores/editor';
   import { theme } from './stores/theme';
@@ -515,6 +516,7 @@
       </button>
       <div class="relative flex flex-1 flex-col overflow-hidden">
         <SearchBar />
+        <OcrStatus />
         <div class="flex-1 overflow-auto px-6 py-8" data-pdf-scroll-container>
           {#key active.id}
             <PDFPages />

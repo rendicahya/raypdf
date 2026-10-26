@@ -24,6 +24,7 @@
   import { search } from '../stores/search';
   import { findInTextLayer } from '../lib/pdf/search';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
+  import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
   import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import PlacedBox from './PlacedBox.svelte';
@@ -1920,6 +1921,12 @@
         separatorBefore: true,
         disabled: capturing,
         onSelect: () => capturePageImage(null, 'clipboard'),
+      },
+      {
+        label: 'Recognize text on this page',
+        icon: MENU_ICONS.recognize,
+        disabled: isOcrRunning($ocrStatus),
+        onSelect: () => recognizeText([page]),
       },
     ];
   }
