@@ -7,7 +7,7 @@
   // choice) once a PDF is added.
 
   interface Feature {
-    kind: FeatureKind;
+    kind: FeatureKind | 'watermark';
     title: string;
     description: string;
     points: string[];
@@ -19,6 +19,22 @@
   }
 
   const features: Feature[] = [
+    {
+      kind: 'watermark',
+      title: 'Sign, with signatures that are hard to reuse',
+      description:
+        "Draw your signature with a mouse, finger, or pen, type it in a handwriting font, or upload a scan, then drag it onto the page. RayPDF weaves a watermark into the signature image, such as your name, the document name, and the date. A signature copied out of one PDF carries that document's details with it, so it's harder to paste into another.",
+      points: [
+        'Your signatures are kept on this device, so next time you only add the PDF.',
+        'Keep several, such as a full signature and your initials.',
+        'Move and resize it, reuse the last position, or put it on every page or every open document in one click.',
+        'Choose the watermark text, add the date and time, and set its position, color, size, and opacity.',
+        'Save the watermark texts you use often and reuse them in one click.',
+      ],
+      illustration: 'A signature copied from Contract.pdf into Invoice.pdf still shows Contract.pdf in its watermark',
+      paths: ['M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6l8-3z', 'M9 13c1-2 2-2 3 0s2 2 3 0'],
+      highlight: true,
+    },
     {
       kind: 'onePass',
       title: 'Everything in one go',
@@ -32,19 +48,6 @@
       illustration: 'Signing, redacting, page numbers, and compression all go into one document, saved once',
       paths: ['M4 6h16', 'M4 12h16', 'M4 18h10', 'M17 16l2 2 3-4'],
       highlight: true,
-    },
-    {
-      kind: 'sign',
-      title: 'Sign',
-      description:
-        'Draw your signature with a mouse, finger, or pen, type it in a handwriting font, or upload a scan. It is kept on this device, so next time you only add the PDF.',
-      points: [
-        'Keep several, such as a full signature and your initials.',
-        'Drag one onto the page, then move and resize it.',
-        'Put it on every page, or in every open document, in one click.',
-      ],
-      illustration: 'A saved signature dragged into the signature box of a page',
-      paths: ['M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z', 'M13 7l3 3'],
     },
     {
       kind: 'forms',
@@ -110,6 +113,18 @@
       paths: ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4'],
     },
     {
+      kind: 'screenshot',
+      title: 'Screenshots',
+      description:
+        'Click a page to capture all of it, or drag a rectangle to capture just an area. The image is copied to the clipboard, ready to paste into a message or another document.',
+      points: [
+        'Save it as a PNG instead, at up to four times the screen resolution.',
+        'Includes your signatures, text, highlights, shapes, images, redactions, and form answers, or leave them out.',
+      ],
+      illustration: 'An area of a page dragged out and copied to the clipboard as an image',
+      paths: ['M4 8V5a1 1 0 0 1 1-1h3', 'M16 4h3a1 1 0 0 1 1 1v3', 'M20 16v3a1 1 0 0 1-1 1h-3', 'M8 20H5a1 1 0 0 1-1-1v-3'],
+    },
+    {
       kind: 'save',
       title: 'Save your way',
       description:
@@ -148,37 +163,23 @@
       paths: ['M12 3v12m0 0-4-4m4 4 4-4', 'M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4'],
     },
   ];
+
+  // Everything else the editor does, too small for a row of its own.
+  const extras = [
+    'Undo and redo every change until you save.',
+    'Open several PDFs at once, each in its own tab.',
+    'Drop files anywhere on the page to add them.',
+    'Zoom in and out, fit the width or the whole page, and rotate the view.',
+    'Page thumbnails in a sidebar you can resize.',
+    "Select and copy the PDF's own text.",
+    "Right-click menus that fit what's under the pointer.",
+    'Keyboard shortcuts for undo, search, pages, and tools.',
+    'Dark mode and fullscreen.',
+  ];
 </script>
 
 <section class="w-full">
-  <!-- The headline feature gets its own wide card above the rows. -->
-  <div
-    class="fi-host flex flex-col gap-4 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6
-      shadow-sm sm:flex-row sm:items-center dark:border-blue-900 dark:from-blue-950/60 dark:to-neutral-900"
-  >
-    <div
-      class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white
-        shadow-md shadow-blue-600/25"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6l8-3z" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 13c1-2 2-2 3 0s2 2 3 0" />
-      </svg>
-    </div>
-    <div class="flex-1">
-      <h2 class="text-lg font-semibold">Signatures that are hard to reuse</h2>
-      <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-        RayPDF weaves a watermark into your signature image, such as your name, the document name, and the date.
-        A signature copied out of one PDF carries that document's details with it, so it's harder to paste into
-        another.
-      </p>
-    </div>
-    <div class="w-full max-w-sm shrink-0 self-center sm:w-72 lg:w-80">
-      <WatermarkIllustration />
-    </div>
-  </div>
-
-  <ul class="mt-4 flex flex-col gap-4">
+  <ul class="flex flex-col gap-4">
     {#each features as feature, i (feature.title)}
       <li
         class="fi-host grid items-center gap-6 rounded-2xl border p-6 shadow-sm sm:grid-cols-2
@@ -191,7 +192,11 @@
             ? 'bg-white/70 dark:bg-neutral-950/40'
             : 'bg-neutral-50 dark:bg-neutral-950/50'} {i % 2 === 1 ? 'sm:order-last' : ''}"
         >
-          <FeatureIllustration kind={feature.kind} label={feature.illustration} />
+          {#if feature.kind === 'watermark'}
+            <WatermarkIllustration label={feature.illustration} />
+          {:else}
+            <FeatureIllustration kind={feature.kind} label={feature.illustration} />
+          {/if}
         </div>
         <div>
           <div class="flex items-center gap-3">
@@ -228,4 +233,27 @@
       </li>
     {/each}
   </ul>
+
+  <div
+    class="mt-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800
+      dark:bg-neutral-900"
+  >
+    <h3 class="text-lg font-semibold">Also in RayPDF</h3>
+    <ul class="mt-3 grid gap-x-6 gap-y-1.5 text-sm text-neutral-500 sm:grid-cols-2 dark:text-neutral-400">
+      {#each extras as extra (extra)}
+        <li class="flex gap-2">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            class="mt-0.5 h-4 w-4 shrink-0 text-blue-500"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5 5 9-10" />
+          </svg>
+          {extra}
+        </li>
+      {/each}
+    </ul>
+  </div>
 </section>

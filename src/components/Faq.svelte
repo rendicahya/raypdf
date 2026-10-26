@@ -80,7 +80,7 @@
 </script>
 
 <section class="w-full" aria-labelledby="faq-heading">
-  <h2 id="faq-heading" class="text-center text-2xl font-bold tracking-tight">Questions and answers</h2>
+  <h2 id="faq-heading" class="text-center text-2xl font-bold tracking-tight">FAQs</h2>
   <div
     class="mt-6 divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white shadow-sm
       dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900"

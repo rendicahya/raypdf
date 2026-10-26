@@ -1,7 +1,9 @@
 <script lang="ts">
   // Front-page illustration for the watermarked signature: a signature
   // signed into one PDF, then copied into another, still carrying the first
-  // document's details. Decorative; the card's text says the same thing.
+  // document's details. Decorative; the row's text says the same thing.
+
+  let { label }: { label: string } = $props();
 
   const WATERMARK = 'R. Doe · Contract.pdf · 25 Oct';
   const SIGNATURE = 'M2 22c6-14 10-20 13-14s-6 18-2 16 8-16 12-14-2 12 2 12 6-10 9-9 0 8 4 8 9-6 14-8 10-2 14-3';
@@ -12,7 +14,7 @@
   ];
 </script>
 
-<svg viewBox="0 0 360 168" class="h-auto w-full" role="img" aria-label="A signature copied from Contract.pdf into Invoice.pdf still shows Contract.pdf in its watermark">
+<svg viewBox="0 0 360 168" class="h-auto w-full" role="img" aria-label={label}>
   <defs>
     {#each docs as doc}
       <clipPath id={doc.clip}>

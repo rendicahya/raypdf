@@ -28,7 +28,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Getting started
 
-- The front page shows the upload area at the top, then a tour of every feature, one illustrated row each: the protected signature first (with an illustration of a copied signature giving itself away), then "Everything in one go" (several jobs on one document, saved once), then each tool. A short FAQ sits at the bottom.
+- The front page shows the upload area at the top, then a tour of every feature, one illustrated row each, animated while hovered: signing with the protected signature first (with an illustration of a copied signature giving itself away), then "Everything in one go" (several jobs on one document, saved once), then each tool, and a short "Also in RayPDF" list for the rest. The FAQs sit at the bottom.
 - Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).- Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
 - **Keep several signatures**, say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.

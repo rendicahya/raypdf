@@ -85,7 +85,7 @@ Toolbar buttons are icon-only, with instant tooltips (`lib/utils/tooltip.ts`) in
 
 ## First Visit
 
-Display a large Add PDF upload card (one or more files), the feature showcase (`FeatureGrid`) below it, and the FAQ (`Faq`) last; the watermarked signature leads as a wide card. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
+Display a large Add PDF upload card (one or more files), the feature showcase (`FeatureGrid`) below it, and the FAQs (`Faq`) last; Sign with the watermarked signature (WatermarkIllustration) leads, and every user-facing feature appears either in a row or in the "Also in RayPDF" list below them. After PDFs are added, the user picks **Open in editor** or **Verify**. Signatures are added inside the editor's Signature panel.
 
 The upload card supports:
 

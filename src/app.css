@@ -99,7 +99,7 @@ body {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .fi-host:hover :is(.fi-pop, .fi-fade, .fi-grow, .fi-draw, .fi-type, .fi-slide, .fi-move, .fi-fly, .fi-out, .fi-press) {
+  .fi-host:hover :is(.fi-pop, .fi-fade, .fi-grow, .fi-draw, .fi-type, .fi-sweep, .fi-slide, .fi-move, .fi-fly, .fi-out, .fi-press) {
     animation-duration: var(--t, 0.4s);
     animation-delay: var(--d, 0s);
     animation-fill-mode: both;
@@ -124,6 +124,10 @@ body {
   }
   .fi-host:hover .fi-type {
     animation-name: fi-type;
+  }
+  /* Revealed from the top-left corner, like a rectangle being dragged out. */
+  .fi-host:hover .fi-sweep {
+    animation-name: fi-sweep;
   }
   .fi-host:hover .fi-slide {
     animation-name: fi-slide;
@@ -180,6 +184,14 @@ body {
 @keyframes fi-type {
   from {
     clip-path: inset(-2px 100% -2px -2px);
+  }
+  to {
+    clip-path: inset(-2px -2px -2px -2px);
+  }
+}
+@keyframes fi-sweep {
+  from {
+    clip-path: inset(-2px 100% 100% -2px);
   }
   to {
     clip-path: inset(-2px -2px -2px -2px);

@@ -1,12 +1,12 @@
 <script lang="ts" module>
   export type FeatureKind =
     | 'onePass'
-    | 'sign'
     | 'forms'
     | 'markup'
     | 'redact'
     | 'pages'
     | 'find'
+    | 'screenshot'
     | 'save'
     | 'verify'
     | 'offline';
@@ -126,82 +126,6 @@
       <text x="213" y="76.5" text-anchor="middle" font-size="9" font-weight="600" class="fill-white">Save</text>
     </g>
     <text x="213" y="98" text-anchor="middle" font-size="7" class="fi-fade {MUTED}" style:--d="2.3s">once</text>
-  {:else if kind === 'sign'}
-    <!-- Pick how to make it, it's drawn, then dragged into the box on the page. -->
-    {@render page(20, 10, 120, 130)}
-    {@render lines(32, 24, 96, 5, 10)}
-    <rect
-      x="32"
-      y="84"
-      width="96"
-      height="36"
-      rx="4"
-      stroke-dasharray="4 3"
-      class="fill-blue-50/60 stroke-blue-400 dark:fill-blue-950/40"
-    />
-    <text
-      x="80"
-      y="105"
-      text-anchor="middle"
-      font-size="8"
-      class="fi-gone fi-out fill-blue-400"
-      style:--d="1.4s"
-      style:--t="1s"
-    >
-      Sign here
-    </text>
-    <line x1="40" y1="128" x2="120" y2="128" class="stroke-neutral-300 dark:stroke-neutral-600" />
-    {@render arrow('M152 60C142 78 130 86 118 90', 1.1)}
-    <g class="fi-pop" style:--d="0.3s">
-      <g transform="translate(150 18) rotate(4)">
-        <rect x="2" y="3" width="76" height="34" rx="6" class="fill-neutral-900/10" />
-        <rect width="76" height="34" rx="6" stroke-width="1.5" class="fill-white stroke-blue-500 dark:fill-neutral-800" />
-        <path
-          d={SIGNATURE}
-          pathLength="1"
-          transform="translate(10 5) scale(0.8)"
-          fill="none"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="fi-draw {INK}"
-          style:--d="0.5s"
-        />
-      </g>
-    </g>
-    <!-- The copy dragged from the card into the box, cursor and all. -->
-    <g class="fi-fly" style:--d="1.4s" style:--dx="108px" style:--dy="-65px">
-      <path
-        d={SIGNATURE}
-        transform="translate(52 88) scale(0.8)"
-        fill="none"
-        stroke-width="2.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class={INK}
-      />
-      <path
-        d="M0 0v14l4-4 3 7 3-1-3-7h5z"
-        transform="translate(106 109)"
-        stroke-width="1"
-        class="fill-neutral-900 stroke-white dark:fill-white dark:stroke-neutral-900"
-      />
-    </g>
-    {#each ['Draw', 'Type', 'Upload'] as chip, i (chip)}
-      <g class="fi-pop" style:--d="{i * 0.1}s">
-        <rect
-          x="160"
-          y={80 + i * 20}
-          width="64"
-          height="15"
-          rx="7.5"
-          class="fill-blue-50 stroke-blue-200 dark:fill-blue-950 dark:stroke-blue-900"
-        />
-        <text x="192" y={90.5 + i * 20} text-anchor="middle" font-size="8" class="fill-blue-700 dark:fill-blue-300">
-          {chip}
-        </text>
-      </g>
-    {/each}
   {:else if kind === 'forms'}
     <!-- A name is typed, the box ticked, and the dropdown picked. -->
     {@render page(60, 8, 120, 134)}
@@ -419,6 +343,73 @@
       class="fi-pop fill-orange-400/60 stroke-orange-500"
       style:--d="1.6s"
     />
+  {:else if kind === 'screenshot'}
+    <!-- An area is dragged out over the page, flashes, and lands on the clipboard. -->
+    {@render page(16, 10, 110, 130)}
+    {@render lines(28, 24, 86, 4, 10)}
+    <path
+      d={SIGNATURE}
+      transform="translate(36 68) scale(0.8)"
+      fill="none"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={INK}
+    />
+    {@render lines(28, 106, 86, 3, 10)}
+    <rect
+      x="26"
+      y="64"
+      width="80"
+      height="32"
+      stroke-dasharray="3 2"
+      class="fi-sweep fill-blue-500/10 stroke-blue-500"
+      style:--d="0.3s"
+      style:--t="0.7s"
+    />
+    <rect x="26" y="64" width="80" height="32" class="fi-gone fi-out fill-white" style:--d="1s" style:--t="0.3s" />
+    <!-- The crosshair drags from the top-left corner to the bottom-right. -->
+    <g class="fi-move" style:--d="0.3s" style:--t="0.7s" style:--dx="-80px" style:--dy="-32px">
+      <path d="M106 90v12M100 96h12" stroke-width="1.5" class={INK} />
+    </g>
+    {@render arrow('M112 80C126 80 130 64 144 64', 1.1)}
+    <g class="fi-fly" style:--d="1.1s" style:--t="0.8s" style:--dx="-122px" style:--dy="16px">
+      <rect x="150" y="51" width="80" height="32" rx="3" class="fill-neutral-900/10" />
+      <rect x="148" y="48" width="80" height="32" rx="3" stroke-width="1.5" class="fill-white stroke-blue-500 dark:fill-neutral-800" />
+      <path
+        d={SIGNATURE}
+        transform="translate(158 52) scale(0.8)"
+        fill="none"
+        stroke-width="2.2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class={INK}
+      />
+    </g>
+    <text x="188" y="98" text-anchor="middle" font-size="8" class="fi-fade {MUTED}" style:--d="1.9s">
+      Copied to clipboard
+    </text>
+    {#each ['Save PNG', 'Up to 4×'] as chip, i (chip)}
+      <g class="fi-pop" style:--d="{2.1 + i * 0.1}s">
+        <rect
+          x={148 + i * 42}
+          y="106"
+          width="38"
+          height="15"
+          rx="7.5"
+          class="fill-blue-50 stroke-blue-200 dark:fill-blue-950 dark:stroke-blue-900"
+        />
+        <text
+          x={167 + i * 42}
+          y="116.5"
+          text-anchor="middle"
+          font-size="7"
+          class="fill-blue-700 dark:fill-blue-300"
+        >
+          {chip}
+        </text>
+      </g>
+    {/each}
   {:else if kind === 'save'}
     <!-- One PDF fans out to each way of saving it. -->
     <g class="fi-pop">
