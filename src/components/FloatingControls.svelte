@@ -5,7 +5,6 @@
   import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
   import { signatureToolMode } from '../stores/signatureTool';
-  import { zoomToolMode } from '../stores/zoomTool';
   import { textSelectMode } from '../stores/textSelect';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation } from '../lib/pdf/loader';
@@ -35,6 +34,8 @@
     'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-100 ' +
     'disabled:cursor-not-allowed disabled:opacity-30 dark:text-neutral-300 dark:hover:bg-neutral-800';
   const toolButtonClass = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors';
+  // Separates the groups of tools: basics, sign and fill, mark up, protect, pages.
+  const dividerClass = 'h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700';
 
   const zoomPercent = $derived(Math.round(($editorStore.renderScale / DEFAULT_RENDER_SCALE) * 100));
   const pageNumbers = $derived(
@@ -49,7 +50,6 @@
       signatureToolMode.set(false);
       textToolMode.set(false);
       commentToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
@@ -65,7 +65,6 @@
       redactMode.set(false);
       textToolMode.set(false);
       commentToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
@@ -82,7 +81,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
@@ -97,24 +95,6 @@
     if ($commentToolMode) {
       redactMode.set(false);
       textToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      zoomToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function toggleZoomToolMode() {
-    zoomToolMode.update((v) => !v);
-    if ($zoomToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
       textSelectMode.set(false);
@@ -134,7 +114,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
       pageWatermarkToolMode.set(false);
@@ -155,7 +134,6 @@
       !$commentToolMode &&
       !$clickToPlaceMode &&
       !$signatureToolMode &&
-      !$zoomToolMode &&
       !$textSelectMode &&
       !$screenshotToolMode &&
       !$pageNumbersToolMode &&
@@ -173,7 +151,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       pageNumbersToolMode.set(false);
       pageWatermarkToolMode.set(false);
@@ -190,7 +167,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageWatermarkToolMode.set(false);
@@ -207,7 +183,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
@@ -224,7 +199,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
@@ -241,7 +215,6 @@
       commentToolMode.set(false);
       clickToPlaceMode.set(false);
       signatureToolMode.set(false);
-      zoomToolMode.set(false);
       textSelectMode.set(false);
       screenshotToolMode.set(false);
       pageNumbersToolMode.set(false);
@@ -338,7 +311,6 @@
     textToolMode.set(false);
     commentToolMode.set(false);
     clickToPlaceMode.set(false);
-    zoomToolMode.set(false);
     textSelectMode.set(false);
     screenshotToolMode.set(false);
     pageNumbersToolMode.set(false);
@@ -607,6 +579,7 @@
       </button>
     </div>
 
+    <!-- Basics -->
     <button
       type="button"
       aria-label="Move"
@@ -638,6 +611,31 @@
 
     <button
       type="button"
+      aria-label="Select"
+      aria-pressed={$textSelectMode}
+      use:tooltip={'Select: drag over the document to select and copy its real text'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$textSelectMode}
+      class:text-neutral-600={!$textSelectMode}
+      class:hover:bg-neutral-100={!$textSelectMode}
+      class:dark:border-neutral-800={!$textSelectMode}
+      class:dark:text-neutral-300={!$textSelectMode}
+      class:dark:hover:bg-neutral-800={!$textSelectMode}
+      class:border-emerald-600={$textSelectMode}
+      class:bg-emerald-600={$textSelectMode}
+      class:text-white={$textSelectMode}
+      onclick={toggleTextSelectMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 5h8M12 5v14M8 19h8" />
+      </svg>
+    </button>
+
+    <div aria-hidden="true" class={dividerClass}></div>
+
+    <!-- Sign and fill -->
+    <button
+      type="button"
       aria-label="Signature"
       aria-pressed={$signatureToolMode}
       use:tooltip={'Signature: open the signature panel to place, manage, and watermark signatures'}
@@ -656,29 +654,6 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z" />
         <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
-      </svg>
-    </button>
-
-    <button
-      type="button"
-      aria-label="Redact"
-      aria-pressed={$redactMode}
-      use:tooltip={'Redact: draw a box to permanently remove content from the exported PDF'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$redactMode}
-      class:text-neutral-600={!$redactMode}
-      class:hover:bg-neutral-100={!$redactMode}
-      class:dark:border-neutral-800={!$redactMode}
-      class:dark:text-neutral-300={!$redactMode}
-      class:dark:hover:bg-neutral-800={!$redactMode}
-      class:border-red-600={$redactMode}
-      class:bg-red-600={$redactMode}
-      class:text-white={$redactMode}
-      onclick={toggleRedactMode}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <path stroke-linecap="round" d="M8 12h8" />
       </svg>
     </button>
 
@@ -704,6 +679,23 @@
       </svg>
     </button>
 
+    <label
+      aria-label="Add image"
+      use:tooltip={'Add image: place a picture or logo on the page (or drop an image file onto a page)'}
+      class="{toolButtonClass} cursor-pointer border-neutral-200 text-neutral-600 hover:bg-neutral-100
+        dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+    >
+      <input type="file" accept={IMAGE_ACCEPT} class="hidden" onchange={onImagePicked} />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="9" cy="10" r="2" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 16l-5-5-9 9" />
+      </svg>
+    </label>
+
+    <div aria-hidden="true" class={dividerClass}></div>
+
+    <!-- Mark up -->
     <button
       type="button"
       aria-label="Comment"
@@ -723,121 +715,6 @@
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v11H8l-4 4V5Z" />
-      </svg>
-    </button>
-
-    <button
-      type="button"
-      aria-label="Zoom"
-      aria-pressed={$zoomToolMode}
-      use:tooltip={'Zoom: click to zoom in, right-click to zoom out'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$zoomToolMode}
-      class:text-neutral-600={!$zoomToolMode}
-      class:hover:bg-neutral-100={!$zoomToolMode}
-      class:dark:border-neutral-800={!$zoomToolMode}
-      class:dark:text-neutral-300={!$zoomToolMode}
-      class:dark:hover:bg-neutral-800={!$zoomToolMode}
-      class:border-purple-600={$zoomToolMode}
-      class:bg-purple-600={$zoomToolMode}
-      class:text-white={$zoomToolMode}
-      onclick={toggleZoomToolMode}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <circle cx="10" cy="10" r="6" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M10 7v6M7 10h6" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="m20 20-5.5-5.5" />
-      </svg>
-    </button>
-
-    <button
-      type="button"
-      aria-label="Select"
-      aria-pressed={$textSelectMode}
-      use:tooltip={'Select: drag over the document to select and copy its real text'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$textSelectMode}
-      class:text-neutral-600={!$textSelectMode}
-      class:hover:bg-neutral-100={!$textSelectMode}
-      class:dark:border-neutral-800={!$textSelectMode}
-      class:dark:text-neutral-300={!$textSelectMode}
-      class:dark:hover:bg-neutral-800={!$textSelectMode}
-      class:border-emerald-600={$textSelectMode}
-      class:bg-emerald-600={$textSelectMode}
-      class:text-white={$textSelectMode}
-      onclick={toggleTextSelectMode}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8 5h8M12 5v14M8 19h8" />
-      </svg>
-    </button>
-
-    <button
-      type="button"
-      aria-label="Screenshot"
-      aria-pressed={$screenshotToolMode}
-      use:tooltip={'Screenshot: click a page to capture all of it, or drag to capture an area'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$screenshotToolMode}
-      class:text-neutral-600={!$screenshotToolMode}
-      class:hover:bg-neutral-100={!$screenshotToolMode}
-      class:dark:border-neutral-800={!$screenshotToolMode}
-      class:dark:text-neutral-300={!$screenshotToolMode}
-      class:dark:hover:bg-neutral-800={!$screenshotToolMode}
-      class:border-sky-600={$screenshotToolMode}
-      class:bg-sky-600={$screenshotToolMode}
-      class:text-white={$screenshotToolMode}
-      onclick={toggleScreenshotToolMode}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    </button>
-
-    <button
-      type="button"
-      aria-label="Page numbers, header & footer"
-      aria-pressed={$pageNumbersToolMode}
-      use:tooltip={'Page numbers, header & footer: number the pages, or add text along their top and bottom'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$pageNumbersToolMode}
-      class:text-neutral-600={!$pageNumbersToolMode}
-      class:hover:bg-neutral-100={!$pageNumbersToolMode}
-      class:dark:border-neutral-800={!$pageNumbersToolMode}
-      class:dark:text-neutral-300={!$pageNumbersToolMode}
-      class:dark:hover:bg-neutral-800={!$pageNumbersToolMode}
-      class:border-teal-600={$pageNumbersToolMode}
-      class:bg-teal-600={$pageNumbersToolMode}
-      class:text-white={$pageNumbersToolMode}
-      onclick={togglePageNumbersToolMode}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="5" y="3" width="14" height="18" rx="1.5" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
-      </svg>
-    </button>
-
-    <button
-      type="button"
-      aria-label="Watermark"
-      aria-pressed={$pageWatermarkToolMode}
-      use:tooltip={'Watermark: stamp a word or a picture across every page'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$pageWatermarkToolMode}
-      class:text-neutral-600={!$pageWatermarkToolMode}
-      class:hover:bg-neutral-100={!$pageWatermarkToolMode}
-      class:dark:border-neutral-800={!$pageWatermarkToolMode}
-      class:dark:text-neutral-300={!$pageWatermarkToolMode}
-      class:dark:hover:bg-neutral-800={!$pageWatermarkToolMode}
-      class:border-amber-600={$pageWatermarkToolMode}
-      class:bg-amber-600={$pageWatermarkToolMode}
-      class:text-white={$pageWatermarkToolMode}
-      onclick={togglePageWatermarkToolMode}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="5" y="3" width="14" height="18" rx="1.5" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 15.5l7-7M8.5 11.5l3-3M12.5 15.5l3-3" />
       </svg>
     </button>
 
@@ -864,6 +741,81 @@
       </svg>
     </button>
 
+    <div aria-hidden="true" class={dividerClass}></div>
+
+    <!-- Protect -->
+    <button
+      type="button"
+      aria-label="Redact"
+      aria-pressed={$redactMode}
+      use:tooltip={'Redact: draw a box to permanently remove content from the exported PDF'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$redactMode}
+      class:text-neutral-600={!$redactMode}
+      class:hover:bg-neutral-100={!$redactMode}
+      class:dark:border-neutral-800={!$redactMode}
+      class:dark:text-neutral-300={!$redactMode}
+      class:dark:hover:bg-neutral-800={!$redactMode}
+      class:border-red-600={$redactMode}
+      class:bg-red-600={$redactMode}
+      class:text-white={$redactMode}
+      onclick={toggleRedactMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path stroke-linecap="round" d="M8 12h8" />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      aria-label="Watermark"
+      aria-pressed={$pageWatermarkToolMode}
+      use:tooltip={'Watermark: stamp a word or a picture across every page'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$pageWatermarkToolMode}
+      class:text-neutral-600={!$pageWatermarkToolMode}
+      class:hover:bg-neutral-100={!$pageWatermarkToolMode}
+      class:dark:border-neutral-800={!$pageWatermarkToolMode}
+      class:dark:text-neutral-300={!$pageWatermarkToolMode}
+      class:dark:hover:bg-neutral-800={!$pageWatermarkToolMode}
+      class:border-amber-600={$pageWatermarkToolMode}
+      class:bg-amber-600={$pageWatermarkToolMode}
+      class:text-white={$pageWatermarkToolMode}
+      onclick={togglePageWatermarkToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="5" y="3" width="14" height="18" rx="1.5" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 15.5l7-7M8.5 11.5l3-3M12.5 15.5l3-3" />
+      </svg>
+    </button>
+
+    <div aria-hidden="true" class={dividerClass}></div>
+
+    <!-- Pages -->
+    <button
+      type="button"
+      aria-label="Page numbers, header & footer"
+      aria-pressed={$pageNumbersToolMode}
+      use:tooltip={'Page numbers, header & footer: number the pages, or add text along their top and bottom'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$pageNumbersToolMode}
+      class:text-neutral-600={!$pageNumbersToolMode}
+      class:hover:bg-neutral-100={!$pageNumbersToolMode}
+      class:dark:border-neutral-800={!$pageNumbersToolMode}
+      class:dark:text-neutral-300={!$pageNumbersToolMode}
+      class:dark:hover:bg-neutral-800={!$pageNumbersToolMode}
+      class:border-teal-600={$pageNumbersToolMode}
+      class:bg-teal-600={$pageNumbersToolMode}
+      class:text-white={$pageNumbersToolMode}
+      onclick={togglePageNumbersToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <rect x="5" y="3" width="14" height="18" rx="1.5" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
+      </svg>
+    </button>
+
     <button
       type="button"
       aria-label="Crop"
@@ -883,6 +835,29 @@
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      aria-label="Screenshot"
+      aria-pressed={$screenshotToolMode}
+      use:tooltip={'Screenshot: click a page to capture all of it, or drag to capture an area'}
+      class={toolButtonClass}
+      class:border-neutral-200={!$screenshotToolMode}
+      class:text-neutral-600={!$screenshotToolMode}
+      class:hover:bg-neutral-100={!$screenshotToolMode}
+      class:dark:border-neutral-800={!$screenshotToolMode}
+      class:dark:text-neutral-300={!$screenshotToolMode}
+      class:dark:hover:bg-neutral-800={!$screenshotToolMode}
+      class:border-sky-600={$screenshotToolMode}
+      class:bg-sky-600={$screenshotToolMode}
+      class:text-white={$screenshotToolMode}
+      onclick={toggleScreenshotToolMode}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
+        <circle cx="12" cy="12" r="3" />
       </svg>
     </button>
 
@@ -913,19 +888,5 @@
     {#if ocrMenu}
       <ContextMenu x={ocrMenu.x} y={ocrMenu.y} items={ocrMenuItems} onClose={closeOcrMenu} above />
     {/if}
-
-    <label
-      aria-label="Add image"
-      use:tooltip={'Add image: place a picture or logo on the page (or drop an image file onto a page)'}
-      class="{toolButtonClass} cursor-pointer border-neutral-200 text-neutral-600 hover:bg-neutral-100
-        dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-    >
-      <input type="file" accept={IMAGE_ACCEPT} class="hidden" onchange={onImagePicked} />
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <circle cx="9" cy="10" r="2" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 16l-5-5-9 9" />
-      </svg>
-    </label>
   </div>
 </div>

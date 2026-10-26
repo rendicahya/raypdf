@@ -152,8 +152,7 @@
 
   // Zooming or rotating resizes every page: keep the same spot of the
   // current page at the top of the view, or, for Ctrl+wheel, the spot under
-  // the pointer where it was. (The Zoom tool then corrects further, to keep
-  // the clicked point under the pointer.)
+  // the pointer where it was.
   type Anchor = {
     page: number;
     // The spot as a fraction of its page, and where it sits in the view.

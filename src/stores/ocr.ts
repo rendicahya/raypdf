@@ -10,7 +10,6 @@ import { textToolMode } from './textTool';
 import { commentToolMode } from './commentTool';
 import { clickToPlaceMode } from './clickToPlace';
 import { signatureToolMode } from './signatureTool';
-import { zoomToolMode } from './zoomTool';
 import { textSelectMode } from './textSelect';
 import { screenshotToolMode } from './screenshotTool';
 import { pageNumbersToolMode } from './pageNumbersTool';
@@ -50,7 +49,6 @@ const OTHER_TOOLS: Writable<boolean>[] = [
   commentToolMode,
   clickToPlaceMode,
   signatureToolMode,
-  zoomToolMode,
   textSelectMode,
   screenshotToolMode,
   pageNumbersToolMode,

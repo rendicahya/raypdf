@@ -70,7 +70,6 @@
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
-  import { zoomToolMode } from '../stores/zoomTool';
   import { textSelectMode } from '../stores/textSelect';
   import {
     textToolMode,
@@ -460,7 +459,6 @@
       !$textToolMode &&
       !$commentToolMode &&
       !$clickToPlaceMode &&
-      !$zoomToolMode &&
       !$textSelectMode &&
       !$screenshotToolMode &&
       !$shapeToolMode &&
@@ -522,7 +520,6 @@
       $textToolMode ||
       $commentToolMode ||
       $clickToPlaceMode ||
-      $zoomToolMode ||
       $textSelectMode ||
       $screenshotToolMode ||
       $shapeToolMode ||
@@ -883,59 +880,7 @@
     pointerInside = true;
   }
 
-  // Zoom tool: clicking the document zooms in one step, keeping the clicked
-  // point anchored under the cursor (like the zoom tool in Acrobat/Figma)
-  // rather than just re-centering on the page. The canvas resizes
-  // asynchronously (renderPageToCanvas awaits pdf.js), so the scroll
-  // adjustment can't be computed up front — a ResizeObserver fires once the
-  // canvas has actually taken on its new size, and only then is the scroll
-  // position corrected using the ratio captured before the click.
-  // Right-click zooms out instead of in.
-  function zoomAtPoint(e: PointerEvent, direction: 'in' | 'out') {
-    const zoom = direction === 'in' ? editorStore.zoomIn : editorStore.zoomOut;
-    const container = wrapperEl?.closest('[data-pdf-scroll-container]') as HTMLElement | null;
-    const oldScale = $editorStore.renderScale;
-    const oldRect = canvasEl.getBoundingClientRect();
-
-    if (!container || oldRect.width === 0 || oldRect.height === 0) {
-      zoom();
-      return;
-    }
-
-    // Where the click landed as a fraction across the canvas (scale-independent)...
-    const xRatio = clamp((e.clientX - oldRect.left) / oldRect.width, 0, 1);
-    const yRatio = clamp((e.clientY - oldRect.top) / oldRect.height, 0, 1);
-    // ...and the exact screen position that fraction should stay pinned to.
-    const anchorX = e.clientX;
-    const anchorY = e.clientY;
-
-    zoom();
-    if ($editorStore.renderScale === oldScale) return; // already at the zoom limit — nothing to reposition
-
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      observer.disconnect();
-      clearTimeout(fallback);
-      const newRect = canvasEl.getBoundingClientRect();
-      container.scrollLeft += newRect.left + xRatio * newRect.width - anchorX;
-      container.scrollTop += newRect.top + yRatio * newRect.height - anchorY;
-    };
-    const observer = new ResizeObserver(finish);
-    observer.observe(canvasEl);
-    // Safety net in case the canvas never actually resizes (e.g. the render
-    // fails) — don't leave the observer watching forever.
-    const fallback = setTimeout(finish, 1000);
-  }
-
   function onCanvasClick(e: PointerEvent) {
-    if ($zoomToolMode) {
-      if (e.button === 0) zoomAtPoint(e, 'in');
-      else if (e.button === 2) zoomAtPoint(e, 'out');
-      return;
-    }
-
     // Right-click opens the context menu rather than using the tool.
     if ($redactMode || e.button !== 0) return;
 
@@ -1246,7 +1191,6 @@
       !$textToolMode &&
       !$commentToolMode &&
       !$clickToPlaceMode &&
-      !$zoomToolMode &&
       !$shapeToolMode &&
       !$cropToolMode &&
       !$ocrAreaMode &&
@@ -1945,8 +1889,8 @@
     // Text fields keep the browser's own menu (spelling, paste, …).
     if (target.closest('input, textarea, select')) return;
     e.preventDefault();
-    // The Zoom tool's right-click zooms out; Screenshot and area recognition own every click on the page.
-    if ($zoomToolMode || $screenshotToolMode || $ocrAreaMode) return;
+    // Screenshot and area recognition own every click on the page.
+    if ($screenshotToolMode || $ocrAreaMode) return;
     const doc = $activeDocument;
     if (!doc) return;
     const items = menuItemsFor(e, target, doc);
@@ -2216,19 +2160,14 @@
     class="rounded-lg shadow-lg active:cursor-grabbing"
     class:cursor-crosshair={$redactMode || $shapeToolMode}
     class:cursor-text={($textToolMode || $commentToolMode) && !$redactMode}
-    class:cursor-zoom-in={$zoomToolMode && !$redactMode && !$textToolMode && !$commentToolMode}
     class:cursor-grab={!$redactMode &&
       !$textToolMode &&
       !$commentToolMode &&
       !$clickToPlaceMode &&
-      !$zoomToolMode &&
       !$shapeToolMode &&
       !textSelectActive}
     onpointerdown={onCanvasClick}
     onpointermove={onCanvasMouseMove}
-    oncontextmenu={(e) => {
-      if ($zoomToolMode) e.preventDefault();
-    }}
   ></canvas>
 
   <!-- Invisible, selectable text built by lib/pdf/textLayer.ts — always

@@ -19,7 +19,6 @@
   import { pageSidebarOpen, pageSidebarWidth, togglePageSidebar } from './stores/layout';
   import { redactMode } from './stores/redact';
   import { textToolMode } from './stores/textTool';
-  import { zoomToolMode } from './stores/zoomTool';
   import { screenshotToolMode } from './stores/screenshotTool';
   import { textSelectMode } from './stores/textSelect';
   import { signatureToolMode } from './stores/signatureTool';
@@ -236,11 +235,6 @@
       if ($textToolMode) {
         e.preventDefault();
         textToolMode.set(false);
-        return;
-      }
-      if ($zoomToolMode) {
-        e.preventDefault();
-        zoomToolMode.set(false);
         return;
       }
       if ($textSelectMode) {
