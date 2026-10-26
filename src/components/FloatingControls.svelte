@@ -389,6 +389,24 @@
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     zoomMenu = { x: rect.left, y: rect.top - 4 };
   }
+
+  // A few seconds after the pointer leaves, the toolbar fades so it hides
+  // less of the page; hovering it or tabbing into it brings it back (a
+  // button keeps focus after a click, so only keyboard focus counts). It
+  // stays solid while one of its menus is open.
+  const FADE_DELAY = 3000;
+  let hovered = $state(false);
+  let focused = $state(false);
+  let faded = $state(false);
+
+  $effect(() => {
+    if (hovered || focused || zoomMenu || ocrMenu) {
+      faded = false;
+      return;
+    }
+    const timer = setTimeout(() => (faded = true), FADE_DELAY);
+    return () => clearTimeout(timer);
+  });
 </script>
 
 <!-- Placed by App.svelte, which keeps it still when the tool panel opens. -->
@@ -438,9 +456,18 @@
     </div>
   {/if}
 
-  <div class="pointer-events-auto flex max-w-full items-center gap-2 overflow-x-auto rounded-full border
-    border-neutral-200 bg-white/90 px-2 py-1.5 shadow-lg backdrop-blur dark:border-neutral-800
-    dark:bg-neutral-900/90">
+  <div
+    role="group"
+    aria-label="Editing tools"
+    class="pointer-events-auto flex max-w-full items-center gap-2 overflow-x-auto rounded-full border
+      border-neutral-200 bg-white/90 px-2 py-1.5 shadow-lg backdrop-blur transition-opacity duration-500
+      dark:border-neutral-800 dark:bg-neutral-900/90"
+    class:opacity-40={faded}
+    onpointerenter={() => (hovered = true)}
+    onpointerleave={() => (hovered = false)}
+    onfocusin={(e) => (focused = (e.target as Element).matches(':focus-visible'))}
+    onfocusout={(e) => (focused = e.currentTarget.contains(e.relatedTarget as Node | null))}
+  >
     <div class={groupClass}>
       <button
         type="button"
