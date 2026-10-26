@@ -191,16 +191,21 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       const totalRotation = getTotalRotation(pdfjsPage, rotation);
       const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: totalRotation });
 
-      const [x1, y1] = viewport.convertToPdfPoint(placement.x, placement.y);
-      const [x2, y2] = viewport.convertToPdfPoint(placement.x + placement.width, placement.y + placement.height);
-
-      const x = Math.min(x1, x2);
-      const y = Math.min(y1, y2);
-      const width = Math.abs(x2 - x1);
-      const height = Math.abs(y2 - y1);
+      // Drawn as shown: fitted in its box (object-fit: contain), upright on
+      // a rotated page, and turned about the box's centre by its own angle.
+      // pdf-lib turns an image counterclockwise about its bottom-left corner,
+      // so that corner is found from the centre.
+      const fit = Math.min(placement.width / pngImage.width, placement.height / pngImage.height);
+      const width = (pngImage.width * fit) / renderScale;
+      const height = (pngImage.height * fit) / renderScale;
+      const [cx, cy] = viewport.convertToPdfPoint(placement.x + placement.width / 2, placement.y + placement.height / 2);
+      const turn = totalRotation - (placement.angle ?? 0);
+      const t = (turn * Math.PI) / 180;
+      const x = cx - (width / 2) * Math.cos(t) + (height / 2) * Math.sin(t);
+      const y = cy - (width / 2) * Math.sin(t) - (height / 2) * Math.cos(t);
 
       const targetPage = pdfDoc.getPage(placement.page - 1); // pdf-lib pages are 0-indexed
-      targetPage.drawImage(pngImage, { x, y, width, height });
+      targetPage.drawImage(pngImage, { x, y, width, height, rotate: degrees(turn) });
     }
   }
 

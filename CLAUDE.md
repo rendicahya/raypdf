@@ -133,6 +133,9 @@ Supported interactions:
 
 - Move
 - Resize
+- Rotate (any angle: the handle above it, the arrow keys on that handle, or its right-click menu)
+
+A placed signature's `angle` (degrees clockwise as shown, about the box's centre; the box itself is unturned) is drawn the same way by PDFViewer, `screenshot.ts`, and export (fitted in its box, upright on rotated pages, then turned). When the page view turns, `convertGeometry` keeps a signature's size and turns it with the page instead of reshaping its box.
 
 Floating toolbar (bottom): undo/redo, page navigation, zoom, fit, rotate, and the tools — Move, Signature, Redact, Add Text, Comment, Zoom (right-click zooms out), Select, Screenshot, Page numbers (with header & footer), Watermark, Shapes, Crop, Recognize text (a menu; pressed while waiting for an area), and the Add image button.
 
@@ -148,7 +151,6 @@ Tools are mutually exclusive: turning one on turns the others off, and Escape or
 
 Future:
 
-- Rotate the placed signature
 - Snap to page edges
 
 ---

@@ -19,7 +19,7 @@ export async function boxFromRatioForDocument(
   renderScale: number,
   rotation: number,
   ratio: PlacementRatio,
-): Promise<{ x: number; y: number; width: number; height: number; page: number }> {
+): Promise<{ x: number; y: number; width: number; height: number; page: number; angle?: number }> {
   const page = await pdfjsDoc.getPage(pageNumber);
   const totalRotation = getTotalRotation(page, rotation);
   const viewport = page.getViewport({ scale: renderScale, rotation: totalRotation });
@@ -33,6 +33,7 @@ export async function boxFromRatioForDocument(
     x: clamp(ratio.xRatio * viewport.width, 0, viewport.width - width),
     y: clamp(ratio.yRatio * viewport.height, 0, viewport.height - height),
     page: pageNumber,
+    ...(ratio.angle && { angle: ratio.angle }),
   };
 }
 
@@ -60,7 +61,7 @@ export async function boxToRatio(
   pageNumber: number,
   renderScale: number,
   rotation: number,
-  box: { x: number; y: number; width: number; height: number },
+  box: { x: number; y: number; width: number; height: number; angle?: number },
 ): Promise<PlacementRatio> {
   const page = await pdfjsDoc.getPage(pageNumber);
   const totalRotation = getTotalRotation(page, rotation);
@@ -71,5 +72,6 @@ export async function boxToRatio(
     yRatio: box.y / viewport.height,
     widthRatio: box.width / viewport.width,
     heightRatio: box.height / viewport.height,
+    ...(box.angle && { angle: box.angle }),
   };
 }

@@ -51,7 +51,7 @@ export interface CaptureOverlays {
   markups: MarkupPaint[];
   redactions: Box[];
   /** Each placed signature with its image, visible watermark already applied (see lib/watermark/visible.ts). */
-  signatures: (Box & { image: Blob })[];
+  signatures: (Box & { image: Blob; angle?: number })[];
   texts: PlacedText[];
   shapes?: PlacedShape[];
   /** Each placed image with its picture. */
@@ -149,7 +149,12 @@ async function drawOverlays(canvas: HTMLCanvasElement, overlays: CaptureOverlays
     const scale = Math.min(box.width / bitmap.width, box.height / bitmap.height);
     const w = bitmap.width * scale;
     const h = bitmap.height * scale;
-    ctx.drawImage(bitmap, box.x + (box.width - w) / 2, box.y + (box.height - h) / 2, w, h);
+    // Turned about its centre, as the editor shows it.
+    ctx.save();
+    ctx.translate(box.x + box.width / 2, box.y + box.height / 2);
+    if (box.angle) ctx.rotate((box.angle * Math.PI) / 180);
+    ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
+    ctx.restore();
   }
   bitmaps.forEach((b) => b.close());
 

@@ -27,7 +27,7 @@
       points: [
         'Your signatures are kept on this device, so next time you only add the PDF.',
         'Keep several, such as a full signature and your initials.',
-        'Move and resize it, reuse the last position, or put it on every page or every open document in one click.',
+        'Move, resize, and rotate it, reuse the last position, or put it on every page or every open document in one click.',
         'Choose the watermark text, add the date and time, and set its position, color, size, and opacity.',
         'Save the watermark texts you use often and reuse them in one click.',
       ],

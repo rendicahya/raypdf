@@ -28,6 +28,8 @@ export interface PlacedSignature {
   height: number;
   /** 1-indexed page this placement belongs to. */
   page: number;
+  /** Degrees clockwise, as shown, turned about the box's centre (none means upright). The box above is the unturned one. */
+  angle?: number;
 }
 
 /** A user-drawn area to permanently strip from the exported PDF, in canvas pixel coordinates. */
@@ -358,6 +360,16 @@ async function convertGeometry<T extends Geometry>(
   const newPage = await to.pdfjsDoc.getPage(to.pageNumber);
   const oldViewport = oldPage.getViewport({ scale: renderScale, rotation: getTotalRotation(oldPage, from.rotation) });
   const newViewport = newPage.getViewport({ scale: renderScale, rotation: getTotalRotation(newPage, to.rotation) });
+
+  // A signature turns with the page instead of being reshaped: its centre
+  // follows the content and it keeps its size, turned by as much as the page.
+  if ('signatureId' in box) {
+    const [pcx, pcy] = oldViewport.convertToPdfPoint(box.x + box.width / 2, box.y + box.height / 2);
+    const [cx, cy] = newViewport.convertToViewportPoint(pcx, pcy);
+    const turn = newViewport.rotation - oldViewport.rotation;
+    const angle = (((((box as T & { angle?: number }).angle ?? 0) + turn) % 360) + 360) % 360;
+    return { ...box, x: cx - box.width / 2, y: cy - box.height / 2, angle: angle || undefined };
+  }
 
   const [px1, py1] = oldViewport.convertToPdfPoint(box.x, box.y);
   const [px2, py2] = oldViewport.convertToPdfPoint(box.x + box.width, box.y + box.height);

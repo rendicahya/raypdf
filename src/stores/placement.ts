@@ -11,6 +11,8 @@ export interface PlacementRatio {
   yRatio: number;
   widthRatio: number;
   heightRatio: number;
+  /** The signature's turn in degrees clockwise (PlacedSignature.angle). */
+  angle?: number;
 }
 
 export const lastPlacement = persistedWritable<PlacementRatio | null>('lastPlacement', null);

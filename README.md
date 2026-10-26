@@ -72,7 +72,7 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Placing the signature
 
 - Turn on the **Signature** tool, then drag a signature from the panel onto the page, or click the large preview to place the active one. Click-to-place mode follows the cursor.
-- Move and resize (aspect ratio locked); several signatures per document are supported. Selected items can be nudged with the arrow keys and removed with `Delete`.
+- Move, resize (aspect ratio locked), and rotate to any angle: drag the round handle above a selected signature (it snaps upright and to quarter turns, Shift snaps to 15° steps), use the arrow keys on that handle (15° steps, 1° with Shift), double-click it to straighten, or right-click for Rotate left / Rotate right / Straighten. The saved PDF and screenshots show it turned exactly as placed. Several signatures per document are supported. Selected items can be nudged with the arrow keys and removed with `Delete`.
 - **Use last position** re-applies the last placement (as a ratio of the page) to the current page.
 - **Apply Signature to All N Pages** copies the current page's signature(s) to the same spot on every page.
 - **Apply to All N Documents** places the signature on page 1 of every open single-page PDF.
