@@ -1,6 +1,6 @@
 # RayPDF
 
-A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, mark up, redact, edit pages, and verify PDFs exported with RayPDF. Add a PDF, then choose **Open in editor** or **Verify**.
+A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, add text, images, and shapes, mark up and comment, redact, watermark, number pages, crop, reorder and rotate pages, recognize text in scans, compress, password-protect, and verify PDFs exported with RayPDF. Add a PDF, then choose **Open in editor** or **Verify**.
 
 RayPDF was previously called Signy.
 
@@ -29,7 +29,8 @@ It is **not** a replacement for PKI-based digital signatures.
 ### Getting started
 
 - The front page shows the upload area at the top, then a tour of every feature, one illustrated row each, animated while hovered: signing with the protected signature first (with an illustration of a copied signature giving itself away), then "Everything in one go" (several jobs on one document, saved once), then each tool, and a short "Also in RayPDF" list for the rest. The FAQs sit at the bottom.
-- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).- Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
+- Upload one or more PDFs (drag & drop anywhere on the page, or click to browse). Files are type- and size-checked (50 MB per PDF, 10 MB per signature image).
+- Then choose what to do with them: **Open in editor** opens the editor (signing, form filling, markup, and redaction), **Verify** checks each PDF for a RayPDF record right on the front page.
 - **Add a signature three ways:** draw it with a mouse, finger, or pen (pressure-sensitive, black or blue ink); type your name in one of four handwriting fonts (bundled, so this works offline); or upload a scan.
 - **Keep several signatures**, say a full signature and your initials. All are saved in IndexedDB, so returning users only need to upload a new PDF. Click one to make it the one new placements use, or drag any of them straight onto the page; each placed signature remembers which one it is. Delete any of them at any time.
 
@@ -104,7 +105,7 @@ It is **not** a replacement for PKI-based digital signatures.
 ## Roadmap
 
 - **Invisible watermark**: DWT/DCT-based payload (signer, document ID, timestamp, signature ID), implemented as a replaceable module independent of the visible watermark.
-- Rotating a placed signature, and snapping it to page edges.
+- Snapping placed items to page edges.
 - Signature background removal.
 - Automated tests (coordinate mapping in `lib/pdf/export.ts`, zoom rescaling in `stores/editor.ts`).
 
@@ -130,5 +131,5 @@ Project guidelines (product vision, principles, UX rules, code structure, and wo
 - `src/stores/`: app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
 - `src/lib/pdf/`: loading, rendering, export, compression, redaction, page operations, form filling, screenshots, text recognition, verification
 - `src/lib/watermark/`: visible watermark layout and rendering
-- `src/lib/signature/`: signature storage and sizing
+- `src/lib/signature/`: signature storage, sizing, and drawn or typed signatures
 - `src/lib/utils/`: persistence, file validation, tooltip and other Svelte actions
