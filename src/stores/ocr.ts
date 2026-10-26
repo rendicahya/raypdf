@@ -1,33 +1,89 @@
-import { writable, get } from 'svelte/store';
+import { writable, derived, get, type Writable } from 'svelte/store';
 import { editorStore, getActiveDocument } from './editor';
 import { getCachedPdf } from '../lib/pdf/docCache';
-import { pageHasText, recognizePages } from '../lib/pdf/ocr';
+import { pageHasText, recognizePages, recognizeArea, type OcrProgress } from '../lib/pdf/ocr';
+import type { CaptureArea } from '../lib/pdf/screenshot';
+import { redactMode } from './redact';
+import { textToolMode } from './textTool';
+import { commentToolMode } from './commentTool';
+import { clickToPlaceMode } from './clickToPlace';
+import { signatureToolMode } from './signatureTool';
+import { zoomToolMode } from './zoomTool';
+import { textSelectMode } from './textSelect';
+import { screenshotToolMode } from './screenshotTool';
+import { pageNumbersToolMode } from './pageNumbersTool';
+import { shapeToolMode } from './shapeTool';
+import { cropToolMode } from './cropTool';
 
 /**
- * Recognize text (OCR) on the active document's scanned pages. One run at a
- * time; its progress and outcome are shown by OcrStatus.
+ * Recognize text (OCR) on the active document's scanned pages, or in an area
+ * the user drags on a page. One run at a time; its progress and outcome are
+ * shown by OcrStatus.
  */
 
 export type OcrStatus =
   | { state: 'idle' }
+  /** Waiting for the user to drag a rectangle on a page (PDFViewer draws it). */
+  | { state: 'selecting' }
   | { state: 'checking' }
   | { state: 'loading' }
   | { state: 'recognizing'; done: number; total: number }
-  | { state: 'finished'; message: string; error?: boolean };
+  /** `text`, when set, is what was read in an area, offered for copying. */
+  | { state: 'finished'; message: string; error?: boolean; text?: string };
 
 export const ocrStatus = writable<OcrStatus>({ state: 'idle' });
+
+/** Whether the page is waiting for an area to be dragged. It works like a tool: turning on another tool ends it. */
+export const ocrAreaMode = derived(ocrStatus, (s) => s.state === 'selecting');
+
+const OTHER_TOOLS: Writable<boolean>[] = [
+  redactMode,
+  textToolMode,
+  commentToolMode,
+  clickToPlaceMode,
+  signatureToolMode,
+  zoomToolMode,
+  textSelectMode,
+  screenshotToolMode,
+  pageNumbersToolMode,
+  shapeToolMode,
+  cropToolMode,
+];
+for (const tool of OTHER_TOOLS) {
+  tool.subscribe((on) => {
+    if (on) stopAreaSelection();
+  });
+}
 
 let runId = 0;
 let dismissTimer: ReturnType<typeof setTimeout> | undefined;
 
-function finish(message: string, error = false) {
-  ocrStatus.set({ state: 'finished', message, error });
+function finish(message: string, error = false, text?: string) {
+  ocrStatus.set({ state: 'finished', message, error, text });
   clearTimeout(dismissTimer);
-  if (!error) dismissTimer = setTimeout(dismissOcrStatus, 6000);
+  // Text to copy stays until it's closed.
+  if (!error && !text) dismissTimer = setTimeout(dismissOcrStatus, 6000);
+}
+
+function failed(e: unknown) {
+  console.error(e);
+  const offline = !navigator.onLine ? ' Text recognition needs a connection the first time it is used.' : '';
+  finish(`Text recognition failed.${offline}`, true);
 }
 
 export function isOcrRunning(status: OcrStatus): boolean {
   return status.state === 'checking' || status.state === 'loading' || status.state === 'recognizing';
+}
+
+function showProgress(cancelled: () => boolean) {
+  return (progress: OcrProgress) => {
+    if (cancelled()) return;
+    ocrStatus.set(
+      progress.phase === 'loading'
+        ? { state: 'loading' }
+        : { state: 'recognizing', done: progress.done, total: progress.total },
+    );
+  };
 }
 
 /**
@@ -56,20 +112,7 @@ export async function recognizeText(pages?: number[]): Promise<void> {
       return;
     }
 
-    const results = await recognizePages(
-      pdf,
-      todo,
-      rotation,
-      (progress) => {
-        if (cancelled()) return;
-        ocrStatus.set(
-          progress.phase === 'loading'
-            ? { state: 'loading' }
-            : { state: 'recognizing', done: progress.done, total: progress.total },
-        );
-      },
-      cancelled,
-    );
+    const results = await recognizePages(pdf, todo, rotation, showProgress(cancelled), cancelled);
     if (cancelled()) return;
 
     const found = results.filter((r) => r.words.length > 0);
@@ -86,10 +129,57 @@ export async function recognizeText(pages?: number[]): Promise<void> {
     const where = found.length === 1 ? `page ${found[0].page}` : `${found.length} pages`;
     finish(`Text recognized on ${where}. You can now find, select, and copy it.`);
   } catch (e) {
+    if (!cancelled()) failed(e);
+  }
+}
+
+/** Waits for the user to drag a rectangle on a page; the other tools turn off. */
+export function startAreaSelection() {
+  if (isOcrRunning(get(ocrStatus))) return;
+  for (const tool of OTHER_TOOLS) tool.set(false);
+  clearTimeout(dismissTimer);
+  ocrStatus.set({ state: 'selecting' });
+}
+
+export function stopAreaSelection() {
+  if (get(ocrStatus).state === 'selecting') ocrStatus.set({ state: 'idle' });
+}
+
+/**
+ * Recognizes the text in an area of a page of the active document (fractions
+ * of the page as shown), adds what isn't text yet to the page as invisible
+ * text, and offers all of it for copying.
+ */
+export async function recognizeTextInArea(page: number, area: CaptureArea): Promise<void> {
+  const doc = getActiveDocument(get(editorStore));
+  if (!doc || isOcrRunning(get(ocrStatus))) return;
+  const myRun = ++runId;
+  const cancelled = () => myRun !== runId;
+  clearTimeout(dismissTimer);
+  ocrStatus.set({ state: 'loading' });
+
+  try {
+    const { id, file, rotation } = doc;
+    const pdf = await getCachedPdf(id, file);
+    const { text, newWords } = await recognizeArea(pdf, page, rotation, area, showProgress(cancelled));
     if (cancelled()) return;
-    console.error(e);
-    const offline = !navigator.onLine ? ' Text recognition needs a connection the first time it is used.' : '';
-    finish(`Text recognition failed.${offline}`, true);
+    if (!text) {
+      finish('No text was found in this area.');
+      return;
+    }
+    if (newWords.length === 0) {
+      finish('This text was already on the page, so nothing was added.', false, text);
+      return;
+    }
+    const applied = await editorStore.addRecognizedText(id, file, [{ page, words: newWords }]);
+    if (cancelled()) return;
+    if (!applied) {
+      finish('The page changed while its text was being recognized, so nothing was added. Try again.', true);
+      return;
+    }
+    finish('Text recognized. You can now find, select, and copy it.', false, text);
+  } catch (e) {
+    if (!cancelled()) failed(e);
   }
 }
 

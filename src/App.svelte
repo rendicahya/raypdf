@@ -26,6 +26,7 @@
   import { pageNumbersToolMode } from './stores/pageNumbersTool';
   import { shapeToolMode } from './stores/shapeTool';
   import { cropToolMode } from './stores/cropTool';
+  import { ocrAreaMode, stopAreaSelection } from './stores/ocr';
   import { activePanelTool, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
   import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
@@ -258,6 +259,11 @@
       if ($cropToolMode) {
         e.preventDefault();
         cropToolMode.set(false);
+        return;
+      }
+      if ($ocrAreaMode) {
+        e.preventDefault();
+        stopAreaSelection();
         return;
       }
       if ($search.open) {

@@ -14,6 +14,7 @@
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { shapeToolMode } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
+  import { ocrAreaMode, stopAreaSelection } from '../stores/ocr';
   import { addImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
   import { downloadBlob } from '../lib/pdf/screenshot';
 
@@ -141,7 +142,8 @@
       !$screenshotToolMode &&
       !$pageNumbersToolMode &&
       !$shapeToolMode &&
-      !$cropToolMode,
+      !$cropToolMode &&
+      !$ocrAreaMode,
   );
 
   function toggleScreenshotToolMode() {
@@ -254,6 +256,7 @@
     pageNumbersToolMode.set(false);
     shapeToolMode.set(false);
     cropToolMode.set(false);
+    stopAreaSelection();
   }
 
   // Fits the current page to the visible scroll area — width-only, or both

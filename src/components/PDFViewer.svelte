@@ -24,7 +24,14 @@
   import { search } from '../stores/search';
   import { findInTextLayer } from '../lib/pdf/search';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
-  import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
+  import {
+    ocrStatus,
+    ocrAreaMode,
+    recognizeText,
+    recognizeTextInArea,
+    startAreaSelection,
+    isOcrRunning,
+  } from '../stores/ocr';
   import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import PlacedBox from './PlacedBox.svelte';
@@ -403,7 +410,8 @@
       !$textSelectMode &&
       !$screenshotToolMode &&
       !$shapeToolMode &&
-      !$cropToolMode,
+      !$cropToolMode &&
+      !$ocrAreaMode,
   );
 
   // Move mode auto-switches into text selection when the pointer rests over
@@ -464,7 +472,8 @@
       $textSelectMode ||
       $screenshotToolMode ||
       $shapeToolMode ||
-      $cropToolMode;
+      $cropToolMode ||
+      $ocrAreaMode;
     const otherInteractionInProgress =
       isPanning ||
       drawingBox ||
@@ -1074,6 +1083,7 @@
       !$zoomToolMode &&
       !$shapeToolMode &&
       !$cropToolMode &&
+      !$ocrAreaMode &&
       !textSelectActive &&
       e.target === canvasEl
     );
@@ -1217,6 +1227,50 @@
       ? { x: box.x / rect.width, y: box.y / rect.height, width: box.width / rect.width, height: box.height / rect.height }
       : null;
     capturePageImage(area, $screenshotDestination);
+  }
+
+  // Recognize text in an area: the same drag as a screenshot, handed to
+  // stores/ocr.ts as fractions of the page as shown. A click without a drag
+  // does nothing, so the user can still scroll to another page to drag on.
+  let ocrBox: { x: number; y: number; width: number; height: number } | null = $state(null);
+  let ocrStart = { x: 0, y: 0 };
+
+  $effect(() => {
+    if (!$ocrAreaMode) ocrBox = null;
+  });
+
+  function onOcrPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    ocrStart = shotPoint(e);
+    ocrBox = { ...ocrStart, width: 0, height: 0 };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onOcrPointerMove(e: PointerEvent) {
+    if (!ocrBox) return;
+    const { x, y } = shotPoint(e);
+    ocrBox = {
+      x: Math.min(x, ocrStart.x),
+      y: Math.min(y, ocrStart.y),
+      width: Math.abs(x - ocrStart.x),
+      height: Math.abs(y - ocrStart.y),
+    };
+  }
+
+  function onOcrPointerUp(e: PointerEvent) {
+    const box = ocrBox;
+    ocrBox = null;
+    if (!box) return;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    if (box.width < SHOT_DRAW_MIN_SIZE || box.height < SHOT_DRAW_MIN_SIZE) return;
+    const rect = canvasEl.getBoundingClientRect();
+    recognizeTextInArea(pageNumber, {
+      x: box.x / rect.width,
+      y: box.y / rect.height,
+      width: box.width / rect.width,
+      height: box.height / rect.height,
+    });
   }
 
   /**
@@ -1714,8 +1768,8 @@
     // Text fields keep the browser's own menu (spelling, paste, …).
     if (target.closest('input, textarea, select')) return;
     e.preventDefault();
-    // The Zoom tool's right-click zooms out; Screenshot owns every click on the page.
-    if ($zoomToolMode || $screenshotToolMode) return;
+    // The Zoom tool's right-click zooms out; Screenshot and area recognition own every click on the page.
+    if ($zoomToolMode || $screenshotToolMode || $ocrAreaMode) return;
     const doc = $activeDocument;
     if (!doc) return;
     const items = menuItemsFor(e, target, doc);
@@ -1927,6 +1981,12 @@
         icon: MENU_ICONS.recognize,
         disabled: isOcrRunning($ocrStatus),
         onSelect: () => recognizeText([page]),
+      },
+      {
+        label: 'Recognize text in an area',
+        icon: MENU_ICONS.recognizeArea,
+        disabled: isOcrRunning($ocrStatus),
+        onSelect: startAreaSelection,
       },
     ];
   }
@@ -2711,6 +2771,29 @@
       {/if}
       {#if capturing}
         <div class="pointer-events-none absolute inset-0 animate-pulse bg-white/30 dark:bg-black/20"></div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Recognize text in an area: like the Screenshot overlay, a drag over
+       the page and everything on it. -->
+  {#if $ocrAreaMode}
+    <div
+      role="presentation"
+      class="absolute inset-0 z-[60] cursor-crosshair touch-none"
+      onpointerdown={onOcrPointerDown}
+      onpointermove={onOcrPointerMove}
+      onpointerup={onOcrPointerUp}
+      onpointercancel={() => (ocrBox = null)}
+    >
+      {#if ocrBox && (ocrBox.width > 0 || ocrBox.height > 0)}
+        <div
+          class="pointer-events-none absolute border-2 border-dashed border-blue-500 bg-blue-400/15"
+          style:left="{ocrBox.x}px"
+          style:top="{ocrBox.y}px"
+          style:width="{ocrBox.width}px"
+          style:height="{ocrBox.height}px"
+        ></div>
       {/if}
     </div>
   {/if}

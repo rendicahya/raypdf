@@ -6,13 +6,39 @@
   import ExportButton from './ExportButton.svelte';
   import { editorStore } from '../stores/editor';
   import { openSearch } from '../stores/search';
-  import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
+  import { ocrStatus, recognizeText, startAreaSelection, isOcrRunning } from '../stores/ocr';
+  import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { tooltip } from '../lib/utils/tooltip';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
   import { isFileAccepted, dedupeFiles, formatFileSize, MAX_PDF_SIZE_BYTES } from '../lib/utils/fileValidation';
 
   const PDF_ACCEPT = 'application/pdf,.pdf';
   const findShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘F' : 'Ctrl+F';
+
+  // Recognize text: on every page without text, or in an area the user drags.
+  let ocrMenu: { x: number; y: number } | null = $state(null);
+  const ocrMenuItems: ContextMenuItem[] = [
+    { label: 'Recognize text on every page', icon: MENU_ICONS.recognize, onSelect: () => recognizeText() },
+    { label: 'Recognize text in an area', icon: MENU_ICONS.recognizeArea, onSelect: startAreaSelection },
+  ];
+
+  // The menu closes on any pointerdown outside it, including the button's
+  // own, so a click right after that closing mustn't open it again.
+  let ocrMenuClosedAt = 0;
+
+  function closeOcrMenu() {
+    ocrMenu = null;
+    ocrMenuClosedAt = performance.now();
+  }
+
+  function toggleOcrMenu(e: MouseEvent) {
+    if (ocrMenu || performance.now() - ocrMenuClosedAt < 400) {
+      ocrMenu = null;
+      return;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    ocrMenu = { x: rect.left, y: rect.bottom + 4 };
+  }
 
   let addPdfsError: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -94,17 +120,22 @@
       <button
         type="button"
         aria-label="Recognize text"
+        aria-haspopup="menu"
+        aria-expanded={ocrMenu !== null}
         use:tooltip={'Recognize text in scanned pages (OCR)'}
         disabled={isOcrRunning($ocrStatus)}
         class="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors
           hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-40 dark:text-neutral-400
           dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-        onclick={() => recognizeText()}
+        onclick={toggleOcrMenu}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
           <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.recognize} />
         </svg>
       </button>
+      {#if ocrMenu}
+        <ContextMenu x={ocrMenu.x} y={ocrMenu.y} items={ocrMenuItems} onClose={closeOcrMenu} />
+      {/if}
       <FullscreenToggle />
       <ThemeToggle />
       <div class="ml-2">
