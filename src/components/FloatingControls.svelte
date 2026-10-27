@@ -420,7 +420,8 @@
     >
       {#if result.ok}
         <span class="text-emerald-600 dark:text-emerald-400">
-          {result.copied ? 'Screenshot copied to clipboard' : 'Screenshot ready'}
+          {result.label ?? 'Screenshot'}
+          {result.copied ? 'copied to clipboard' : 'ready'}
         </span>
         <button
           type="button"

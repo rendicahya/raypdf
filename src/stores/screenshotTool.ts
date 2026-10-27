@@ -26,6 +26,8 @@ export type ScreenshotResult =
       fileName: string;
       /** Whether the image also made it onto the clipboard (not every browser allows it). */
       copied: boolean;
+      /** What was captured, for the toast; a screenshot unless given. */
+      label?: string;
     }
   | { ok: false; message: string };
 

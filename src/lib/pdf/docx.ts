@@ -13,6 +13,7 @@ import {
   TabStopType,
   TextRun,
 } from 'docx';
+import { paintedImages } from './embeddedImages';
 import { downloadBlob } from './screenshot';
 import './loader'; // sets up the pdf.js worker
 
@@ -26,8 +27,6 @@ import './loader'; // sets up the pdf.js worker
 
 // Pictures are cut from the page rendered at this scale (144 dpi).
 const IMAGE_SCALE = 2;
-// Pictures smaller than this (in points) are decoration, not content.
-const MIN_IMAGE_SIZE = 8;
 const POINTS_TO_PIXELS = 96 / 72;
 const POINTS_TO_TWIPS = 20;
 
@@ -212,59 +211,12 @@ function wordFont(name: string): string | undefined {
   return WORD_FONTS.find(([pattern]) => pattern.test(base))?.[1];
 }
 
-// Where each picture is painted, as boxes on the page as shown: the current
-// transform is followed through the operator list, and a picture fills the
-// unit square under it.
+// Where each picture is painted, as boxes on the page as shown.
 function imageRects(
   operators: { fnArray: number[]; argsArray: unknown[] },
   viewport: { transform: number[]; width: number; height: number },
 ): Rect[] {
-  const { OPS, Util } = pdfjsLib;
-  let ctm = [1, 0, 0, 1, 0, 0];
-  const stack: number[][] = [];
-  const rects: Rect[] = [];
-
-  operators.fnArray.forEach((fn, i) => {
-    const args = operators.argsArray[i] as unknown[] | null;
-    switch (fn) {
-      case OPS.save:
-        stack.push(ctm);
-        break;
-      case OPS.restore:
-        ctm = stack.pop() ?? ctm;
-        break;
-      case OPS.transform:
-        ctm = Util.transform(ctm, args as number[]);
-        break;
-      case OPS.paintFormXObjectBegin:
-        stack.push(ctm);
-        if (Array.isArray(args?.[0])) ctm = Util.transform(ctm, args[0] as number[]);
-        break;
-      case OPS.paintFormXObjectEnd:
-        ctm = stack.pop() ?? ctm;
-        break;
-      case OPS.paintImageXObject:
-      case OPS.paintInlineImageXObject: {
-        const m = Util.transform(viewport.transform, ctm);
-        const corners = [
-          [0, 0],
-          [1, 0],
-          [0, 1],
-          [1, 1],
-        ].map(([x, y]) => Util.applyTransform([x, y], m));
-        const xs = corners.map((c) => c[0]);
-        const ys = corners.map((c) => c[1]);
-        const left = Math.max(0, Math.min(...xs));
-        const top = Math.max(0, Math.min(...ys));
-        const right = Math.min(viewport.width, Math.max(...xs));
-        const bottom = Math.min(viewport.height, Math.max(...ys));
-        if (right - left >= MIN_IMAGE_SIZE && bottom - top >= MIN_IMAGE_SIZE) {
-          rects.push({ x: left, y: top, width: right - left, height: bottom - top });
-        }
-        break;
-      }
-    }
-  });
+  const rects: Rect[] = paintedImages(operators, viewport).map(({ x, y, width, height }) => ({ x, y, width, height }));
 
   // A picture inside another (a stamp on a photo) comes along with it.
   return rects.filter(

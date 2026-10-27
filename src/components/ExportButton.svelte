@@ -18,6 +18,8 @@
     downloadCompressedPdf,
   } from '../lib/pdf/export';
   import { compressPdf } from '../lib/pdf/compress';
+  import { getCachedPdf } from '../lib/pdf/docCache';
+  import { downloadAllImages, type Rect } from '../lib/pdf/embeddedImages';
 import { applyProtection, hasProtection } from '../lib/pdf/password';
   import { formatFileSize } from '../lib/utils/fileValidation';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
@@ -28,6 +30,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
   let compressNote: string | null = $state(null);
   let compressNoteTimeout: ReturnType<typeof setTimeout> | undefined;
   let convertingDocx = $state(false);
+  let savingImages = $state(false);
   let exportingPageOnly = $state(false);
   let exportingPagesZip = $state(false);
   let exportingAll = $state(false);
@@ -192,6 +195,35 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       error = e instanceof Error ? e.message : 'Conversion failed';
     } finally {
       convertingDocx = false;
+    }
+  }
+
+  // The pictures in the file as opened, at their stored resolution; anything
+  // under a redaction box is left out, as it would be from the saved PDF.
+  async function onSaveImages() {
+    const doc = $activeDocument;
+    if (!doc) return;
+
+    savingImages = true;
+    error = null;
+    try {
+      const scale = $editorStore.renderScale;
+      const redacted = (page: number, image: Rect) =>
+        doc.redactions.some(
+          (r) =>
+            r.page === page &&
+            r.x / scale < image.x + image.width &&
+            (r.x + r.width) / scale > image.x &&
+            r.y / scale < image.y + image.height &&
+            (r.y + r.height) / scale > image.y,
+        );
+      const pdfDoc = await getCachedPdf(doc.id, doc.file);
+      const count = await downloadAllImages(pdfDoc, doc.file, doc.rotation, redacted);
+      if (count === 0) error = 'No pictures found in this document.';
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to save the images';
+    } finally {
+      savingImages = false;
     }
   }
 
@@ -502,6 +534,22 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       >
         <span class="block">{convertingDocx ? 'Converting…' : 'Save as Word (.docx)'}</span>
         <span class="block text-xs text-neutral-400">Editable text and pictures; tables and columns may shift</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
+          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+          dark:text-neutral-200 dark:hover:bg-neutral-800"
+        disabled={savingImages}
+        onclick={() => {
+          showSaveMenu = false;
+          onSaveImages();
+        }}
+      >
+        <span class="block">{savingImages ? 'Saving images…' : 'Save all images'}</span>
+        <span class="block text-xs text-neutral-400">Every picture in the PDF at full resolution (ZIP)</span>
       </button>
 
       {#if ($activeDocument?.pageCount ?? 1) > 1}

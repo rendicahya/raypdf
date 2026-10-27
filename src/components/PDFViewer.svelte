@@ -13,6 +13,8 @@
   import { watermarkCenters, watermarkSize } from '../lib/pdf/pageWatermark';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
   import { getTotalRotation } from '../lib/pdf/loader';
+  import type { PDFPageProxy } from 'pdfjs-dist';
+  import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
   import {
     MARKUP_COLORS,
     MARKUP_LABELS,
@@ -770,6 +772,7 @@
   let selectedSignatureId: string | null = $state(null);
 
   function onWindowPointerDown(e: PointerEvent) {
+    menuToken++;
     const current = selectedSignatureId
       ? wrapperEl?.querySelector(`[data-placed-signature="${selectedSignatureId}"]`)
       : null;
@@ -1883,6 +1886,9 @@
   // items: a placed object gets its own actions, selected text gets Copy and
   // Highlight, and the page itself gets placement, zoom, rotate, and capture.
   let menu: { x: number; y: number; items: ContextMenuItem[] } | null = $state(null);
+  // Bumped by every pointerdown, so a page menu still waiting on the page's
+  // pictures doesn't open after the user has moved on.
+  let menuToken = 0;
 
   function onDocumentContextMenu(e: MouseEvent) {
     const target = e.target as HTMLElement;
@@ -1894,7 +1900,79 @@
     const doc = $activeDocument;
     if (!doc) return;
     const items = menuItemsFor(e, target, doc);
-    if (items.length > 0) menu = { x: e.clientX, y: e.clientY, items };
+    if (items) {
+      if (items.length > 0) menu = { x: e.clientX, y: e.clientY, items };
+      return;
+    }
+
+    // The page itself: a picture of the PDF's own under the pointer adds
+    // Save image and Copy image above the page's actions.
+    const point: ClientPoint = { clientX: e.clientX, clientY: e.clientY };
+    const rect = canvasEl.getBoundingClientRect();
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    const token = ++menuToken;
+    loadPageImages()
+      .then((found) => {
+        const image = imageAt(found.images, fx * found.width, fy * found.height);
+        return image ? { ...found, image } : null;
+      })
+      .catch(() => null)
+      .then((hit) => {
+        if (token !== menuToken) return;
+        const pageItems = pageMenuItems(point);
+        if (!hit) {
+          menu = { x: point.clientX, y: point.clientY, items: pageItems };
+          return;
+        }
+        pageItems[0] = { ...pageItems[0], separatorBefore: true };
+        menu = { x: point.clientX, y: point.clientY, items: [...imageMenuItems(doc.file, hit), ...pageItems] };
+      });
+  }
+
+  // The PDF's own pictures on this page (lib/pdf/embeddedImages.ts), read on
+  // the first right-click rather than alongside every render.
+  type FoundImages = { page: PDFPageProxy; images: PaintedImage[]; width: number; height: number };
+  let pageImagesCache: { doc: PdfDocument; page: number; rotation: number; found: Promise<FoundImages> } | null = null;
+
+  function loadPageImages(): Promise<FoundImages> {
+    const doc = pdfDoc;
+    const page = pageNumber;
+    const rotation = viewRotation;
+    const cached = pageImagesCache;
+    if (cached && cached.doc === doc && cached.page === page && cached.rotation === rotation) return cached.found;
+    const found = doc.getPage(page).then(async (p) => {
+      const total = getTotalRotation(p, rotation);
+      const { width, height } = p.getViewport({ scale: 1, rotation: total });
+      return { page: p, images: await pageImages(p, total), width, height };
+    });
+    pageImagesCache = { doc, page, rotation, found };
+    return found;
+  }
+
+  function imageMenuItems(file: File, hit: FoundImages & { image: PaintedImage }): ContextMenuItem[] {
+    const failed = (err: unknown) =>
+      screenshotResult.set({ ok: false, message: err instanceof Error ? err.message : 'Failed to save the image' });
+    return [
+      {
+        label: 'Save image',
+        icon: MENU_ICONS.save,
+        onSelect: () => downloadImage(file, hit.page, hit.images, hit.image).catch(failed),
+      },
+      {
+        label: 'Copy image',
+        icon: MENU_ICONS.copy,
+        onSelect: () => {
+          const png = imagePng(hit.page, hit.image);
+          // Started synchronously, while the click still counts as a user gesture.
+          const copied = copyImageToClipboard(png);
+          const fileName = `${file.name.replace(/\.pdf$/i, '')}_page${hit.page.pageNumber}_image.png`;
+          Promise.all([png, copied])
+            .then(([blob, ok]) => screenshotResult.set({ ok: true, blob, fileName, copied: ok, label: 'Image' }))
+            .catch(failed);
+        },
+      },
+    ];
   }
 
   function highlightAt(point: ClientPoint) {
@@ -1908,7 +1986,7 @@
     e: MouseEvent,
     target: HTMLElement,
     doc: NonNullable<typeof $activeDocument>,
-  ): ContextMenuItem[] {
+  ): ContextMenuItem[] | null {
     const idOf = (attr: string) => target.closest(`[${attr}]`)?.getAttribute(attr) ?? null;
     const deleteItem = (label: string, remove: () => void): ContextMenuItem => ({
       label,
@@ -2069,6 +2147,11 @@
       ];
     }
 
+    // Nothing placed under the pointer: the page menu (onDocumentContextMenu).
+    return null;
+  }
+
+  function pageMenuItems(point: ClientPoint): ContextMenuItem[] {
     const page = pageNumber;
     return [
       {
