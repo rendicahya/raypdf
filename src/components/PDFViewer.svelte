@@ -6,7 +6,8 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { renderPageToCanvas, type PdfDocument } from '../lib/pdf/loader';
-  import { renderTextLayer, cancelTextLayer } from '../lib/pdf/textLayer';
+  import { renderTextLayer, cancelTextLayer, textItemIndices } from '../lib/pdf/textLayer';
+  import { selectionFonts, fontLabels } from '../lib/pdf/fontInfo';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
   import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { headerFooterDate, pageLabels } from '../lib/pdf/headerFooter';
@@ -157,8 +158,10 @@
     function updateHasTextSelection() {
       const sel = window.getSelection();
       hasTextSelection = !!sel && !sel.isCollapsed && !!textLayerEl && !!sel.anchorNode && textLayerEl.contains(sel.anchorNode);
-      if (pointerHeld || !hasTextSelection) pendingHighlight = null;
-      else updatePendingHighlight();
+      if (pointerHeld || !hasTextSelection) {
+        pendingHighlight = null;
+        selectionFont = null;
+      } else updatePendingHighlight();
     }
     function onPointerDown() {
       pointerHeld = true;
@@ -192,7 +195,8 @@
   // into lines and which edge an underline sits on.
   let pageRotation = $state(0);
   const pageVertical = $derived(pageRotation % 180 !== 0);
-  const MARKUP_POPUP_HALF_WIDTH = 120;
+  // About half the toolbar's width with a long font label.
+  const MARKUP_POPUP_HALF_WIDTH = 240;
 
   function updatePendingHighlight() {
     const sel = window.getSelection();
@@ -220,13 +224,35 @@
     const last = boxes[boxes.length - 1];
     const first = boxes[0];
     const below = last.y + last.height + 40 < canvasRect.height;
+    const halfWidth = Math.min(MARKUP_POPUP_HALF_WIDTH, canvasRect.width / 2);
     pendingHighlight = {
       boxes,
       anchor: {
-        x: clamp(last.x + last.width, MARKUP_POPUP_HALF_WIDTH, canvasRect.width - MARKUP_POPUP_HALF_WIDTH),
+        x: clamp(last.x + last.width, halfWidth, canvasRect.width - halfWidth),
         y: below ? last.y + last.height + 6 : Math.max(0, first.y - 38),
       },
     };
+    updateSelectionFont(sel);
+  }
+
+  // The font of the selected text, as stored in the PDF (lib/pdf/fontInfo.ts),
+  // shown at the start of the selection toolbar.
+  let selectionFont: { label: string; detail: string } | null = $state(null);
+  let fontRun = 0;
+
+  function updateSelectionFont(sel: Selection) {
+    const indices = new Set<number>();
+    for (let i = 0; i < sel.rangeCount; i++) {
+      for (const index of textItemIndices(textLayerEl, sel.getRangeAt(i))) indices.add(index);
+    }
+    const run = ++fontRun;
+    selectionFonts(pdfDoc, pageNumber, [...indices].sort((a, b) => a - b))
+      .then((fonts) => {
+        if (run === fontRun) selectionFont = fontLabels(fonts);
+      })
+      .catch(() => {
+        if (run === fontRun) selectionFont = null;
+      });
   }
 
   // Applied on pointerdown (and click, for the keyboard): the selection is
@@ -3009,6 +3035,15 @@
         e.stopPropagation();
       }}
     >
+      {#if selectionFont}
+        <span
+          class="max-w-[13rem] truncate px-1.5 text-neutral-500 dark:text-neutral-400"
+          use:tooltip={selectionFont.detail}
+        >
+          {selectionFont.label}
+        </span>
+        <span class="mx-1 h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700"></span>
+      {/if}
       <button
         type="button"
         class="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors hover:bg-neutral-100

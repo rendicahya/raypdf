@@ -141,7 +141,7 @@ A placed signature's `angle` (degrees clockwise as shown, about the box's centre
 
 Floating toolbar (bottom): undo/redo, page navigation, zoom (the percentage is a menu of common levels plus fit width / fit page), rotate, and the tools in groups split by dividers: Move, Select | Signature, Add Text, Add image | Comment, Shapes | Redact, Watermark | Page numbers (with header & footer), Crop, Screenshot, Recognize text (a menu; pressed while waiting for an area). A new tool goes in the group that fits its task. There's no Zoom tool: Ctrl+wheel and the zoom controls cover it. A few seconds after the pointer leaves, the toolbar fades to semi-transparent (not while hovered, keyboard-focused, or a menu of it is open).
 
-Selecting text shows a markup toolbar (highlight in five colors, underline / strikethrough always black via `markupColorFor`); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`). The toolbar's Comment button adds a highlight and a `PlacedComment` with that `groupId` in one step; such a comment is removed with its markup, follows it to duplicated pages, and is exported as the markup annotation's Contents instead of a sticky note.
+Selecting text shows a markup toolbar (highlight in five colors, underline / strikethrough always black via `markupColorFor`); markups are stored per document as `PlacedHighlight` (one box per line, grouped by `groupId`, with `kind` and `color`) and exported as PDF Highlight / Underline / StrikeOut annotations (`lib/pdf/highlight.ts`). The toolbar starts with the selection's font (`lib/pdf/fontInfo.ts`): `textItemIndices` in `textLayer.ts` maps the selected spans back to pdf.js text content items (one span per item, same order), whose `fontName` looks up the font pdf.js loaded for drawing (`page.commonObjs`, its `name` / `bold` / `italic`), and whose transform gives the size. The toolbar's Comment button adds a highlight and a `PlacedComment` with that `groupId` in one step; such a comment is removed with its markup, follows it to duplicated pages, and is exported as the markup annotation's Contents instead of a sticky note.
 
 Ctrl+F opens SearchBar (`stores/search.ts`, `lib/pdf/search.ts`): matches are counted from pdf.js text content and boxed on screen from the text layer. Its Highlight all builds each page's text layer off screen (`findMatchBoxes`) so every match, mounted page or not, becomes a highlight markup in one undo step (`addHighlights`).
 
@@ -252,7 +252,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, compress, docx, embeddedImages, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, compress, docx, embeddedImages, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, fontInfo, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, portal, tooltip, wheelRange

@@ -69,7 +69,23 @@ export async function renderTextLayer(
   }
 
   if (!current) return null; // superseded while rendering
+  layer.textDivs.forEach((span, index) => itemIndices.set(span, index));
   return { cancel: () => layer.cancel() };
+}
+
+// Each span's place among the page's text content items (those with a `str`,
+// which is every item without marked content), so a selection can be traced
+// back to the items it covers (lib/pdf/fontInfo.ts).
+const itemIndices = new WeakMap<HTMLElement, number>();
+
+/** Indices of the text content items whose spans `range` touches, in order. */
+export function textItemIndices(container: HTMLElement, range: Range): number[] {
+  const indices: number[] = [];
+  for (const span of container.querySelectorAll('span')) {
+    const index = itemIndices.get(span);
+    if (index !== undefined && span.textContent && range.intersectsNode(span)) indices.push(index);
+  }
+  return indices;
 }
 
 /**

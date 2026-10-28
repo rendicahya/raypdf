@@ -16,7 +16,7 @@ export function tooltip(node: HTMLElement, text: string) {
     tip.setAttribute('role', 'tooltip');
     tip.textContent = current;
     tip.className =
-      'pointer-events-none fixed z-[1000] max-w-xs rounded-md bg-neutral-900 px-2 py-1 text-xs text-white ' +
+      'pointer-events-none fixed z-[1000] max-w-xs whitespace-pre-line rounded-md bg-neutral-900 px-2 py-1 text-xs text-white ' +
       'shadow-lg dark:bg-neutral-100 dark:text-neutral-900';
     document.body.appendChild(tip);
     position();
