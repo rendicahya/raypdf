@@ -463,7 +463,17 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
 
 <!-- Lives in the top Toolbar: Save is always one click away, whether or not
      the Signature panel is open. The chevron menu holds the other ways to
-     save plus the two export options. -->
+     save, grouped by output format, plus the export options. -->
+{#snippet heading(label: string, divider: boolean)}
+  <div
+    role="presentation"
+    class="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-400
+      {divider ? 'mt-1 border-t border-neutral-200 dark:border-neutral-700' : ''}"
+  >
+    {label}
+  </div>
+{/snippet}
+
 <svelte:window onkeydown={onKeydown} />
 
 <div class="relative flex items-center gap-1">
@@ -543,9 +553,10 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
     ></button>
     <div
       role="menu"
-      class="absolute right-0 top-full z-40 mt-1 w-64 rounded-lg border border-neutral-200 bg-white py-1
-        shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+      class="absolute right-0 top-full z-40 mt-1 max-h-[calc(100vh-4rem)] w-72 overflow-y-auto rounded-lg border
+        border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
     >
+      {@render heading('PDF', false)}
       <button
         type="button"
         role="menuitem"
@@ -561,64 +572,6 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         <span class="block">{compressing ? 'Compressing…' : 'Save compressed'}</span>
         <span class="block text-xs text-neutral-400">Smaller file: images are scaled down and re-encoded</span>
       </button>
-
-      <button
-        type="button"
-        role="menuitem"
-        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
-          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
-          dark:text-neutral-200 dark:hover:bg-neutral-800"
-        disabled={convertingDocx}
-        onclick={() => {
-          showSaveMenu = false;
-          onExportDocx();
-        }}
-      >
-        <span class="block">{convertingDocx ? 'Converting…' : 'Save as Word (.docx)'}</span>
-        <span class="block text-xs text-neutral-400">Editable text and pictures; tables and columns may shift</span>
-      </button>
-
-      <button
-        type="button"
-        role="menuitem"
-        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
-          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
-          dark:text-neutral-200 dark:hover:bg-neutral-800"
-        disabled={savingImages}
-        onclick={() => {
-          showSaveMenu = false;
-          onSaveImages();
-        }}
-      >
-        <span class="block">{savingImages ? 'Saving images…' : 'Save all images'}</span>
-        <span class="block text-xs text-neutral-400">Every picture in the PDF at full resolution (ZIP)</span>
-      </button>
-
-      <div class="flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200">
-        <span class="min-w-0 flex-1">
-          <span class="block">{savingPageImages ? 'Rendering pages…' : 'Save pages as images'}</span>
-          <span class="block text-xs text-neutral-400">
-            {($activeDocument?.pageCount ?? 1) > 1 ? 'One image per page (ZIP)' : 'The page as one image'}
-          </span>
-        </span>
-        {#each ['png', 'jpg'] as const as format (format)}
-          <button
-            type="button"
-            role="menuitem"
-            aria-label={`Save pages as ${format.toUpperCase()} images`}
-            class="shrink-0 rounded-md border border-neutral-200 px-2 py-1 text-xs font-medium transition-colors
-              hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
-              dark:border-neutral-700 dark:hover:bg-neutral-800"
-            disabled={savingPageImages !== null}
-            onclick={() => {
-              showSaveMenu = false;
-              onSavePagesAsImages(format);
-            }}
-          >
-            {format.toUpperCase()}
-          </button>
-        {/each}
-      </div>
 
       {#if ($activeDocument?.pageCount ?? 1) > 1}
         <button
@@ -680,6 +633,66 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           Save all as one PDF
         </button>
       {/if}
+
+      {@render heading('Image', true)}
+      <button
+        type="button"
+        role="menuitem"
+        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
+          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+          dark:text-neutral-200 dark:hover:bg-neutral-800"
+        disabled={savingImages}
+        onclick={() => {
+          showSaveMenu = false;
+          onSaveImages();
+        }}
+      >
+        <span class="block">{savingImages ? 'Saving images…' : 'Save all images'}</span>
+        <span class="block text-xs text-neutral-400">Every picture in the PDF at full resolution (ZIP)</span>
+      </button>
+
+      <div class="flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200">
+        <span class="min-w-0 flex-1">
+          <span class="block">{savingPageImages ? 'Rendering pages…' : 'Save pages as images'}</span>
+          <span class="block text-xs text-neutral-400">
+            {($activeDocument?.pageCount ?? 1) > 1 ? 'One image per page (ZIP)' : 'The page as one image'}
+          </span>
+        </span>
+        {#each ['png', 'jpg'] as const as format (format)}
+          <button
+            type="button"
+            role="menuitem"
+            aria-label={`Save pages as ${format.toUpperCase()} images`}
+            class="shrink-0 rounded-md border border-neutral-200 px-2 py-1 text-xs font-medium transition-colors
+              hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+              dark:border-neutral-700 dark:hover:bg-neutral-800"
+            disabled={savingPageImages !== null}
+            onclick={() => {
+              showSaveMenu = false;
+              onSavePagesAsImages(format);
+            }}
+          >
+            {format.toUpperCase()}
+          </button>
+        {/each}
+      </div>
+
+      {@render heading('Word', true)}
+      <button
+        type="button"
+        role="menuitem"
+        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
+          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+          dark:text-neutral-200 dark:hover:bg-neutral-800"
+        disabled={convertingDocx}
+        onclick={() => {
+          showSaveMenu = false;
+          onExportDocx();
+        }}
+      >
+        <span class="block">{convertingDocx ? 'Converting…' : 'Save as Word (.docx)'}</span>
+        <span class="block text-xs text-neutral-400">Editable text and pictures; tables and columns may shift</span>
+      </button>
 
       <div class="mt-1 flex flex-col gap-2 border-t border-neutral-200 px-3 py-2 pt-3 dark:border-neutral-700">
         <label class="flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">
