@@ -96,6 +96,7 @@
     textDecoration,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
+  import { openSignatureTool } from '../stores/signatureTool';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import {
     watermarkText,
@@ -1133,6 +1134,16 @@
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   }
 
+  // Opens the signature panel with this placement's signature as the active one.
+  function editSignature(id: string) {
+    const placed = $activeDocument?.placedSignatures.find((s) => s.id === id);
+    if (placed && $signatureStore.signatures.some((s) => s.id === placed.signatureId)) {
+      signatureStore.setActive(placed.signatureId);
+    }
+    selectedSignatureId = id;
+    openSignatureTool();
+  }
+
   function rotateSignatureBy(id: string, delta: number) {
     const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
     if (!sig) return;
@@ -2024,7 +2035,13 @@
       selectedSignatureId = signatureId;
       const angle = doc.placedSignatures.find((s) => s.id === signatureId)?.angle ?? 0;
       return [
-        { label: 'Rotate left', icon: MENU_ICONS.rotateLeft, onSelect: () => rotateSignatureBy(signatureId, -90) },
+        { label: 'Edit signature', icon: MENU_ICONS.edit, onSelect: () => editSignature(signatureId) },
+        {
+          label: 'Rotate left',
+          icon: MENU_ICONS.rotateLeft,
+          separatorBefore: true,
+          onSelect: () => rotateSignatureBy(signatureId, -90),
+        },
         { label: 'Rotate right', icon: MENU_ICONS.rotateRight, onSelect: () => rotateSignatureBy(signatureId, 90) },
         {
           label: 'Straighten',
@@ -2663,6 +2680,9 @@
         onpointerup={onSignaturePointerUp}
         onfocus={() => (selectedSignatureId = sig.id)}
         onkeydown={(e) => onSignatureKeydown(e, sig.id)}
+        ondblclick={(e) => {
+          if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'IMG') editSignature(sig.id);
+        }}
       >
         <img
           src={image.previewUrl}

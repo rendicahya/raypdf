@@ -1,6 +1,10 @@
 import { writable, get } from 'svelte/store';
 import { persistedWritable } from '../lib/utils/persist';
 import type { SaveProtection } from '../lib/pdf/password';
+import type { CompressionLevel } from '../lib/pdf/compress';
+
+/** How hard Save compressed shrinks images; the last level used is remembered. */
+export const compressionLevel = persistedWritable<CompressionLevel>('compressionLevel', 'medium');
 
 /**
  * Whether to strip embedded JavaScript/auto-run actions carried over from

@@ -3,8 +3,10 @@
   import { editorStore, activeDocument } from '../stores/editor';
   import { search, searchFocusRequest, closeSearch } from '../stores/search';
   import { getCachedPdf } from '../lib/pdf/docCache';
-  import { findMatches } from '../lib/pdf/search';
+  import { findMatches, findMatchBoxes } from '../lib/pdf/search';
   import { tooltip } from '../lib/utils/tooltip';
+  import { MENU_ICONS } from '../lib/utils/menuIcons';
+  import { markupColor } from '../stores/markup';
   import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
 
   let inputEl: HTMLInputElement | undefined = $state();
@@ -76,6 +78,33 @@
     showCurrent();
   }
 
+  // Highlight all: every match becomes a highlight markup (in the markup
+  // toolbar's color), saved with the PDF, as one undo step.
+  let highlighting = $state(false);
+  let highlightNote: string | null = $state(null);
+  let highlightNoteTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function highlightAll() {
+    const doc = $activeDocument;
+    const { matches, query: q } = $search;
+    if (!doc || matches.length === 0 || highlighting) return;
+    highlighting = true;
+    try {
+      const pdf = await getCachedPdf(doc.id, doc.file);
+      const pages = [...new Set(matches.map((m) => m.page))];
+      const marks = await findMatchBoxes(pdf, q, pages, $editorStore.renderScale, doc.rotation);
+      const added = editorStore.addHighlights(marks, 'highlight', $markupColor);
+      highlightNote =
+        added === 0 ? 'Already highlighted' : `Highlighted ${added} match${added === 1 ? '' : 'es'}`;
+    } catch {
+      highlightNote = 'Could not highlight the matches';
+    } finally {
+      highlighting = false;
+      clearTimeout(highlightNoteTimer);
+      highlightNoteTimer = setTimeout(() => (highlightNote = null), 3000);
+    }
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -88,6 +117,8 @@
   }
 
   const status = $derived.by(() => {
+    if (highlighting) return 'Highlighting…';
+    if (highlightNote) return highlightNote;
     if (!$search.query.trim()) return '';
     if ($search.searching) return 'Searching…';
     if ($search.matches.length === 0) return 'No results';
@@ -160,6 +191,18 @@
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
         <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+      </svg>
+    </button>
+    <button
+      type="button"
+      class={buttonClass}
+      aria-label="Highlight all matches"
+      use:tooltip={'Highlight all matches (kept in the saved PDF)'}
+      disabled={$search.matches.length === 0 || $search.searching || highlighting}
+      onclick={highlightAll}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.highlight} />
       </svg>
     </button>
     <button type="button" class={buttonClass} aria-label="Close search" use:tooltip={'Close (Esc)'} onclick={closeSearch}>

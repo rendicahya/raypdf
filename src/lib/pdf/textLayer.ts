@@ -56,6 +56,7 @@ export async function renderTextLayer(
   const layer = new TextLayer({ textContentSource: page.streamTextContent(), container, viewport });
   myClaim.layer = layer;
 
+  let current = false;
   try {
     await layer.render();
   } catch (e) {
@@ -63,10 +64,11 @@ export async function renderTextLayer(
     // render owns the container and will finish building it.
     if (!(e instanceof AbortException)) throw e;
   } finally {
-    if (pendingRenders.get(container) === myClaim) pendingRenders.delete(container);
+    current = pendingRenders.get(container) === myClaim;
+    if (current) pendingRenders.delete(container);
   }
 
-  if (pendingRenders.get(container) !== myClaim) return null; // superseded while rendering
+  if (!current) return null; // superseded while rendering
   return { cancel: () => layer.cancel() };
 }
 

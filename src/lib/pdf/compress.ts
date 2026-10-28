@@ -15,7 +15,8 @@ import { loadEditablePdf } from './password';
  * Makes a PDF smaller, entirely in the browser:
  *
  *  - Photos and scans (the usual bulk of a large PDF) are scaled down to at
- *    most MAX_IMAGE_SIDE pixels on their long side and re-encoded as JPEG.
+ *    most the level's `maxSide` pixels on their long side and re-encoded as
+ *    JPEG at its `quality`.
  *  - Streams stored without any compression are deflated.
  *  - The file is written with object streams, which packs the remaining
  *    small objects together.
@@ -26,8 +27,20 @@ import { loadEditablePdf } from './password';
  * depths or color spaces) are kept as they are.
  */
 
-const MAX_IMAGE_SIDE = 1800;
-const JPEG_QUALITY = 0.7;
+export type CompressionLevel = 'low' | 'medium' | 'high';
+
+interface ImageSettings {
+  maxSide: number;
+  quality: number;
+}
+
+/** Low keeps images close to print quality; high is for email and the screen. */
+export const COMPRESSION_LEVELS: Record<CompressionLevel, ImageSettings & { label: string; description: string }> = {
+  low: { maxSide: 2600, quality: 0.85, label: 'Low', description: 'Best quality, a little smaller' },
+  medium: { maxSide: 1800, quality: 0.7, label: 'Medium', description: 'Good quality, much smaller' },
+  high: { maxSide: 1100, quality: 0.5, label: 'High', description: 'Smallest file, for screen and email' },
+};
+
 /** Re-encoded images must come out at least this much smaller to be used. */
 const MIN_SAVING = 0.9;
 /** Raw streams below this size aren't worth deflating. */
@@ -82,11 +95,11 @@ function makeCanvas(width: number, height: number): OffscreenCanvas | HTMLCanvas
   return canvas;
 }
 
-async function canvasToJpeg(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Uint8Array> {
+async function canvasToJpeg(canvas: OffscreenCanvas | HTMLCanvasElement, quality: number): Promise<Uint8Array> {
   const blob =
     canvas instanceof HTMLCanvasElement
-      ? await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY))
-      : await canvas.convertToBlob({ type: 'image/jpeg', quality: JPEG_QUALITY });
+      ? await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+      : await canvas.convertToBlob({ type: 'image/jpeg', quality });
   if (!blob) throw new Error('JPEG encoding failed');
   return new Uint8Array(await blob.arrayBuffer());
 }
@@ -125,7 +138,7 @@ async function decodeImage(stream: PDFRawStream): Promise<ImageBitmap | null> {
 }
 
 /** The re-encoded image, or null to keep the original. */
-async function recompressImage(stream: PDFRawStream): Promise<Uint8Array | null> {
+async function recompressImage(stream: PDFRawStream, settings: ImageSettings): Promise<Uint8Array | null> {
   const { dict } = stream;
   // Masks, color-key masks, and custom decode arrays all depend on exact
   // pixel values, which JPEG doesn't keep.
@@ -136,7 +149,7 @@ async function recompressImage(stream: PDFRawStream): Promise<Uint8Array | null>
   const bitmap = await decodeImage(stream).catch(() => null);
   if (!bitmap) return null;
   try {
-    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, settings.maxSide / Math.max(bitmap.width, bitmap.height));
     const width = Math.max(1, Math.round(bitmap.width * scale));
     const height = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = makeCanvas(width, height);
@@ -144,7 +157,7 @@ async function recompressImage(stream: PDFRawStream): Promise<Uint8Array | null>
     if (!ctx) return null;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bitmap, 0, 0, width, height);
-    const jpeg = await canvasToJpeg(canvas);
+    const jpeg = await canvasToJpeg(canvas, settings.quality);
     if (jpeg.length > stream.contents.length * MIN_SAVING) return null;
     dict.set(name('Width'), PDFNumber.of(width));
     dict.set(name('Height'), PDFNumber.of(height));
@@ -157,7 +170,9 @@ async function recompressImage(stream: PDFRawStream): Promise<Uint8Array | null>
 export async function compressPdf(
   input: Uint8Array,
   finish?: (pdfDoc: PDFDocument) => void,
+  level: CompressionLevel = 'medium',
 ): Promise<CompressResult> {
+  const settings = COMPRESSION_LEVELS[level];
   const pdfDoc = await loadEditablePdf(input);
   const { context } = pdfDoc;
 
@@ -177,7 +192,7 @@ export async function compressPdf(
 
     if (subtype instanceof PDFName && subtype.decodeText() === 'Image') {
       if (softMasks.has(ref)) continue;
-      const jpeg = await recompressImage(obj);
+      const jpeg = await recompressImage(obj, settings);
       if (!jpeg) continue;
       const replacement = context.stream(jpeg);
       for (const [key, value] of dict.entries()) {

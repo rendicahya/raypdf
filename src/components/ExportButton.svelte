@@ -2,7 +2,14 @@
   import { editorStore, activeDocument, type PdfDocumentState } from '../stores/editor';
   import { signatureStore } from '../stores/signature';
   import { currentWatermarkOptions } from '../stores/watermark';
-  import { stripEmbeddedScripts, securePdf, passwordProtect, savePassword, currentSaveProtection } from '../stores/exportOptions';
+  import {
+    stripEmbeddedScripts,
+    securePdf,
+    passwordProtect,
+    savePassword,
+    currentSaveProtection,
+    compressionLevel,
+  } from '../stores/exportOptions';
   import {
     exportSignedPdf,
     downloadSignedPdf,
@@ -17,7 +24,7 @@
     printPdfBytes,
     downloadCompressedPdf,
   } from '../lib/pdf/export';
-  import { compressPdf } from '../lib/pdf/compress';
+  import { compressPdf, COMPRESSION_LEVELS, type CompressionLevel } from '../lib/pdf/compress';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { downloadAllImages, type Rect } from '../lib/pdf/embeddedImages';
   import { downloadPagesAsImages, type PageImageFormat } from '../lib/pdf/pageImages';
@@ -107,9 +114,10 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
   // Saves everything added, like Save, then shrinks the result. Unlike Save it
   // also works on an untouched PDF, since making a file smaller is reason
   // enough to save it.
-  async function onExportCompressed() {
+  async function onExportCompressed(level: CompressionLevel) {
     const doc = $activeDocument;
     if (!doc) return;
+    $compressionLevel = level;
 
     compressing = true;
     error = null;
@@ -142,6 +150,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       const result = await compressPdf(
         bytes,
         hasProtection(protection) ? (d) => applyProtection(d, protection) : undefined,
+        level,
       );
       downloadCompressedPdf(result.bytes, doc.file.name);
       editorStore.markDocumentExported(doc.id);
@@ -557,21 +566,32 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
     >
       {@render heading('PDF', false)}
-      <button
-        type="button"
-        role="menuitem"
-        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
-          hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
-          dark:text-neutral-200 dark:hover:bg-neutral-800"
-        disabled={compressing}
-        onclick={() => {
-          showSaveMenu = false;
-          onExportCompressed();
-        }}
-      >
+      <div class="px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200">
         <span class="block">{compressing ? 'Compressing…' : 'Save compressed'}</span>
         <span class="block text-xs text-neutral-400">Smaller file: images are scaled down and re-encoded</span>
-      </button>
+        <div class="mt-1.5 flex gap-1.5">
+          {#each Object.entries(COMPRESSION_LEVELS) as [level, settings] (level)}
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={`Save compressed, ${settings.label.toLowerCase()} compression`}
+              use:tooltip={settings.description}
+              class="flex-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors
+                disabled:cursor-not-allowed disabled:opacity-50
+                {$compressionLevel === level
+                ? 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50'
+                : 'border-neutral-200 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800'}"
+              disabled={compressing}
+              onclick={() => {
+                showSaveMenu = false;
+                onExportCompressed(level as CompressionLevel);
+              }}
+            >
+              {settings.label}
+            </button>
+          {/each}
+        </div>
+      </div>
 
       {#if ($activeDocument?.pageCount ?? 1) > 1}
         <button

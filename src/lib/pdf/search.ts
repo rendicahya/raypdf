@@ -1,4 +1,7 @@
 import type { PdfDocument } from './loader';
+import { getTotalRotation } from './loader';
+import { renderTextLayer, cancelTextLayer } from './textLayer';
+import { selectionToBoxes, type Box } from './highlight';
 
 /**
  * Find-in-document (Ctrl+F). Matching is case-insensitive and treats any run
@@ -102,6 +105,55 @@ export async function findMatches(
     for (let index = 0; index < count; index++) matches.push({ page, index });
   }
   return matches;
+}
+
+/**
+ * The on-page boxes (one per line, in canvas pixels at `scale` and the view's
+ * `extraRotation`, like a text selection's markup) of every match on each
+ * page in `pages`. Each page's text layer is built off screen and measured
+ * the same way PDFViewer boxes the matches it shows, so pages that aren't
+ * mounted come out exactly where they would be on screen.
+ */
+export async function findMatchBoxes(
+  doc: PdfDocument,
+  query: string,
+  pages: number[],
+  scale: number,
+  extraRotation: number,
+): Promise<{ page: number; rects: Box[] }[]> {
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  host.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;overflow:hidden;';
+  const layer = document.createElement('div');
+  layer.className = 'pdf-text-layer';
+  host.append(layer);
+  document.body.append(host);
+
+  const marks: { page: number; rects: Box[] }[] = [];
+  try {
+    for (const pageNumber of pages) {
+      const page = await doc.getPage(pageNumber);
+      const rotation = getTotalRotation(page, extraRotation);
+      const viewport = page.getViewport({ scale, rotation });
+      host.style.width = `${viewport.width}px`;
+      host.style.height = `${viewport.height}px`;
+      if (!(await renderTextLayer(doc, pageNumber, layer, scale, extraRotation))) continue;
+      const origin = host.getBoundingClientRect();
+      for (const range of findInTextLayer(layer, query)) {
+        const rects = Array.from(range.getClientRects(), (r) => ({
+          x: r.left - origin.left,
+          y: r.top - origin.top,
+          width: r.width,
+          height: r.height,
+        }));
+        marks.push({ page: pageNumber, rects: selectionToBoxes(rects, rotation % 180 !== 0) });
+      }
+    }
+  } finally {
+    cancelTextLayer(layer);
+    host.remove();
+  }
+  return marks;
 }
 
 /**

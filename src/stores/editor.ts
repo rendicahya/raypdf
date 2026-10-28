@@ -986,6 +986,39 @@ function createEditorStore() {
     return commentId;
   }
 
+  /**
+   * Several markups at once (Find's Highlight all), as one undo step. A mark
+   * whose first box is already highlighted on that page is skipped, so
+   * running it twice doesn't stack highlights. Returns how many were added.
+   */
+  function addHighlights(marks: { page: number; rects: Geometry[] }[], kind: MarkupKind, color: string): number {
+    const highlights = getActiveDocument(currentState())?.highlights;
+    if (!highlights) return 0;
+    const near = (a: Geometry, b: Geometry) =>
+      Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.width - b.width) < 1;
+    const fresh = marks.filter(
+      (m) =>
+        m.rects.length > 0 &&
+        !highlights.some((h) => h.page === m.page && h.kind === kind && near(h, m.rects[0])),
+    );
+    if (fresh.length === 0) return 0;
+    recordActiveHistory(`add-highlights-${crypto.randomUUID()}`);
+    update((state) =>
+      updateActiveDocument(state, (d) => ({
+        ...d,
+        highlights: [
+          ...d.highlights,
+          ...fresh.flatMap((m) => {
+            const groupId = crypto.randomUUID();
+            return m.rects.map((r) => ({ ...r, page: m.page, groupId, kind, color, id: crypto.randomUUID() }));
+          }),
+        ],
+        exported: false,
+      })),
+    );
+    return fresh.length;
+  }
+
   /** Changes the color of every rectangle of one markup. */
   function recolorHighlight(groupId: string, color: string) {
     recordActiveHistory(`recolor-highlight-${groupId}-${Date.now()}`);
@@ -1456,6 +1489,7 @@ function createEditorStore() {
     removeComment,
     setCommentsForDocument,
     addHighlight,
+    addHighlights,
     recolorHighlight,
     removeHighlight,
     addShape,
