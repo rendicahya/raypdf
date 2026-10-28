@@ -20,6 +20,7 @@
   import { compressPdf } from '../lib/pdf/compress';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { downloadAllImages, type Rect } from '../lib/pdf/embeddedImages';
+  import { downloadPagesAsImages, type PageImageFormat } from '../lib/pdf/pageImages';
 import { applyProtection, hasProtection } from '../lib/pdf/password';
   import { formatFileSize } from '../lib/utils/fileValidation';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
@@ -31,6 +32,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
   let compressNoteTimeout: ReturnType<typeof setTimeout> | undefined;
   let convertingDocx = $state(false);
   let savingImages = $state(false);
+  let savingPageImages: PageImageFormat | null = $state(null);
   let exportingPageOnly = $state(false);
   let exportingPagesZip = $state(false);
   let exportingAll = $state(false);
@@ -224,6 +226,46 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       error = e instanceof Error ? e.message : 'Failed to save the images';
     } finally {
       savingImages = false;
+    }
+  }
+
+  // Every page with everything added, rendered as an image like the
+  // thumbnail menu's "Save page as". No comments: a sticky note would only
+  // show as an icon. No password either, since an image can't carry one.
+  async function onSavePagesAsImages(format: PageImageFormat) {
+    const doc = $activeDocument;
+    if (!doc) return;
+
+    savingPageImages = format;
+    error = null;
+    try {
+      const placements = $signatureStore.signature ? doc.placedSignatures : [];
+      const bytes = await exportSignedPdf({
+        pdfFile: doc.file,
+        documentId: doc.id,
+        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
+        placements: placements.length > 0 ? placements : undefined,
+        renderScale: $editorStore.renderScale,
+        rotation: doc.rotation,
+        watermark: currentWatermark(),
+        stripScripts: $stripEmbeddedScripts,
+        redactions: doc.redactions,
+        texts: doc.texts,
+        comments: [],
+        highlights: doc.highlights,
+        shapes: doc.shapes,
+        images: doc.images,
+        formValues: doc.formValues,
+        pageNumbers: doc.pageNumbers,
+        headerFooter: doc.headerFooter,
+        pageWatermark: doc.pageWatermark,
+      });
+      const pages = Array.from({ length: doc.pageCount }, (_, i) => i + 1);
+      await downloadPagesAsImages(bytes, doc.file.name, pages, format);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to save the pages as images';
+    } finally {
+      savingPageImages = null;
     }
   }
 
@@ -551,6 +593,32 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         <span class="block">{savingImages ? 'Saving images…' : 'Save all images'}</span>
         <span class="block text-xs text-neutral-400">Every picture in the PDF at full resolution (ZIP)</span>
       </button>
+
+      <div class="flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200">
+        <span class="min-w-0 flex-1">
+          <span class="block">{savingPageImages ? 'Rendering pages…' : 'Save pages as images'}</span>
+          <span class="block text-xs text-neutral-400">
+            {($activeDocument?.pageCount ?? 1) > 1 ? 'One image per page (ZIP)' : 'The page as one image'}
+          </span>
+        </span>
+        {#each ['png', 'jpg'] as const as format (format)}
+          <button
+            type="button"
+            role="menuitem"
+            aria-label={`Save pages as ${format.toUpperCase()} images`}
+            class="shrink-0 rounded-md border border-neutral-200 px-2 py-1 text-xs font-medium transition-colors
+              hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+              dark:border-neutral-700 dark:hover:bg-neutral-800"
+            disabled={savingPageImages !== null}
+            onclick={() => {
+              showSaveMenu = false;
+              onSavePagesAsImages(format);
+            }}
+          >
+            {format.toUpperCase()}
+          </button>
+        {/each}
+      </div>
 
       {#if ($activeDocument?.pageCount ?? 1) > 1}
         <button
