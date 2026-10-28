@@ -11,11 +11,14 @@
 
   let inputEl: HTMLInputElement | undefined = $state();
 
+  const open = $derived($search.open);
+
   // Focus (and select) the field every time search is opened, including
-  // Ctrl+F again while it's already open.
+  // Ctrl+F again while it's already open. It reads `open`, not `$search`,
+  // so typing (which updates the query) doesn't re-select the text.
   $effect(() => {
     void $searchFocusRequest;
-    if (!$search.open) return;
+    if (!open) return;
     tick().then(() => {
       inputEl?.focus();
       inputEl?.select();
@@ -27,7 +30,6 @@
   const docId = $derived($activeDocument?.id ?? null);
   const docFile = $derived($activeDocument?.file ?? null);
   const query = $derived($search.query);
-  const open = $derived($search.open);
   let runId = 0;
 
   $effect(() => {
