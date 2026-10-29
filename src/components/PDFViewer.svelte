@@ -895,13 +895,20 @@
     if (isPageDrag(e)) return;
     e.preventDefault();
     isDragOver = false;
+    // The signature panel tags each dragged signature with its id. Checked
+    // first: Chrome also attaches a dragged <img> as a file, which would
+    // otherwise be added as a plain image, without the watermark.
+    const signatureId = e.dataTransfer?.getData(SIGNATURE_DRAG_TYPE);
+    if (signatureId) {
+      placeSignatureAt(e, signatureId);
+      return;
+    }
     const imageFile = Array.from(e.dataTransfer?.files ?? []).find(isImageFile);
     if (imageFile) {
       addImageAt(imageFile, { clientX: e.clientX, clientY: e.clientY });
       return;
     }
-    // The signature panel tags each dragged signature with its id.
-    placeSignatureAt(e, e.dataTransfer?.getData(SIGNATURE_DRAG_TYPE) || undefined);
+    placeSignatureAt(e);
   }
 
   function onCanvasMouseMove(e: PointerEvent) {
