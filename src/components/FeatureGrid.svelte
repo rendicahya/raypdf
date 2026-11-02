@@ -162,6 +162,7 @@
       points: [
         'Save pages as PNG or JPG images.',
         'Turn a PDF into an editable Word document.',
+        'Convert it to Markdown, without headers, footers, or page numbers: preview it, then save or copy.',
         'Save the pictures in a PDF at full resolution: right-click one, or save them all.',
         'Protect the saved PDF with a password, or open a protected one and save it without.',
         'Optionally remove embedded JavaScript or lock copying.',

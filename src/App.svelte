@@ -13,6 +13,8 @@
   import Faq from './components/Faq.svelte';
   import SearchBar from './components/SearchBar.svelte';
   import OcrStatus from './components/OcrStatus.svelte';
+  import MarkdownExport from './components/MarkdownExport.svelte';
+  import { markdownExport } from './stores/markdownExport';
   import { search, openSearch, closeSearch } from './stores/search';
   import { editorStore, activeDocument, DEFAULT_RENDER_SCALE } from './stores/editor';
   import { theme } from './stores/theme';
@@ -329,6 +331,10 @@
   ondrop={onPageDrop}
 >
   <UpdateToast />
+
+  {#if $markdownExport && readyForEditor}
+    <MarkdownExport initialPages={$markdownExport.pages} />
+  {/if}
 
   {#if isPageDragging}
     <div class="pointer-events-none fixed inset-4 z-50 flex items-center justify-center rounded-3xl border-4

@@ -20,6 +20,7 @@
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import { MENU_ICONS } from '../lib/utils/menuIcons';
   import { ocrStatus, recognizeText, isOcrRunning } from '../stores/ocr';
+  import { openMarkdownExport } from '../stores/markdownExport';
 
   let pdfDoc: PdfDocument | null = $state(null);
   let error: string | null = $state(null);
@@ -343,6 +344,7 @@
           { label: 'PDF', onSelect: () => exportPages(pages, 'pdf') },
           { label: many ? 'PNG (ZIP)' : 'PNG', onSelect: () => exportPages(pages, 'png') },
           { label: many ? 'JPG (ZIP)' : 'JPG', onSelect: () => exportPages(pages, 'jpg') },
+          { label: 'Markdown', onSelect: () => openMarkdownExport(pages) },
         ],
       },
       many

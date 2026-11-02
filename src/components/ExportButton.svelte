@@ -31,6 +31,7 @@
 import { applyProtection, hasProtection } from '../lib/pdf/password';
   import { formatFileSize } from '../lib/utils/fileValidation';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
+  import { openMarkdownExport } from '../stores/markdownExport';
   import { tooltip } from '../lib/utils/tooltip';
 
   let exportingOne = $state(false);
@@ -712,6 +713,21 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       >
         <span class="block">{convertingDocx ? 'Converting…' : 'Save as Word (.docx)'}</span>
         <span class="block text-xs text-neutral-400">Editable text and pictures; tables and columns may shift</span>
+      </button>
+
+      {@render heading('Text', true)}
+      <button
+        type="button"
+        role="menuitem"
+        class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
+          hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        onclick={() => {
+          showSaveMenu = false;
+          openMarkdownExport();
+        }}
+      >
+        <span class="block">Save as Markdown (.md)</span>
+        <span class="block text-xs text-neutral-400">Preview first, then save or copy</span>
       </button>
 
       <div class="mt-1 flex flex-col gap-2 border-t border-neutral-200 px-3 py-2 pt-3 dark:border-neutral-700">
