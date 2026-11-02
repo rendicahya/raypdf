@@ -66,6 +66,14 @@
       ],
     },
     {
+      q: 'Can I convert a PDF to Word or Markdown?',
+      a: [
+        'Yes. Open the arrow next to Save and choose Save as Word or Save as Markdown. Paragraphs, headings, bold, and italic are rebuilt from the page, along with anything you added, such as text and form answers.',
+        'Markdown opens a preview first, where you pick all pages or just some and keep or drop bold and italic, then save the file or copy it. Headers, footers, and page numbers are left out.',
+        'Scanned pages have no text to convert until you use Recognize text on them.',
+      ],
+    },
+    {
       q: 'How much smaller does "Save compressed" make a file?',
       a: [
         'It depends on what is inside. Scanned pages and photos usually shrink a lot, because images are scaled down and re-encoded. A PDF that is mostly text is often already compact and changes little. Text stays sharp and selectable either way.',

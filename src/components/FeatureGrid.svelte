@@ -158,7 +158,7 @@
       kind: 'save',
       title: 'Save your way',
       description:
-        'Save the whole document, just the current page, or each page as its own PDF. Compress large scans, save several documents at once, merge them in the order you choose, or print.',
+        'Save the whole document, just the current page, or each page as its own PDF. Compress large scans, save several documents at once, merge them in the order you choose, or print. Or take the text out as a Word document or Markdown.',
       points: [
         'Save pages as PNG or JPG images.',
         'Turn a PDF into an editable Word document.',

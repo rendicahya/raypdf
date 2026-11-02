@@ -1,6 +1,6 @@
 # RayPDF
 
-A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, add text, images, and shapes, mark up and comment, redact, watermark, number pages, crop, reorder and rotate pages, recognize text in scans, compress, password-protect, and verify PDFs exported with RayPDF. Add a PDF, then choose **Open in editor** or **Verify**.
+A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, add text, images, and shapes, mark up and comment, redact, watermark, number pages, crop, reorder and rotate pages, recognize text in scans, convert to Word or Markdown, compress, password-protect, and verify PDFs exported with RayPDF. Add a PDF, then choose **Open in editor** or **Verify**.
 
 RayPDF was previously called Signy.
 
@@ -133,7 +133,7 @@ Project guidelines (product vision, principles, UX rules, code structure, and wo
 
 - `src/components/`: UI (`PDFViewer`, `PageSidebar`, `FloatingControls`, `SignaturePanel`, `ExportButton`, `DocumentTabs`, `VerifyResults`, …)
 - `src/stores/`: app state (`editor.ts` holds documents, placements, and undo history; one small store per tool)
-- `src/lib/pdf/`: loading, rendering, export, compression, Word conversion, redaction, page operations, form filling, screenshots, text recognition, verification
+- `src/lib/pdf/`: loading, rendering, export, compression, Word and Markdown conversion, redaction, page operations, form filling, screenshots, text recognition, verification
 - `src/lib/watermark/`: visible watermark layout and rendering
 - `src/lib/signature/`: signature storage, sizing, and drawn or typed signatures
 - `src/lib/utils/`: persistence, file validation, tooltip and other Svelte actions
