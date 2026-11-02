@@ -35,7 +35,8 @@
   let rangeText = $state(untrack(() => formatPageRange(initialPages ?? [])));
   let view: 'preview' | 'markdown' = $state('preview');
 
-  let source: MarkdownSource | null = $state(null);
+  // Raw: read once and never changed, so no deep proxy over every run.
+  let source: MarkdownSource | null = $state.raw(null);
   let progress = $state('Preparing…');
   let error: string | null = $state(null);
   let copied = $state(false);

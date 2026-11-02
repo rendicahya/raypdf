@@ -313,14 +313,16 @@ export function chooseBlocks(source: MarkdownSource, pageNumbers: number[]): Mar
       // A paragraph that runs on to the next page is one paragraph.
       if (i === 0 && n === lastPage + 1 && continuesParagraph(previous, block)) {
         const runs = (previous as Extract<MarkdownBlock, { kind: 'paragraph' }>).runs;
-        const first = structuredClone((block as Extract<MarkdownBlock, { kind: 'paragraph' }>).runs);
+        const first = (block as Extract<MarkdownBlock, { kind: 'paragraph' }>).runs.map((run) => ({ ...run }));
         const tail = runs.at(-1)!;
         if (/\p{L}-$/u.test(tail.text)) tail.text = tail.text.slice(0, -1);
         else first[0] = { ...first[0], text: ' ' + first[0].text.trimStart() };
         (previous as Extract<MarkdownBlock, { kind: 'paragraph' }>).runs = [...runs, ...first];
         return;
       }
-      blocks.push(structuredClone(block));
+      // Copied (not structuredClone: the preview's source may be a Svelte proxy),
+      // so joining and packing levels never change the source.
+      blocks.push(block.kind === 'heading' ? { ...block } : { ...block, runs: block.runs.map((run) => ({ ...run })) });
     });
     lastPage = n;
   }
