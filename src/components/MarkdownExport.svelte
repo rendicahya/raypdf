@@ -266,6 +266,27 @@
               >
                 {block.text}
               </svelte:element>
+            {:else if block.kind === 'table'}
+              <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left text-xs">
+                  <tbody>
+                    {#each block.rows as row, r (r)}
+                      <tr class={r === 0 ? 'bg-neutral-100 font-semibold dark:bg-neutral-800' : ''}>
+                        {#each row as cell, c (c)}
+                          <td class="border border-neutral-200 px-2 py-1 dark:border-neutral-700">
+                            {#each displayRuns(cell, $markdownFormatting) as run, j (j)}
+                              {#if run.bold && run.italic}<strong><em>{run.text}</em></strong>
+                              {:else if run.bold}<strong>{run.text}</strong>
+                              {:else if run.italic}<em>{run.text}</em>
+                              {:else}{run.text}{/if}
+                            {/each}
+                          </td>
+                        {/each}
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
             {:else}
               <p class={block.list ? 'relative pl-6' : ''}>
                 {#if block.list}

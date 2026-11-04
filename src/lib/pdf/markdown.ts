@@ -10,6 +10,7 @@ import {
   readTextPieces,
   type Line,
 } from './textLayout';
+import { findTables } from './tables';
 import './loader'; // sets up the pdf.js worker
 
 // Converts a PDF's text to Markdown, in the browser. The structure is rebuilt
@@ -18,7 +19,8 @@ import './loader'; // sets up the pdf.js worker
 // at the top or bottom of the pages, and page numbers) are left out. Bigger
 // or bold short lines become headings, their level ranked by how big they
 // are across the whole document, so the hierarchy holds on any page range.
-// Pictures and tables aren't converted; table rows come out as lines of text.
+// Simple tables become Markdown tables (tables.ts); any other table's rows come
+// out as lines of text. Pictures aren't converted.
 
 export type MarkdownRun = { text: string; bold: boolean; italic: boolean };
 
@@ -29,6 +31,11 @@ export type MarkdownBlock =
       runs: MarkdownRun[];
       /** '-' for a bullet, the marker ("3.", "2)") for a numbered item. */
       list: string | null;
+    }
+  | {
+      kind: 'table';
+      /** The first row is the header. Every row has one entry per column; each cell is its runs. */
+      rows: MarkdownRun[][][];
     };
 
 /** Every page's blocks, read once; toMarkdown writes any choice of pages from it. */
@@ -131,7 +138,8 @@ function withoutHeadersAndFooters(pages: PageLines[]): Line[][] {
 
 type Draft =
   | { kind: 'heading'; style: HeadingStyle; text: string; depth: number }
-  | { kind: 'paragraph'; runs: MarkdownRun[]; list: string | null };
+  | { kind: 'paragraph'; runs: MarkdownRun[]; list: string | null }
+  | { kind: 'table'; rows: MarkdownRun[][][] };
 
 type HeadingStyle = { size: number; bold: boolean };
 
@@ -144,6 +152,26 @@ function pageBlocks(lines: Line[], bodySize: number): Draft[] {
   const contentRight = Math.max(...lines.map((l) => l.right));
 
   const drafts: Draft[] = [];
+  let at = 0;
+  for (const table of findTables(lines)) {
+    addTextDrafts(drafts, lines.slice(at, table.start), contentLeft, contentRight, bodySize);
+    drafts.push({
+      kind: 'table',
+      rows: table.rows.map((row) => row.map((cell) => (cell ? paragraphRuns([cell]) : []))),
+    });
+    at = table.end + 1;
+  }
+  addTextDrafts(drafts, lines.slice(at), contentLeft, contentRight, bodySize);
+  return drafts;
+}
+
+function addTextDrafts(
+  drafts: Draft[],
+  lines: Line[],
+  contentLeft: number,
+  contentRight: number,
+  bodySize: number,
+): void {
   let previous: { style: HeadingStyle; bottom: number } | null = null;
   for (const paragraph of groupParagraphs(lines, contentLeft, contentRight)) {
     const runs = paragraphRuns(paragraph);
@@ -189,7 +217,6 @@ function pageBlocks(lines: Line[], bodySize: number): Draft[] {
     }
     drafts.push({ kind: 'paragraph', runs, list: null });
   }
-  return drafts;
 }
 
 function headingStyle(paragraph: Line[], text: string, bodySize: number): HeadingStyle | null {
@@ -322,7 +349,7 @@ export function chooseBlocks(source: MarkdownSource, pageNumbers: number[]): Mar
       }
       // Copied (not structuredClone: the preview's source may be a Svelte proxy),
       // so joining and packing levels never change the source.
-      blocks.push(block.kind === 'heading' ? { ...block } : { ...block, runs: block.runs.map((run) => ({ ...run })) });
+      blocks.push(block.kind === 'paragraph' ? { ...block, runs: block.runs.map((run) => ({ ...run })) } : { ...block });
     });
     lastPage = n;
   }
@@ -363,6 +390,8 @@ export function writeMarkdown(blocks: MarkdownBlock[], options: MarkdownOptions)
     }
     if (block.kind === 'heading') {
       out += `${'#'.repeat(Math.max(1, block.level))} ${escapeInline(block.text.trim())}`;
+    } else if (block.kind === 'table') {
+      out += writeTable(block.rows, options.formatting);
     } else {
       const text = writeRuns(block.runs, options.formatting);
       if (block.list === '-') out += `- ${text}`;
@@ -391,6 +420,13 @@ function writeRuns(runs: MarkdownRun[], formatting: boolean): string {
     .join('')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function writeTable(rows: MarkdownRun[][][], formatting: boolean): string {
+  const row = (cells: string[]) => `| ${cells.join(' | ')} |`;
+  const lines = rows.map((cells) => row(cells.map((runs) => writeRuns(runs, formatting).replace(/\|/g, '\\|'))));
+  lines.splice(1, 0, row(rows[0].map(() => '---')));
+  return lines.join('\n');
 }
 
 function escapeInline(text: string): string {

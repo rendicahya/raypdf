@@ -69,7 +69,7 @@
       q: 'Can I convert a PDF to Word or Markdown?',
       a: [
         'Yes. Open the arrow next to Save and choose Save as Word or Save as Markdown. Paragraphs, headings, bold, and italic are rebuilt from the page, along with anything you added, such as text and form answers.',
-        'Markdown opens a preview first, where you pick all pages or just some and keep or drop bold and italic, then save the file or copy it. Headers, footers, and page numbers are left out.',
+        'Markdown opens a preview first, where you pick all pages or just some and keep or drop bold and italic, then save the file or copy it. Headers, footers, and page numbers are left out. Simple tables become Markdown tables; a table with wrapped or merged cells comes out as lines of text.',
         'Scanned pages have no text to convert until you use Recognize text on them.',
       ],
     },
