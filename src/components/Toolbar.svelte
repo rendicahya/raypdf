@@ -7,26 +7,27 @@
   import { editorStore } from '../stores/editor';
   import { openSearch } from '../stores/search';
   import { isFileAccepted, dedupeFiles, formatFileSize, MAX_PDF_SIZE_BYTES } from '../lib/utils/fileValidation';
+  import { DOCUMENT_ACCEPT, toPdfFiles } from '../lib/pdf/importFiles';
 
-  const PDF_ACCEPT = 'application/pdf,.pdf';
   const findShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘F' : 'Ctrl+F';
 
   let addPdfsError: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  function onAddDocument(e: Event) {
+  async function onAddDocument(e: Event) {
     const input = e.target as HTMLInputElement;
-    const typeOk = Array.from(input.files ?? []).filter((f) => isFileAccepted(f, PDF_ACCEPT));
+    const typeOk = Array.from(input.files ?? []).filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
     input.value = '';
 
     const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
     const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
+    const { pdfs, messages } = await toPdfFiles(sized);
     const { unique, duplicates } = dedupeFiles(
-      sized,
+      pdfs,
       $editorStore.documents.map((d) => d.file),
     );
 
-    const messages: string[] = [];
+
     if (tooLarge.length > 0) {
       messages.push(`Skipped (over ${formatFileSize(MAX_PDF_SIZE_BYTES)}): ${tooLarge.map((f) => f.name).join(', ')}`);
     }
@@ -65,12 +66,12 @@
           hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800/60
           dark:hover:text-neutral-100"
         aria-label="Add document"
-        title="Add another PDF document"
+        title="Add another PDF or Markdown file"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
         </svg>
-        <input type="file" accept={PDF_ACCEPT} multiple class="hidden" onchange={onAddDocument} />
+        <input type="file" accept={DOCUMENT_ACCEPT} multiple class="hidden" onchange={onAddDocument} />
       </label>
     </div>
 

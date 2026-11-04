@@ -33,9 +33,8 @@
   import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf, isLockedPdf } from './lib/pdf/docCache';
+  import { DOCUMENT_ACCEPT, toPdfFiles } from './lib/pdf/importFiles';
   import UnlockPdf from './components/UnlockPdf.svelte';
-
-  const PDF_ACCEPT = 'application/pdf,.pdf';
 
   const sidebarShortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘B' : 'Ctrl+B';
 
@@ -84,24 +83,27 @@
     ),
   );
 
-  function onPdfFiles(files: File[]) {
-    const { unique } = dedupeFiles(files);
-    editorStore.loadPdfs(unique);
+  async function onPdfFiles(files: File[]) {
+    const { pdfs, messages } = await toPdfFiles(files);
+    addPdfsError = messages.length > 0 ? messages.join(' ') : null;
+    const { unique } = dedupeFiles(pdfs);
+    if (unique.length > 0) editorStore.loadPdfs(unique);
   }
 
-  function onAddMorePdfs(e: Event) {
+  async function onAddMorePdfs(e: Event) {
     const input = e.target as HTMLInputElement;
-    const typeOk = Array.from(input.files ?? []).filter((f) => isFileAccepted(f, PDF_ACCEPT));
+    const typeOk = Array.from(input.files ?? []).filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
     input.value = '';
 
     const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
     const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
+    const { pdfs, messages } = await toPdfFiles(sized);
     const { unique, duplicates } = dedupeFiles(
-      sized,
+      pdfs,
       editor.documents.map((d) => d.file),
     );
 
-    const messages: string[] = [];
+
     if (tooLarge.length > 0) {
       messages.push(`Skipped (over ${formatFileSize(MAX_PDF_SIZE_BYTES)}): ${tooLarge.map((f) => f.name).join(', ')}`);
     }
@@ -150,27 +152,28 @@
     if (pageDragDepth === 0) isPageDragging = false;
   }
 
-  function onPageDrop(e: DragEvent) {
+  async function onPageDrop(e: DragEvent) {
     if (!isFileDrag(e)) return;
     e.preventDefault();
     pageDragDepth = 0;
     isPageDragging = false;
 
     const dropped = Array.from(e.dataTransfer?.files ?? []);
-    const typeOk = dropped.filter((f) => isFileAccepted(f, PDF_ACCEPT));
+    const typeOk = dropped.filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
     if (typeOk.length === 0) {
-      addPdfsError = 'Please drop PDF files.';
+      addPdfsError = 'Please drop PDF or Markdown files.';
       return;
     }
 
     const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
     const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
+    const { pdfs, messages } = await toPdfFiles(sized);
     const { unique, duplicates } = dedupeFiles(
-      sized,
+      pdfs,
       editor.documents.map((d) => d.file),
     );
 
-    const messages: string[] = [];
+
     if (tooLarge.length > 0) {
       messages.push(`Skipped (over ${formatFileSize(MAX_PDF_SIZE_BYTES)}): ${tooLarge.map((f) => f.name).join(', ')}`);
     }
@@ -180,7 +183,7 @@
     addPdfsError = messages.length > 0 ? messages.join(' ') : null;
 
     if (unique.length === 0) return;
-    if (editor.documents.length === 0) onPdfFiles(unique);
+    if (editor.documents.length === 0) editorStore.loadPdfs(unique);
     else editorStore.addPdfs(unique);
   }
 
@@ -383,10 +386,10 @@
         <div class="w-full max-w-md">
           <UploadCard
             title="Add PDF"
-            subtitle="Drag & drop or click to browse. You can select multiple."
-            accept={PDF_ACCEPT}
+            subtitle="Drag & drop or click to browse. You can select multiple. Markdown files become PDFs."
+            accept={DOCUMENT_ACCEPT}
             multiple
-            errorMessage="Please choose PDF files."
+            errorMessage="Please choose PDF or Markdown files."
             maxSizeBytes={MAX_PDF_SIZE_BYTES}
             onFiles={onPdfFiles}
           />
@@ -433,7 +436,7 @@
               <div class="flex items-center gap-3 text-xs font-medium">
                 <label class="cursor-pointer text-blue-600 hover:underline dark:text-blue-400">
                   + Add more
-                  <input type="file" accept={PDF_ACCEPT} multiple class="hidden" onchange={onAddMorePdfs} />
+                  <input type="file" accept={DOCUMENT_ACCEPT} multiple class="hidden" onchange={onAddMorePdfs} />
                 </label>
                 <button
                   type="button"

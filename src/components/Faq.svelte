@@ -74,6 +74,13 @@
       ],
     },
     {
+      q: 'Can I turn a Markdown file into a PDF?',
+      a: [
+        'Yes. Add a .md file the same way you add a PDF, and it opens as a PDF, with its headings, lists, tables, code, and links. Like everything else, the conversion happens in your browser.',
+        'Pictures are written as their description, and are not downloaded. Characters outside Western alphabets, such as Chinese or emoji, show as "?", and RayPDF tells you when that happens.',
+      ],
+    },
+    {
       q: 'How much smaller does "Save compressed" make a file?',
       a: [
         'It depends on what is inside. Scanned pages and photos usually shrink a lot, because images are scaled down and re-encoded. A PDF that is mostly text is often already compact and changes little. Text stays sharp and selectable either way.',

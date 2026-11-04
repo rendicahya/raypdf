@@ -1,6 +1,6 @@
 # RayPDF
 
-A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, add text, images, and shapes, mark up and comment, redact, watermark, number pages, crop, reorder and rotate pages, recognize text in scans, convert to Word or Markdown, compress, password-protect, and verify PDFs exported with RayPDF. Add a PDF, then choose **Open in editor** or **Verify**.
+A privacy-first PDF editor that runs entirely in your browser: sign with protected handwritten signatures, fill forms, add text, images, and shapes, mark up and comment, redact, watermark, number pages, crop, reorder and rotate pages, recognize text in scans, convert to Word or Markdown, turn Markdown files into PDFs, compress, password-protect, and verify PDFs exported with RayPDF. Add a PDF, then choose **Open in editor** or **Verify**.
 
 RayPDF was previously called Signy.
 
@@ -84,6 +84,12 @@ It is **not** a replacement for PKI-based digital signatures.
 - 9-position picker, color, size, and opacity. Scroll the mouse wheel over the size and opacity sliders to adjust them.
 - Live preview on the signature in both the sidebar and the page.
 - Flattened into the signature image at export. Preferences persist across sessions.
+
+### Import from Markdown
+
+- Add a `.md` or `.markdown` file anywhere you can add a PDF. It's converted to an A4 PDF in the browser and opens as a normal document, ready to sign, mark up, or save.
+- Headings, bold, italic, strikethrough, inline code, code blocks, lists, task lists, quotes, tables, horizontal rules, and web and email links are kept. Front matter is left out.
+- Pictures aren't loaded, so the file can't contact any server: each one is written as its description. Characters outside Western alphabets, such as Chinese or emoji, show as "?", with a warning that says how many.
 
 ### Export
 
