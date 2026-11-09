@@ -4,6 +4,7 @@
   import StartOverButton from './StartOverButton.svelte';
   import DocumentTabs from './DocumentTabs.svelte';
   import ExportButton from './ExportButton.svelte';
+  import DriveButton from './DriveButton.svelte';
   import { editorStore } from '../stores/editor';
   import { openSearch } from '../stores/search';
   import { isFileAccepted, dedupeFiles, formatFileSize, MAX_PDF_SIZE_BYTES } from '../lib/utils/fileValidation';
@@ -14,11 +15,21 @@
   let addPdfsError: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout> | undefined;
 
+  function showError(message: string | null) {
+    clearTimeout(errorTimeout);
+    addPdfsError = message;
+    if (message) errorTimeout = setTimeout(() => (addPdfsError = null), 4000);
+  }
+
   async function onAddDocument(e: Event) {
     const input = e.target as HTMLInputElement;
-    const typeOk = Array.from(input.files ?? []).filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
+    const files = Array.from(input.files ?? []);
     input.value = '';
+    await addFiles(files);
+  }
 
+  async function addFiles(files: File[]) {
+    const typeOk = files.filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
     const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
     const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
     const { pdfs, messages } = await toPdfFiles(sized);
@@ -34,13 +45,7 @@
     if (duplicates.length > 0) {
       messages.push(`Already added: ${duplicates.map((f) => f.name).join(', ')}`);
     }
-    clearTimeout(errorTimeout);
-    if (messages.length > 0) {
-      addPdfsError = messages.join(' ');
-      errorTimeout = setTimeout(() => (addPdfsError = null), 4000);
-    } else {
-      addPdfsError = null;
-    }
+    showError(messages.length > 0 ? messages.join(' ') : null);
 
     if (unique.length > 0) editorStore.addPdfs(unique);
   }
@@ -73,6 +78,7 @@
         </svg>
         <input type="file" accept={DOCUMENT_ACCEPT} multiple class="hidden" onchange={onAddDocument} />
       </label>
+      <DriveButton variant="icon" onFiles={addFiles} onError={showError} />
     </div>
 
     <div class="ml-auto flex shrink-0 items-center gap-1 pb-2">

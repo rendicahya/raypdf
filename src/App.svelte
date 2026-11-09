@@ -34,6 +34,7 @@
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf, isLockedPdf } from './lib/pdf/docCache';
   import { DOCUMENT_ACCEPT, toPdfFiles } from './lib/pdf/importFiles';
+  import DriveButton from './components/DriveButton.svelte';
   import UnlockPdf from './components/UnlockPdf.svelte';
 
   const sidebarShortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘B' : 'Ctrl+B';
@@ -92,9 +93,14 @@
 
   async function onAddMorePdfs(e: Event) {
     const input = e.target as HTMLInputElement;
-    const typeOk = Array.from(input.files ?? []).filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
+    const files = Array.from(input.files ?? []);
     input.value = '';
+    await addFiles(files);
+  }
 
+  /** Adds files from the picker, a drop, or Google Drive: opens them if nothing is open yet. */
+  async function addFiles(files: File[]) {
+    const typeOk = files.filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
     const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
     const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
     const { pdfs, messages } = await toPdfFiles(sized);
@@ -102,7 +108,6 @@
       pdfs,
       editor.documents.map((d) => d.file),
     );
-
 
     if (tooLarge.length > 0) {
       messages.push(`Skipped (over ${formatFileSize(MAX_PDF_SIZE_BYTES)}): ${tooLarge.map((f) => f.name).join(', ')}`);
@@ -112,7 +117,9 @@
     }
     addPdfsError = messages.length > 0 ? messages.join(' ') : null;
 
-    if (unique.length > 0) editorStore.addPdfs(unique);
+    if (unique.length === 0) return;
+    if (editor.documents.length === 0) editorStore.loadPdfs(unique);
+    else editorStore.addPdfs(unique);
   }
 
   function removeDocument(id: string) {
@@ -164,27 +171,7 @@
       addPdfsError = 'Please drop PDF or Markdown files.';
       return;
     }
-
-    const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
-    const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
-    const { pdfs, messages } = await toPdfFiles(sized);
-    const { unique, duplicates } = dedupeFiles(
-      pdfs,
-      editor.documents.map((d) => d.file),
-    );
-
-
-    if (tooLarge.length > 0) {
-      messages.push(`Skipped (over ${formatFileSize(MAX_PDF_SIZE_BYTES)}): ${tooLarge.map((f) => f.name).join(', ')}`);
-    }
-    if (duplicates.length > 0) {
-      messages.push(`Already added: ${duplicates.map((f) => f.name).join(', ')}`);
-    }
-    addPdfsError = messages.length > 0 ? messages.join(' ') : null;
-
-    if (unique.length === 0) return;
-    if (editor.documents.length === 0) editorStore.loadPdfs(unique);
-    else editorStore.addPdfs(unique);
+    await addFiles(typeOk);
   }
 
   // Reflect the chosen theme on <html> so Tailwind's `dark:` variants apply.
@@ -393,6 +380,9 @@
             maxSizeBytes={MAX_PDF_SIZE_BYTES}
             onFiles={onPdfFiles}
           />
+          <div class="mt-3">
+            <DriveButton variant="button" onFiles={addFiles} />
+          </div>
         </div>
         <div class="mt-4 w-full">
           <FeatureGrid />
@@ -438,6 +428,7 @@
                   + Add more
                   <input type="file" accept={DOCUMENT_ACCEPT} multiple class="hidden" onchange={onAddMorePdfs} />
                 </label>
+                <DriveButton variant="link" onFiles={addFiles} onError={(m) => (addPdfsError = m)} />
                 <button
                   type="button"
                   class="text-neutral-400 hover:text-red-500 hover:underline"
