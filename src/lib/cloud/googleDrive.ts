@@ -19,8 +19,14 @@ const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const MIME_TYPES = 'application/pdf,text/markdown,text/x-markdown';
 const ACCEPTED_NAME = /\.(pdf|md|markdown)$/i;
 
+/**
+ * Turned off until Google's picker accepts the API key ("The API developer
+ * key is invalid"). Set to true to show the Drive buttons again.
+ */
+const DRIVE_ENABLED = false;
+
 /** Whether this build has Google credentials; the Drive buttons are hidden otherwise. */
-export const isDriveConfigured = !!(CLIENT_ID && API_KEY && APP_ID);
+export const isDriveConfigured = DRIVE_ENABLED && !!(CLIENT_ID && API_KEY && APP_ID);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const gapi: any;
