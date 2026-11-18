@@ -214,9 +214,8 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       const y = cy - (width / 2) * Math.sin(t) - (height / 2) * Math.cos(t);
 
       const targetPage = pdfDoc.getPage(placement.page - 1); // pdf-lib pages are 0-indexed
-      recorder?.begin(targetPage);
+      // Always flat: a signature is never kept editable after saving.
       targetPage.drawImage(pngImage, { x, y, width, height, rotate: degrees(turn) });
-      recorder?.end(targetPage, 'signature', placement);
     }
   }
 

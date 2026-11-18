@@ -739,7 +739,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
               focus:ring-blue-500 dark:border-neutral-600"
             bind:checked={$keepItemsEditable}
           />
-          <span>Keep signatures, text, shapes, and images editable when reopened in RayPDF</span>
+          <span>Keep text, shapes, and images editable when reopened in RayPDF (signatures are always flattened)</span>
         </label>
 
         <label class="flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">

@@ -18,8 +18,8 @@ import type { ItemKind, PlacedImage, PlacedShape, PlacedSignature, PlacedText } 
 import type { StoredImage } from '../../stores/images';
 
 /**
- * Keeps placed items (signatures, text boxes, shapes, images) editable when
- * the saved PDF is opened in RayPDF again.
+ * Keeps placed items (text boxes, shapes, images) editable when the saved
+ * PDF is opened in RayPDF again.
  *
  * Every item is still drawn into the page as ordinary content, so any reader
  * shows the file exactly as before. Each one just goes into a content stream
@@ -28,10 +28,9 @@ import type { StoredImage } from '../../stores/images';
  * the picture). On opening, RayPDF takes those streams back out of the page
  * and puts the items back in the editor, as if they'd never been saved.
  *
- * A signature comes back only if the same saved signature is in this
- * browser: the record holds the signature's id, never the clean image, so
- * anyone else opening the file just sees the watermarked signature drawn on
- * the page, as before.
+ * Signatures are never kept editable: they're always flattened into the
+ * page. Records of signatures from earlier saves are dropped on opening,
+ * leaving the signature drawn on the page.
  */
 
 /** Per-page array of item records. */
@@ -43,7 +42,6 @@ const VERSION = 1;
 type Unplaced<T> = Omit<T, 'id' | 'page'>;
 
 export type RestoredItem =
-  | { kind: 'signature'; page: number; item: Unplaced<PlacedSignature> }
   | { kind: 'text'; page: number; item: Unplaced<PlacedText> }
   | { kind: 'shape'; page: number; item: Unplaced<PlacedShape> }
   | { kind: 'image'; page: number; item: Omit<Unplaced<PlacedImage>, 'imageId'>; image: Omit<StoredImage, 'url'> };
@@ -238,14 +236,11 @@ async function readImage(pdfDoc: PDFDocument, ref: PDFRef): Promise<Omit<StoredI
  * Takes the items saved by RayPDF back out of a PDF. Returns the file with
  * those items removed from the pages, and the items (in canvas pixels at
  * scale 1, as the page is shown with its own rotation), or null if there was
- * nothing to bring back. Items that can't come back (a signature not saved
- * in this browser, a picture that can't be read) stay drawn on the page, and
- * their records stay too, for a later try.
+ * nothing to bring back. Items that can't come back (a picture that can't be
+ * read) stay drawn on the page, and their records stay too, for a later try.
+ * Signatures stay drawn and lose their records.
  */
-export async function restoreEditableItems(
-  file: File,
-  hasSignature: (signatureId: string) => boolean,
-): Promise<{ file: File; items: RestoredItem[] } | null> {
+export async function restoreEditableItems(file: File): Promise<{ file: File; items: RestoredItem[] } | null> {
   const pdfDoc = await loadEditablePdf(await file.arrayBuffer());
   const { context } = pdfDoc;
   const items: RestoredItem[] = [];
@@ -263,7 +258,9 @@ export async function restoreEditableItems(
     for (const entry of records.asArray()) {
       const record = context.lookup(entry);
       if (!(record instanceof PDFDict)) continue;
-      const restored = await restoreRecord(pdfDoc, record, contents, index + 1, hasSignature).catch(() => null);
+      const kind = record.lookup(PDFName.of('Kind'));
+      if (kind instanceof PDFName && kind.decodeText() === 'signature') continue;
+      const restored = await restoreRecord(pdfDoc, record, contents, index + 1).catch(() => null);
       if (!restored) {
         kept.push(entry);
         continue;
@@ -347,7 +344,6 @@ async function restoreRecord(
   record: PDFDict,
   contents: PDFArray,
   page: number,
-  hasSignature: (signatureId: string) => boolean,
 ): Promise<RestoredItem | null> {
   const version = record.lookup(PDFName.of('V'));
   if (!(version instanceof PDFNumber) || version.asNumber() !== VERSION) return null;
@@ -365,10 +361,6 @@ async function restoreRecord(
 
   let restored: RestoredItem;
   switch (kind.decodeText()) {
-    case 'signature':
-      if (typeof data.signatureId !== 'string' || !hasSignature(data.signatureId)) return null;
-      restored = { kind: 'signature', page, item: data as unknown as Unplaced<PlacedSignature> };
-      break;
     case 'text':
       if (typeof data.text !== 'string') return null;
       restored = { kind: 'text', page, item: data as unknown as Unplaced<PlacedText> };

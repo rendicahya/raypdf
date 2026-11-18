@@ -1,7 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import { getCachedPdf } from '../lib/pdf/docCache';
 import { hasEditableItemsMarker, restoreEditableItems, scaleItem } from '../lib/pdf/editableItems';
-import { signatureStore } from './signature';
 import { addStoredImage } from './images';
 import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
 import {
@@ -590,22 +589,6 @@ function createEditorStore() {
       });
   }
 
-  /** The ids of the signatures saved in this browser, once they've loaded. */
-  function savedSignatureIds(): Promise<Set<string>> {
-    return new Promise((resolve) => {
-      let done = false;
-      let unsubscribe: (() => void) | undefined;
-      unsubscribe = signatureStore.subscribe((s) => {
-        if (s.loading || done) return;
-        done = true;
-        resolve(new Set(s.signatures.map((sig) => sig.id)));
-        unsubscribe?.();
-      });
-      // Already loaded: the callback ran before `unsubscribe` was set.
-      if (done) unsubscribe();
-    });
-  }
-
   /**
    * Brings back the items an earlier RayPDF save kept editable (see
    * lib/pdf/editableItems.ts): the file loses their drawings and the
@@ -620,8 +603,7 @@ function createEditorStore() {
       const pdfjsDoc = await getCachedPdf(id, file);
       const { info } = await pdfjsDoc.getMetadata();
       if (!hasEditableItemsMarker(info)) return;
-      const signatureIds = await savedSignatureIds();
-      const restored = await restoreEditableItems(file, (signatureId) => signatureIds.has(signatureId));
+      const restored = await restoreEditableItems(file);
       if (!restored) return;
 
       let applied = false;
@@ -634,8 +616,7 @@ function createEditorStore() {
         const placed = { ...current };
         for (const r of restored.items) {
           const base = { id: crypto.randomUUID(), page: r.page };
-          if (r.kind === 'signature') placed.placedSignatures = [...placed.placedSignatures, { ...scaleItem('signature', r.item, scale), ...base }];
-          else if (r.kind === 'text') placed.texts = [...placed.texts, { ...scaleItem('text', r.item, scale), ...base }];
+          if (r.kind === 'text') placed.texts = [...placed.texts, { ...scaleItem('text', r.item, scale), ...base }];
           else if (r.kind === 'shape') placed.shapes = [...placed.shapes, { ...scaleItem('shape', r.item, scale), ...base }];
           else placed.images = [...placed.images, { ...scaleItem('image', r.item, scale), imageId: addStoredImage(r.image), ...base }];
         }
