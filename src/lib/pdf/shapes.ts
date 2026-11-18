@@ -9,19 +9,76 @@ type Point = [number, number];
 
 /**
  * Where a line or arrow is drawn, in the same units as the shape's box:
- * corner to corner, plus the two strokes of the arrowhead at the end. Shared
+ * corner to corner, with the arrowhead at the end. `strokes` are segments
+ * drawn with the line's width and round caps; `fills` are outlines filled in
+ * the line's color, all in one path (nonzero, so where they overlap is filled
+ * once and a see-through arrow shows no darker seam). A filled head makes the
+ * whole arrow filled: the shaft becomes an outline with a round start. Shared
  * by the editor (SVG), screenshots (canvas), and export (PDF), so all three
  * match.
  */
-export function lineGeometry(s: Pick<PlacedShape, 'x' | 'y' | 'width' | 'height' | 'flipX' | 'flipY' | 'kind' | 'strokeWidth'>) {
+export function lineGeometry(
+  s: Pick<PlacedShape, 'x' | 'y' | 'width' | 'height' | 'flipX' | 'flipY' | 'kind' | 'strokeWidth' | 'arrowHead'>,
+): { start: Point; end: Point; strokes: Point[][]; fills: Point[][] } {
   const start: Point = [s.flipX ? s.x + s.width : s.x, s.flipY ? s.y + s.height : s.y];
   const end: Point = [s.flipX ? s.x : s.x + s.width, s.flipY ? s.y : s.y + s.height];
-  if (s.kind !== 'arrow') return { start, end, head: [] as Point[][] };
-  const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
-  const length = Math.max(10, s.strokeWidth * 4);
-  const wing = (a: number): Point => [end[0] - length * Math.cos(angle + a), end[1] - length * Math.sin(angle + a)];
+  if (s.kind !== 'arrow') return { start, end, strokes: [[start, end]], fills: [] };
+
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const span = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
   const spread = (28 * Math.PI) / 180;
-  return { start, end, head: [[wing(spread), end], [wing(-spread), end]] };
+  const head = s.arrowHead ?? 'open';
+
+  if (head === 'open') {
+    const length = Math.max(10, s.strokeWidth * 4);
+    const wing = (a: number): Point => [end[0] - length * Math.cos(angle + a), end[1] - length * Math.sin(angle + a)];
+    return { start, end, strokes: [[start, end], [wing(spread), end], [wing(-spread), end]], fills: [] };
+  }
+
+  // Along the arrow (u) and across it (n).
+  const u: Point = span > 0 ? [dx / span, dy / span] : [1, 0];
+  const n: Point = [-u[1], u[0]];
+  const at = (from: Point, along: number, across = 0): Point => [
+    from[0] + u[0] * along + n[0] * across,
+    from[1] + u[1] * along + n[1] * across,
+  ];
+  // A filled head is a little longer than an open one, but never longer than the arrow.
+  const length = Math.min(Math.max(12, s.strokeWidth * 4.5), Math.max(span, 1));
+  const half = length * Math.tan(spread);
+  const back = head === 'notched' ? length * 0.65 : length;
+  const tip: Point[] =
+    head === 'notched'
+      ? [end, at(end, -length, -half), at(end, -back), at(end, -length, half)]
+      : [end, at(end, -length, -half), at(end, -length, half)];
+
+  // The shaft runs from a round start into the head (past its back, so they join without a gap).
+  const r = s.strokeWidth / 2;
+  const shaftEnd = Math.max(0, span - back + Math.min(back, length) * 0.4);
+  const shaft: Point[] = [at(start, 0, r), at(start, shaftEnd, r), at(start, shaftEnd, -r), at(start, 0, -r)];
+  const steps = 12;
+  for (let k = 1; k < steps; k++) {
+    const phi = (Math.PI * k) / steps;
+    shaft.push(at(start, -r * Math.sin(phi), -r * Math.cos(phi)));
+  }
+  return { start, end, strokes: [], fills: [clockwise(shaft), clockwise(tip)] };
+}
+
+/** The same outline, wound one way, so outlines filled together (nonzero) make their union. */
+function clockwise(points: Point[]): Point[] {
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    const [x2, y2] = points[(i + 1) % points.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return area < 0 ? [...points].reverse() : points;
+}
+
+/** Outlines as an SVG path, each point passed through `pt` (which returns "x,y"). */
+export function outlinePath(fills: Point[][], pt: (p: Point) => string = (p) => `${p[0]},${p[1]}`): string {
+  return fills.map((poly) => `M${poly.map(pt).join(' L')} Z`).join(' ');
 }
 
 /**
@@ -86,8 +143,16 @@ async function drawShape(
 
   if (s.kind === 'line' || s.kind === 'arrow') {
     if (thickness <= 0) return;
-    const { start, end, head } = lineGeometry(s);
-    for (const [a, b] of [[start, end], ...head]) {
+    const { strokes, fills } = lineGeometry(s);
+    if (fills.length) {
+      // drawSvgPath flips y, hence the minus.
+      const d = outlinePath(fills, (p) => {
+        const [px, py] = toPdf(...p);
+        return `${px},${-py}`;
+      });
+      page.drawSvgPath(d, { x: 0, y: 0, color: stroke, opacity: s.opacity });
+    }
+    for (const [a, b] of strokes) {
       const [x1, y1] = toPdf(...a);
       const [x2, y2] = toPdf(...b);
       page.drawLine({

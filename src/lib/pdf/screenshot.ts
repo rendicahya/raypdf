@@ -286,12 +286,22 @@ function drawShape(ctx: CanvasRenderingContext2D, s: PlacedShape): void {
   }
   ctx.beginPath();
   if (s.kind === 'line' || s.kind === 'arrow') {
-    const { start, end, head } = lineGeometry(s);
-    for (const [a, b] of [[start, end], ...head]) {
+    const { strokes, fills } = lineGeometry(s);
+    for (const [a, b] of strokes) {
       ctx.moveTo(...a);
       ctx.lineTo(...b);
     }
-    if (s.strokeWidth > 0) ctx.stroke();
+    if (strokes.length && s.strokeWidth > 0) ctx.stroke();
+    if (fills.length) {
+      // One path, filled once (nonzero), so the shaft and head show no seam.
+      ctx.beginPath();
+      for (const poly of fills) {
+        poly.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p)));
+        ctx.closePath();
+      }
+      ctx.fillStyle = s.stroke;
+      ctx.fill();
+    }
   } else {
     const box = insetBox(s);
     if (s.kind === 'rectangle') ctx.rect(box.x, box.y, box.width, box.height);

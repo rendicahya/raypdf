@@ -128,6 +128,9 @@ export interface PlacedHighlight {
 
 export type ShapeKind = 'rectangle' | 'ellipse' | 'line' | 'arrow';
 
+/** An arrow's tip: two open strokes, a filled triangle, or a filled triangle notched at the back. */
+export type ArrowHead = 'open' | 'triangle' | 'notched';
+
 /** A drawn shape, in canvas pixel coordinates. Lines and arrows run corner to corner across the box. */
 export interface PlacedShape {
   id: string;
@@ -149,6 +152,8 @@ export interface PlacedShape {
   /** Where a line starts: the right (flipX) or bottom (flipY) edge instead of the left or top. Arrows point to the other end. */
   flipX: boolean;
   flipY: boolean;
+  /** An arrow's tip. Unset means 'open'. */
+  arrowHead?: ArrowHead;
   /** Degrees clockwise as shown, about the box's centre (the box itself is unturned). Unset for upright. */
   angle?: number;
 }

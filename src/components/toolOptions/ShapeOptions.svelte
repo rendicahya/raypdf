@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { editorStore, activeDocument, type PlacedShape, type ShapeKind } from '../../stores/editor';
+  import { editorStore, activeDocument, type ArrowHead, type PlacedShape, type ShapeKind } from '../../stores/editor';
   import {
     selectedShapeId,
     shapeKind,
@@ -7,6 +7,7 @@
     shapeStrokeWidth,
     shapeFill,
     shapeOpacity,
+    shapeArrowHead,
   } from '../../stores/shapeTool';
   import { wheelRange } from '../../lib/utils/wheelRange';
   import { tooltip } from '../../lib/utils/tooltip';
@@ -33,8 +34,16 @@
           strokeWidth: Math.round((selected.strokeWidth / scale) * 2) / 2,
           fill: selected.fill,
           opacity: selected.opacity,
+          arrowHead: selected.arrowHead ?? 'open',
         }
-      : { kind: $shapeKind, stroke: $shapeStroke, strokeWidth: $shapeStrokeWidth, fill: $shapeFill, opacity: $shapeOpacity },
+      : {
+          kind: $shapeKind,
+          stroke: $shapeStroke,
+          strokeWidth: $shapeStrokeWidth,
+          fill: $shapeFill,
+          opacity: $shapeOpacity,
+          arrowHead: $shapeArrowHead,
+        },
   );
   const isLine = $derived(style.kind === 'line' || style.kind === 'arrow');
 
@@ -46,9 +55,14 @@
     if (partial.strokeWidth !== undefined) $shapeStrokeWidth = partial.strokeWidth;
     if (partial.fill !== undefined) $shapeFill = partial.fill;
     if (partial.opacity !== undefined) $shapeOpacity = partial.opacity;
+    if (partial.arrowHead !== undefined) $shapeArrowHead = partial.arrowHead;
     if (!selected) return;
     const { strokeWidth, ...rest } = partial;
     const change: Partial<PlacedShape> = { ...rest };
+    // Turning a shape into an arrow gives it the tip last chosen.
+    if (partial.kind === 'arrow' && partial.arrowHead === undefined && !selected.arrowHead) {
+      change.arrowHead = $shapeArrowHead;
+    }
     if (strokeWidth !== undefined) change.strokeWidth = strokeWidth * scale;
     // A line needs some thickness to be seen at all.
     const nextKind = partial.kind ?? selected.kind;
@@ -63,6 +77,13 @@
     { value: 'ellipse', label: 'Ellipse', icon: 'M12 6c4.4 0 8 2.7 8 6s-3.6 6-8 6-8-2.7-8-6 3.6-6 8-6z' },
     { value: 'line', label: 'Line', icon: 'M5 19L19 5' },
     { value: 'arrow', label: 'Arrow', icon: 'M5 19L19 5M10 5h9v9' },
+  ];
+
+  // Drawn pointing right, as each style looks.
+  const HEADS: { value: ArrowHead; label: string; icon: string; filled: boolean }[] = [
+    { value: 'open', label: 'Open tip', icon: 'M4 12h15M13 6l6 6-6 6', filled: false },
+    { value: 'triangle', label: 'Filled tip', icon: 'M4 12h10M13 6l7 6-7 6z', filled: true },
+    { value: 'notched', label: 'Notched tip', icon: 'M4 12h12M12 6l8 6-8 6 2.5-6z', filled: true },
   ];
 
   const valueOf = (e: Event) => Number((e.target as HTMLInputElement).value);
@@ -99,6 +120,37 @@
         {/each}
       </div>
     </div>
+
+    {#if style.kind === 'arrow'}
+      <div class="flex items-center justify-between gap-2">
+        <span>Tip</span>
+        <div class="flex gap-1">
+          {#each HEADS as head (head.value)}
+            <button
+              type="button"
+              aria-label={head.label}
+              aria-pressed={style.arrowHead === head.value}
+              use:tooltip={head.label}
+              class="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors {style.arrowHead ===
+              head.value
+                ? 'border-fuchsia-600 bg-fuchsia-600 text-white'
+                : 'border-neutral-200 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800'}"
+              onclick={() => set({ arrowHead: head.value })}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill={head.filled ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                stroke-width="2"
+                class="h-4 w-4"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d={head.icon} />
+              </svg>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <label class="flex items-center justify-between gap-2">
       <span>{isLine ? 'Color' : 'Outline'}</span>

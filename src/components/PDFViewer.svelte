@@ -59,6 +59,7 @@
     shapeStrokeWidth,
     shapeFill,
     shapeOpacity,
+    shapeArrowHead,
   } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
   import CropOverlay from './CropOverlay.svelte';
@@ -793,6 +794,7 @@
       strokeWidth: (isLineKind(kind) ? Math.max(1, $shapeStrokeWidth) : $shapeStrokeWidth) * scale,
       fill: isLineKind(kind) ? null : $shapeFill,
       opacity: $shapeOpacity,
+      ...(kind === 'arrow' ? { arrowHead: $shapeArrowHead } : {}),
     });
   }
 
@@ -2154,14 +2156,19 @@
     if (shape) {
       $selectedShapeId = shape.id;
       return [
-        {
-          label: `Edit ${SHAPE_LABELS[shape.kind].toLowerCase()}`,
-          icon: MENU_ICONS.edit,
-          onSelect: () => {
-            $selectedShapeId = shape.id;
-            openShapeTool();
-          },
-        },
+        // A line or arrow is edited in place by its ends (double-click still opens its style).
+        ...(isLineKind(shape.kind)
+          ? []
+          : [
+              {
+                label: `Edit ${SHAPE_LABELS[shape.kind].toLowerCase()}`,
+                icon: MENU_ICONS.edit,
+                onSelect: () => {
+                  $selectedShapeId = shape.id;
+                  openShapeTool();
+                },
+              },
+            ]),
         duplicate({ kind: 'shape', id: shape.id }),
         {
           ...deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
@@ -2781,6 +2788,7 @@
           strokeWidth: (isLineKind(kind) ? Math.max(1, $shapeStrokeWidth) : $shapeStrokeWidth) * $editorStore.renderScale,
           fill: isLineKind(kind) ? null : $shapeFill,
           opacity: $shapeOpacity,
+          arrowHead: $shapeArrowHead,
         }}
       />
     </div>

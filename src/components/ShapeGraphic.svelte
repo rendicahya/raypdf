@@ -1,13 +1,13 @@
 <script lang="ts">
   import type { PlacedShape } from '../stores/editor';
-  import { insetBox, lineGeometry } from '../lib/pdf/shapes';
+  import { insetBox, lineGeometry, outlinePath } from '../lib/pdf/shapes';
 
   // A shape drawn with SVG, filling its box: the same geometry that
   // screenshots and export use (lib/pdf/shapes.ts).
 
   type ShapeStyle = Pick<
     PlacedShape,
-    'kind' | 'width' | 'height' | 'stroke' | 'strokeWidth' | 'fill' | 'opacity' | 'flipX' | 'flipY'
+    'kind' | 'width' | 'height' | 'stroke' | 'strokeWidth' | 'fill' | 'opacity' | 'flipX' | 'flipY' | 'arrowHead'
   >;
 
   let { shape }: { shape: ShapeStyle } = $props();
@@ -33,10 +33,13 @@
   <g transform="translate({margin} {margin})">
   {#if line}
     <g fill="none" stroke={shape.stroke} stroke-width={shape.strokeWidth} stroke-linecap="round">
-      {#each [[line.start, line.end], ...line.head] as [a, b]}
+      {#each line.strokes as [a, b]}
         <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} />
       {/each}
     </g>
+    {#if line.fills.length}
+      <path d={outlinePath(line.fills)} fill={shape.stroke} />
+    {/if}
   {:else if shape.kind === 'rectangle'}
     <rect
       x={inset.x}
