@@ -2774,8 +2774,9 @@
 
   {#if drawingShape}
     {@const kind = $shapeKind}
+    <!-- A dashed frame while dragging, so the shape shows even with no outline (or no fill). -->
     <div
-      class="pointer-events-none absolute"
+      class="pointer-events-none absolute {isLineKind(kind) ? '' : 'outline-dashed outline-1 outline-blue-500/80'}"
       style:left="{drawingShape.x}px"
       style:top="{drawingShape.y}px"
       style:width="{drawingShape.width}px"
