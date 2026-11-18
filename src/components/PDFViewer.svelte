@@ -740,8 +740,8 @@
   };
 
   // Shapes tool: drag on the page to draw the chosen shape (Shift keeps a
-  // square, a circle, or a line at 45° steps); a plain click drops one of a
-  // default size. The tool stays on, so several can be drawn in a row.
+  // square, a circle, or a line at 45° steps); a plain click draws nothing.
+  // The tool stays on, so several can be drawn in a row.
   const SHAPE_DRAW_MIN = 6;
   let drawingShape: { x: number; y: number; width: number; height: number; flipX: boolean; flipY: boolean } | null =
     $state(null);
@@ -783,23 +783,10 @@
   function finishShape(box: NonNullable<typeof drawingShape>) {
     const kind = $shapeKind;
     const scale = $editorStore.renderScale;
-    let geometry = box;
-    // A click rather than a drag: a shape of a default size, centred there.
-    if (Math.max(box.width, box.height) < SHAPE_DRAW_MIN) {
-      const rect = canvasEl.getBoundingClientRect();
-      const width = Math.min(80 * scale, rect.width);
-      const height = isLineKind(kind) ? 0 : Math.min(54 * scale, rect.height);
-      geometry = {
-        x: clamp(box.x - width / 2, 0, rect.width - width),
-        y: clamp(box.y - height / 2, 0, rect.height - height),
-        width,
-        height,
-        flipX: false,
-        flipY: false,
-      };
-    }
+    // A click (or a tiny drag) draws nothing: a shape needs dragging out.
+    if (Math.max(box.width, box.height) < SHAPE_DRAW_MIN) return;
     $selectedShapeId = editorStore.addShape({
-      ...geometry,
+      ...box,
       page: pageNumber,
       kind,
       stroke: $shapeStroke,
