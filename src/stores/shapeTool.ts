@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { persistedWritable } from '../lib/utils/persist';
-import type { ArrowHead, ShapeKind } from './editor';
+import type { ArrowHead, LineStyle, ShapeKind } from './editor';
 
 /** The Shapes tool: drag on the page to draw the chosen shape. */
 export const shapeToolMode = writable<boolean>(false);
@@ -15,3 +15,4 @@ export const shapeStrokeWidth = persistedWritable<number>('shapeStrokeWidth', 2)
 export const shapeFill = persistedWritable<string | null>('shapeFill', null);
 export const shapeOpacity = persistedWritable<number>('shapeOpacity', 1);
 export const shapeArrowHead = persistedWritable<ArrowHead>('shapeArrowHead', 'open');
+export const shapeLineStyle = persistedWritable<LineStyle>('shapeLineStyle', 'solid');

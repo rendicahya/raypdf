@@ -2,7 +2,7 @@ import { renderPageToCanvas, type PdfDocument } from './loader';
 import type { FormWidgetKind } from './forms';
 import type { MarkupPaint } from './highlight';
 import type { PlacedShape, PlacedText } from '../../stores/editor';
-import { insetBox, lineGeometry } from './shapes';
+import { dashPattern, insetBox, lineGeometry } from './shapes';
 import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
 import { pageNumberAnchor, type PageLabel } from './pageNumbers';
 import { drawWatermarkOnCanvas, type PageWatermarkSettings } from './pageWatermark';
@@ -284,14 +284,24 @@ function drawShape(ctx: CanvasRenderingContext2D, s: PlacedShape): void {
     ctx.rotate((s.angle * Math.PI) / 180);
     ctx.translate(-(s.x + s.width / 2), -(s.y + s.height / 2));
   }
+  const dashes = dashPattern(s.lineStyle, s.strokeWidth);
   ctx.beginPath();
   if (s.kind === 'line' || s.kind === 'arrow') {
     const { strokes, fills } = lineGeometry(s);
-    for (const [a, b] of strokes) {
+    strokes.forEach(([a, b], i) => {
+      // Only the line itself is patterned: it's stroked on its own, then the wings.
+      if (dashes && i === 1) {
+        ctx.setLineDash(dashes);
+        if (s.strokeWidth > 0) ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+      }
       ctx.moveTo(...a);
       ctx.lineTo(...b);
-    }
+    });
+    if (dashes && strokes.length === 1) ctx.setLineDash(dashes);
     if (strokes.length && s.strokeWidth > 0) ctx.stroke();
+    ctx.setLineDash([]);
     if (fills.length) {
       // One path, filled once (nonzero), so the shaft and head show no seam.
       ctx.beginPath();
@@ -310,6 +320,7 @@ function drawShape(ctx: CanvasRenderingContext2D, s: PlacedShape): void {
       ctx.fillStyle = s.fill;
       ctx.fill();
     }
+    if (dashes) ctx.setLineDash(dashes);
     if (s.strokeWidth > 0) ctx.stroke();
   }
   ctx.restore();

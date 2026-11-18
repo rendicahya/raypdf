@@ -60,6 +60,7 @@
     shapeFill,
     shapeOpacity,
     shapeArrowHead,
+    shapeLineStyle,
   } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
   import CropOverlay from './CropOverlay.svelte';
@@ -795,6 +796,7 @@
       fill: isLineKind(kind) ? null : $shapeFill,
       opacity: $shapeOpacity,
       ...(kind === 'arrow' ? { arrowHead: $shapeArrowHead } : {}),
+      ...($shapeLineStyle !== 'solid' ? { lineStyle: $shapeLineStyle } : {}),
     });
   }
 
@@ -2789,6 +2791,7 @@
           fill: isLineKind(kind) ? null : $shapeFill,
           opacity: $shapeOpacity,
           arrowHead: $shapeArrowHead,
+          lineStyle: $shapeLineStyle,
         }}
       />
     </div>

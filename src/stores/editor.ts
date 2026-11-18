@@ -131,6 +131,9 @@ export type ShapeKind = 'rectangle' | 'ellipse' | 'line' | 'arrow';
 /** An arrow's tip: two open strokes, a filled triangle, or a filled triangle notched at the back. */
 export type ArrowHead = 'open' | 'triangle' | 'notched';
 
+/** How a shape's outline, or a line, is drawn: unbroken, or as a repeating pattern. */
+export type LineStyle = 'solid' | 'dashed' | 'dotted' | 'dashdot';
+
 /** A drawn shape, in canvas pixel coordinates. Lines and arrows run corner to corner across the box. */
 export interface PlacedShape {
   id: string;
@@ -154,6 +157,8 @@ export interface PlacedShape {
   flipY: boolean;
   /** An arrow's tip. Unset means 'open'. */
   arrowHead?: ArrowHead;
+  /** The outline's or line's pattern. Unset means 'solid'. */
+  lineStyle?: LineStyle;
   /** Degrees clockwise as shown, about the box's centre (the box itself is unturned). Unset for upright. */
   angle?: number;
 }

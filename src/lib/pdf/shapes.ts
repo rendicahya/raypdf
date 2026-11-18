@@ -2,7 +2,7 @@ import { degrees, LineCapStyle, type PDFDocument, type PDFImage, type PDFPage } 
 import { getTotalRotation, type PdfDocument } from './loader';
 import type { EditableItemRecorder } from './editableItems';
 import { hexToRgb } from './textRender';
-import type { PlacedImage, PlacedShape } from '../../stores/editor';
+import type { LineStyle, PlacedImage, PlacedShape } from '../../stores/editor';
 import type { StoredImage } from '../../stores/images';
 
 type Point = [number, number];
@@ -10,15 +10,20 @@ type Point = [number, number];
 /**
  * Where a line or arrow is drawn, in the same units as the shape's box:
  * corner to corner, with the arrowhead at the end. `strokes` are segments
- * drawn with the line's width and round caps; `fills` are outlines filled in
- * the line's color, all in one path (nonzero, so where they overlap is filled
- * once and a see-through arrow shows no darker seam). A filled head makes the
- * whole arrow filled: the shaft becomes an outline with a round start. Shared
- * by the editor (SVG), screenshots (canvas), and export (PDF), so all three
- * match.
+ * drawn with the line's width and round caps; the first, if any, is the line
+ * itself, the only one that takes the line style (an open head's wings stay
+ * solid). `fills` are outlines filled in the line's color, all in one path
+ * (nonzero, so where they overlap is filled once and a see-through arrow shows
+ * no darker seam). A filled head on a solid arrow makes the whole arrow
+ * filled: the shaft becomes an outline with a round start. A patterned one
+ * keeps its shaft a stroke, ending where the head begins. Shared by the editor
+ * (SVG), screenshots (canvas), and export (PDF), so all three match.
  */
 export function lineGeometry(
-  s: Pick<PlacedShape, 'x' | 'y' | 'width' | 'height' | 'flipX' | 'flipY' | 'kind' | 'strokeWidth' | 'arrowHead'>,
+  s: Pick<
+    PlacedShape,
+    'x' | 'y' | 'width' | 'height' | 'flipX' | 'flipY' | 'kind' | 'strokeWidth' | 'arrowHead' | 'lineStyle'
+  >,
 ): { start: Point; end: Point; strokes: Point[][]; fills: Point[][] } {
   const start: Point = [s.flipX ? s.x + s.width : s.x, s.flipY ? s.y + s.height : s.y];
   const end: Point = [s.flipX ? s.x : s.x + s.width, s.flipY ? s.y : s.y + s.height];
@@ -53,6 +58,10 @@ export function lineGeometry(
       ? [end, at(end, -length, -half), at(end, -back), at(end, -length, half)]
       : [end, at(end, -length, -half), at(end, -length, half)];
 
+  if (dashPattern(s.lineStyle, 1)) {
+    return { start, end, strokes: [[start, at(start, Math.max(0, span - back))]], fills: [clockwise(tip)] };
+  }
+
   // The shaft runs from a round start into the head (past its back, so they join without a gap).
   const r = s.strokeWidth / 2;
   const shaftEnd = Math.max(0, span - back + Math.min(back, length) * 0.4);
@@ -63,6 +72,25 @@ export function lineGeometry(
     shaft.push(at(start, -r * Math.sin(phi), -r * Math.cos(phi)));
   }
   return { start, end, strokes: [], fills: [clockwise(shaft), clockwise(tip)] };
+}
+
+/**
+ * The dash pattern for a line style at a line width (in the same units), or
+ * null for solid. Drawn with round caps, which add half the width to each end
+ * of a dash, so a 0-length dash is a round dot.
+ */
+export function dashPattern(style: LineStyle | undefined, width: number): number[] | null {
+  const w = Math.max(width, 0.5);
+  switch (style) {
+    case 'dashed':
+      return [3 * w, 3 * w];
+    case 'dotted':
+      return [0, 2 * w];
+    case 'dashdot':
+      return [3 * w, 2.5 * w, 0, 2.5 * w];
+    default:
+      return null;
+  }
 }
 
 /** The same outline, wound one way, so outlines filled together (nonzero) make their union. */
@@ -140,6 +168,7 @@ async function drawShape(
   const toPdf = (x: number, y: number) => viewport.convertToPdfPoint(...turn([x, y])) as Point;
   const thickness = s.strokeWidth / renderScale;
   const stroke = hexToRgb(s.stroke);
+  const dashes = dashPattern(s.lineStyle, thickness);
 
   if (s.kind === 'line' || s.kind === 'arrow') {
     if (thickness <= 0) return;
@@ -152,7 +181,7 @@ async function drawShape(
       });
       page.drawSvgPath(d, { x: 0, y: 0, color: stroke, opacity: s.opacity });
     }
-    for (const [a, b] of strokes) {
+    strokes.forEach(([a, b], i) => {
       const [x1, y1] = toPdf(...a);
       const [x2, y2] = toPdf(...b);
       page.drawLine({
@@ -162,8 +191,10 @@ async function drawShape(
         color: stroke,
         opacity: s.opacity,
         lineCap: LineCapStyle.Round,
+        // Only the line itself is patterned, not an open head's wings.
+        ...(dashes && i === 0 ? { dashArray: dashes } : {}),
       });
-    }
+    });
     return;
   }
 
@@ -175,6 +206,7 @@ async function drawShape(
     borderColor: thickness > 0 ? stroke : undefined,
     borderWidth: thickness,
     borderOpacity: s.opacity,
+    ...(dashes && thickness > 0 ? { borderDashArray: dashes, borderLineCap: LineCapStyle.Round } : {}),
   };
 
   if (s.angle) {

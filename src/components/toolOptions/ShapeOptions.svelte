@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { editorStore, activeDocument, type ArrowHead, type PlacedShape, type ShapeKind } from '../../stores/editor';
+  import {
+    editorStore,
+    activeDocument,
+    type ArrowHead,
+    type LineStyle,
+    type PlacedShape,
+    type ShapeKind,
+  } from '../../stores/editor';
   import {
     selectedShapeId,
     shapeKind,
@@ -8,6 +15,7 @@
     shapeFill,
     shapeOpacity,
     shapeArrowHead,
+    shapeLineStyle,
   } from '../../stores/shapeTool';
   import { wheelRange } from '../../lib/utils/wheelRange';
   import { tooltip } from '../../lib/utils/tooltip';
@@ -35,6 +43,7 @@
           fill: selected.fill,
           opacity: selected.opacity,
           arrowHead: selected.arrowHead ?? 'open',
+          lineStyle: selected.lineStyle ?? 'solid',
         }
       : {
           kind: $shapeKind,
@@ -43,6 +52,7 @@
           fill: $shapeFill,
           opacity: $shapeOpacity,
           arrowHead: $shapeArrowHead,
+          lineStyle: $shapeLineStyle,
         },
   );
   const isLine = $derived(style.kind === 'line' || style.kind === 'arrow');
@@ -56,6 +66,7 @@
     if (partial.fill !== undefined) $shapeFill = partial.fill;
     if (partial.opacity !== undefined) $shapeOpacity = partial.opacity;
     if (partial.arrowHead !== undefined) $shapeArrowHead = partial.arrowHead;
+    if (partial.lineStyle !== undefined) $shapeLineStyle = partial.lineStyle;
     if (!selected) return;
     const { strokeWidth, ...rest } = partial;
     const change: Partial<PlacedShape> = { ...rest };
@@ -86,7 +97,15 @@
     { value: 'notched', label: 'Notched tip', icon: 'M4 12h12M12 6l8 6-8 6 2.5-6z', filled: true },
   ];
 
-  const valueOf = (e: Event) => Number((e.target as HTMLInputElement).value);
+  // Each drawn as a short line with its own pattern.
+  const LINE_STYLES: { value: LineStyle; label: string; dashes?: string }[] = [
+    { value: 'solid', label: 'Solid' },
+    { value: 'dashed', label: 'Dashed', dashes: '3 4' },
+    { value: 'dotted', label: 'Dotted', dashes: '0 4' },
+    { value: 'dashdot', label: 'Dash-dot', dashes: '4 4 0 4' },
+  ];
+
+  const valueOf =(e: Event) => Number((e.target as HTMLInputElement).value);
 </script>
 
 <div>
@@ -180,6 +199,31 @@
         </span>
       </span>
     </label>
+
+    {#if style.strokeWidth > 0}
+      <div class="flex items-center justify-between gap-2">
+        <span>Style</span>
+        <div class="flex gap-1">
+          {#each LINE_STYLES as lineStyle (lineStyle.value)}
+            <button
+              type="button"
+              aria-label={lineStyle.label}
+              aria-pressed={style.lineStyle === lineStyle.value}
+              use:tooltip={lineStyle.label}
+              class="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors {style.lineStyle ===
+              lineStyle.value
+                ? 'border-fuchsia-600 bg-fuchsia-600 text-white'
+                : 'border-neutral-200 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800'}"
+              onclick={() => set({ lineStyle: lineStyle.value })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                <path stroke-linecap="round" stroke-dasharray={lineStyle.dashes} d="M3 12h18" />
+              </svg>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     {#if !isLine}
       <div class="flex items-center justify-between gap-2">
