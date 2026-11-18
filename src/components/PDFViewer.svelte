@@ -110,6 +110,7 @@
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
   import { openSignatureTool } from '../stores/signatureTool';
+  import { openTextTool } from '../stores/toolPanel';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import {
     watermarkText,
@@ -1781,6 +1782,7 @@
   function onTextDoubleClick(e: MouseEvent, t: PlacedText) {
     e.stopPropagation();
     $selectedTextId = t.id;
+    openTextTool();
     startEditingText(t.id, t.text);
   }
 
@@ -2242,6 +2244,7 @@
           icon: MENU_ICONS.edit,
           onSelect: () => {
             $selectedTextId = text.id;
+            openTextTool();
             startEditingText(text.id, text.text);
           },
         },

@@ -52,6 +52,28 @@ export const activePanelTool = derived(
                         : null,
 );
 
+/**
+ * Turns the Add Text tool on (and every other tool off) and shows its panel,
+ * e.g. when a placed text box is double-clicked to edit it.
+ */
+export function openTextTool() {
+  for (const tool of [
+    signatureToolMode,
+    redactMode,
+    commentToolMode,
+    textSelectMode,
+    screenshotToolMode,
+    pageNumbersToolMode,
+    pageWatermarkToolMode,
+    shapeToolMode,
+    cropToolMode,
+  ]) {
+    tool.set(false);
+  }
+  textToolMode.set(true);
+  toolPanelOpen.set(true);
+}
+
 /** The tool whose options the right-hand panel is showing right now, if any. */
 export const shownPanelTool = derived([activePanelTool, toolPanelOpen], ([tool, open]) =>
   tool === 'signature' || tool === 'pageNumbers' || tool === 'watermark' || tool === 'crop' || (tool && open) ? tool : null,
