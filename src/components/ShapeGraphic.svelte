@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PlacedShape } from '../stores/editor';
-  import { dashPattern, insetBox, lineGeometry, outlinePath } from '../lib/pdf/shapes';
+  import { dashPattern, lineGeometry, outlinePath, pathData, shapeOutline } from '../lib/pdf/shapes';
 
   // A shape drawn with SVG, filling its box: the same geometry that
   // screenshots and export use (lib/pdf/shapes.ts).
@@ -25,7 +25,6 @@
   // Drawn relative to the box's own top-left corner.
   const local = $derived({ ...shape, x: 0, y: 0 });
   const line = $derived(shape.kind === 'line' || shape.kind === 'arrow' ? lineGeometry(local) : null);
-  const inset = $derived(insetBox(local));
   const dashes = $derived(dashPattern(shape.lineStyle, shape.strokeWidth)?.join(' '));
   // Room around the box for line caps and arrowheads, and so a perfectly
   // flat line (no height) still has an SVG to be drawn in.
@@ -52,27 +51,14 @@
     {#if line.fills.length}
       <path d={outlinePath(line.fills)} fill={shape.stroke} />
     {/if}
-  {:else if shape.kind === 'rectangle'}
-    <rect
-      x={inset.x}
-      y={inset.y}
-      width={inset.width}
-      height={inset.height}
-      fill={shape.fill ?? 'none'}
-      stroke={shape.strokeWidth > 0 ? shape.stroke : 'none'}
-      stroke-width={shape.strokeWidth}
-      stroke-dasharray={dashes}
-      stroke-linecap={dashes ? 'round' : undefined}
-    />
   {:else}
-    <ellipse
-      cx={inset.x + inset.width / 2}
-      cy={inset.y + inset.height / 2}
-      rx={inset.width / 2}
-      ry={inset.height / 2}
+    <!-- Miter limit 10, as in canvas and PDF, so pointed corners match. -->
+    <path
+      d={pathData(shapeOutline(local))}
       fill={shape.fill ?? 'none'}
       stroke={shape.strokeWidth > 0 ? shape.stroke : 'none'}
       stroke-width={shape.strokeWidth}
+      stroke-miterlimit="10"
       stroke-dasharray={dashes}
       stroke-linecap={dashes ? 'round' : undefined}
     />

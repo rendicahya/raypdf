@@ -61,6 +61,8 @@
     shapeOpacity,
     shapeArrowHead,
     shapeLineStyle,
+    isLineKind,
+    SHAPE_LABELS,
   } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
   import CropOverlay from './CropOverlay.svelte';
@@ -81,7 +83,6 @@
     type PlacedText,
     type RedactionBox,
     type PlacedComment,
-    type ShapeKind,
     type ItemRef,
   } from '../stores/editor';
   import { redactMode } from '../stores/redact';
@@ -732,14 +733,6 @@
     const rect = canvasEl.getBoundingClientRect();
     return { width: rect.width, height: rect.height };
   }
-
-  const isLineKind = (kind: ShapeKind) => kind === 'line' || kind === 'arrow';
-  const SHAPE_LABELS: Record<ShapeKind, string> = {
-    rectangle: 'Rectangle',
-    ellipse: 'Ellipse',
-    line: 'Line',
-    arrow: 'Arrow',
-  };
 
   // Shapes tool: drag on the page to draw the chosen shape (Shift keeps a
   // square, a circle, or a line at 45° steps); a plain click draws nothing.
@@ -2157,20 +2150,8 @@
     const shape = shapeId ? doc.shapes.find((s) => s.id === shapeId) : undefined;
     if (shape) {
       $selectedShapeId = shape.id;
+      // No Edit item: a shape is edited in place (double-click opens its style).
       return [
-        // A line or arrow is edited in place by its ends (double-click still opens its style).
-        ...(isLineKind(shape.kind)
-          ? []
-          : [
-              {
-                label: `Edit ${SHAPE_LABELS[shape.kind].toLowerCase()}`,
-                icon: MENU_ICONS.edit,
-                onSelect: () => {
-                  $selectedShapeId = shape.id;
-                  openShapeTool();
-                },
-              },
-            ]),
         duplicate({ kind: 'shape', id: shape.id }),
         {
           ...deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {

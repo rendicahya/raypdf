@@ -750,7 +750,7 @@
       type="button"
       aria-label="Shapes"
       aria-pressed={$shapeToolMode}
-      use:tooltip={'Shapes: drag on the page to draw a rectangle, ellipse, line, or arrow'}
+      use:tooltip={'Shapes: drag on the page to draw a shape, line, or arrow'}
       class={toolButtonClass}
       class:border-neutral-200={!$shapeToolMode}
       class:text-neutral-600={!$shapeToolMode}

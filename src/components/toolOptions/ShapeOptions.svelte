@@ -16,6 +16,8 @@
     shapeOpacity,
     shapeArrowHead,
     shapeLineStyle,
+    isLineKind,
+    SHAPE_LABELS,
   } from '../../stores/shapeTool';
   import { wheelRange } from '../../lib/utils/wheelRange';
   import { tooltip } from '../../lib/utils/tooltip';
@@ -55,7 +57,7 @@
           lineStyle: $shapeLineStyle,
         },
   );
-  const isLine = $derived(style.kind === 'line' || style.kind === 'arrow');
+  const isLine = $derived(isLineKind(style.kind));
 
   type Style = typeof style;
 
@@ -83,12 +85,27 @@
     editorStore.updateShape(selected.id, change);
   }
 
-  const KINDS: { value: ShapeKind; label: string; icon: string }[] = [
-    { value: 'rectangle', label: 'Rectangle', icon: 'M4 6h16v12H4z' },
-    { value: 'ellipse', label: 'Ellipse', icon: 'M12 6c4.4 0 8 2.7 8 6s-3.6 6-8 6-8-2.7-8-6 3.6-6 8-6z' },
-    { value: 'line', label: 'Line', icon: 'M5 19L19 5' },
-    { value: 'arrow', label: 'Arrow', icon: 'M5 19L19 5M10 5h9v9' },
-  ];
+  const ICONS: Record<ShapeKind, string> = {
+    rectangle: 'M4 6h16v12H4z',
+    roundedRectangle: 'M7 6h10a3 3 0 013 3v6a3 3 0 01-3 3H7a3 3 0 01-3-3V9a3 3 0 013-3z',
+    ellipse: 'M12 6c4.4 0 8 2.7 8 6s-3.6 6-8 6-8-2.7-8-6 3.6-6 8-6z',
+    triangle: 'M12 5l8 14H4z',
+    rightTriangle: 'M5 5l14 14H5z',
+    diamond: 'M12 4l8 8-8 8-8-8z',
+    pentagon: 'M12 4l8 6-3 9H7l-3-9z',
+    hexagon: 'M8 5h8l4 7-4 7H8l-4-7z',
+    star: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z',
+    heart: 'M12 20s-8-4.8-8-10.5A4.5 4.5 0 0112 7a4.5 4.5 0 018 2.5C20 15.2 12 20 12 20z',
+    callout: 'M6 5h12a2 2 0 012 2v7a2 2 0 01-2 2h-7l-4 4v-4H6a2 2 0 01-2-2V7a2 2 0 012-2z',
+    blockArrow: 'M4 9h9V5l7 7-7 7v-4H4z',
+    line: 'M5 19L19 5',
+    arrow: 'M5 19L19 5M10 5h9v9',
+  };
+  const KINDS = (Object.keys(SHAPE_LABELS) as ShapeKind[]).map((value) => ({
+    value,
+    label: SHAPE_LABELS[value],
+    icon: ICONS[value],
+  }));
 
   // Drawn pointing right, as each style looks.
   const HEADS: { value: ArrowHead; label: string; icon: string; filled: boolean }[] = [
@@ -118,9 +135,9 @@
   </p>
 
   <div class="mt-4 flex flex-col gap-4 text-xs text-neutral-600 dark:text-neutral-300">
-    <div class="flex items-center justify-between gap-2">
+    <div class="flex flex-col gap-2">
       <span>Shape</span>
-      <div class="flex gap-1">
+      <div class="grid grid-cols-7 gap-1">
         {#each KINDS as kind (kind.value)}
           <button
             type="button"

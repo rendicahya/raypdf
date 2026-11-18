@@ -126,7 +126,22 @@ export interface PlacedHighlight {
   page: number;
 }
 
-export type ShapeKind = 'rectangle' | 'ellipse' | 'line' | 'arrow';
+/** Closed shapes fill their box (outlines from `shapeOutline` in lib/pdf/shapes.ts); lines and arrows run corner to corner. */
+export type ShapeKind =
+  | 'rectangle'
+  | 'roundedRectangle'
+  | 'ellipse'
+  | 'triangle'
+  | 'rightTriangle'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'star'
+  | 'heart'
+  | 'callout'
+  | 'blockArrow'
+  | 'line'
+  | 'arrow';
 
 /** An arrow's tip: two open strokes, a filled triangle, or a filled triangle notched at the back. */
 export type ArrowHead = 'open' | 'triangle' | 'notched';
@@ -148,7 +163,7 @@ export interface PlacedShape {
   stroke: string;
   /** In canvas pixels at the current render scale — rescaled on zoom. 0 means no outline. */
   strokeWidth: number;
-  /** CSS hex color filling a rectangle or ellipse, or null for none. */
+  /** CSS hex color filling a closed shape, or null for none. */
   fill: string | null;
   /** 0.1 to 1. */
   opacity: number;

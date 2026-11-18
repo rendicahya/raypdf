@@ -2,7 +2,7 @@ import { renderPageToCanvas, type PdfDocument } from './loader';
 import type { FormWidgetKind } from './forms';
 import type { MarkupPaint } from './highlight';
 import type { PlacedShape, PlacedText } from '../../stores/editor';
-import { dashPattern, insetBox, lineGeometry } from './shapes';
+import { dashPattern, lineGeometry, shapeOutline, tracePath } from './shapes';
 import { FONT_FAMILY_CSS, SCRIPT_SCALE, SCRIPT_SHIFT } from '../../stores/textTool';
 import { pageNumberAnchor, type PageLabel } from './pageNumbers';
 import { drawWatermarkOnCanvas, type PageWatermarkSettings } from './pageWatermark';
@@ -313,9 +313,7 @@ function drawShape(ctx: CanvasRenderingContext2D, s: PlacedShape): void {
       ctx.fill();
     }
   } else {
-    const box = insetBox(s);
-    if (s.kind === 'rectangle') ctx.rect(box.x, box.y, box.width, box.height);
-    else ctx.ellipse(box.x + box.width / 2, box.y + box.height / 2, box.width / 2, box.height / 2, 0, 0, Math.PI * 2);
+    tracePath(ctx, shapeOutline(s));
     if (s.fill) {
       ctx.fillStyle = s.fill;
       ctx.fill();

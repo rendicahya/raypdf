@@ -66,7 +66,7 @@
       kind: 'markup',
       title: 'Mark up',
       description:
-        'Select text to highlight it, underline it, strike it through, or comment on it. Add text boxes in the font and size you want, draw rectangles, circles, lines, and arrows, place images or a logo, and leave comments as sticky notes.',
+        'Select text to highlight it, underline it, strike it through, or comment on it. Add text boxes in the font and size you want, draw shapes from rectangles and circles to stars and speech bubbles, lines, and arrows, place images or a logo, and leave comments as sticky notes.',
       points: [
         'Highlights come in five colors.',
         'Selecting text shows its font and size, as stored in the PDF.',
