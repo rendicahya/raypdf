@@ -2755,7 +2755,9 @@
         openShapeTool();
       }}
       angle={s.angle}
-      onRotate={(angle) => editorStore.updateShape(s.id, { angle })}
+      onRotate={isLineKind(s.kind) ? undefined : (angle) => editorStore.updateShape(s.id, { angle })}
+      line={isLineKind(s.kind) ? { flipX: s.flipX, flipY: s.flipY } : undefined}
+      onLineChange={(geometry) => editorStore.updateShape(s.id, geometry)}
     >
       <ShapeGraphic shape={s} />
     </PlacedBox>

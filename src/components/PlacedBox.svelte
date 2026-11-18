@@ -40,6 +40,14 @@
     angle?: number;
     /** Given, the box shows a rotate handle above it while selected. */
     onRotate?: (angle: number | undefined) => void;
+    /**
+     * Given, the item is a line from corner to corner of its box (flipX /
+     * flipY pick the corners, as `PlacedShape`): it's grabbed along the line
+     * rather than the whole box, and reshaped by dragging either end.
+     */
+    line?: { flipX: boolean; flipY: boolean };
+    /** A dragged end: the new box and corners, with any turn folded in. */
+    onLineChange?: (geometry: Geometry & { flipX: boolean; flipY: boolean; angle: undefined }) => void;
     children: Snippet;
   }
 
@@ -60,6 +68,8 @@
     onDoubleClick,
     angle,
     onRotate,
+    line,
+    onLineChange,
     children,
   }: Props = $props();
 
@@ -85,7 +95,96 @@
     e.stopPropagation();
     onSelect();
     gesture = { kind, pointerX: e.clientX, pointerY: e.clientY, start: { ...box }, angle };
+    // A line's box takes no pointer events itself (only the line does), so
+    // the line holds the capture; the moves still bubble up to the box.
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+
+  // A line's ends, in the box's own (unturned) coordinates.
+  const ends = $derived(
+    line
+      ? {
+          start: [line.flipX ? box.width : 0, line.flipY ? box.height : 0],
+          end: [line.flipX ? 0 : box.width, line.flipY ? 0 : box.height],
+        }
+      : null,
+  );
+
+  // The × beside a line's middle, off to the side that's more upward.
+  const removeAt = $derived.by(() => {
+    if (!ends) return null;
+    const dx = ends.end[0] - ends.start[0];
+    const dy = ends.end[1] - ends.start[1];
+    const length = Math.hypot(dx, dy) || 1;
+    let [nx, ny] = [dy / length, -dx / length];
+    if (ny > 0 || (ny === 0 && nx < 0)) [nx, ny] = [-nx, -ny];
+    return [pad + (ends.start[0] + ends.end[0]) / 2 + nx * 18, pad + (ends.start[1] + ends.end[1]) / 2 + ny * 18];
+  });
+
+  const LINE_SNAP_STEP = 15;
+  let endGesture: { pointerX: number; pointerY: number; which: 'start' | 'end'; fixed: number[]; moving: number[] } | null =
+    null;
+
+  function onEndPointerDown(e: PointerEvent, which: 'start' | 'end') {
+    if (e.button !== 0 || !line) return;
+    e.stopPropagation();
+    onSelect();
+    // Both ends as shown on the page, so a turned line's turn is folded in.
+    const a = ((angle ?? 0) * Math.PI) / 180;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const onPage = ([x, y]: number[]) => {
+      const lx = box.x + x - cx;
+      const ly = box.y + y - cy;
+      return [cx + lx * Math.cos(a) - ly * Math.sin(a), cy + lx * Math.sin(a) + ly * Math.cos(a)];
+    };
+    const start = onPage(ends!.start);
+    const end = onPage(ends!.end);
+    endGesture = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      which,
+      fixed: which === 'start' ? end : start,
+      moving: which === 'start' ? start : end,
+    };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onEndPointerMove(e: PointerEvent) {
+    if (!endGesture || !onLineChange) return;
+    e.stopPropagation();
+    const { fixed, moving, which } = endGesture;
+    let x = moving[0] + e.clientX - endGesture.pointerX;
+    let y = moving[1] + e.clientY - endGesture.pointerY;
+    if (e.shiftKey) {
+      // Shift keeps the line at steps of 15° from the other end.
+      const step = (LINE_SNAP_STEP * Math.PI) / 180;
+      const turn = Math.round(Math.atan2(y - fixed[1], x - fixed[0]) / step) * step;
+      const length = Math.hypot(x - fixed[0], y - fixed[1]);
+      x = fixed[0] + length * Math.cos(turn);
+      y = fixed[1] + length * Math.sin(turn);
+    }
+    const page = bounds();
+    x = clamp(x, 0, page.width);
+    y = clamp(y, 0, page.height);
+    if (Math.hypot(x - fixed[0], y - fixed[1]) < minSize) return;
+    const [sx, sy] = which === 'start' ? [x, y] : fixed;
+    const [ex, ey] = which === 'start' ? fixed : [x, y];
+    onLineChange({
+      x: Math.min(sx, ex),
+      y: Math.min(sy, ey),
+      width: Math.abs(ex - sx),
+      height: Math.abs(ey - sy),
+      flipX: sx > ex,
+      flipY: sy > ey,
+      angle: undefined,
+    });
+  }
+
+  function onEndPointerUp(e: PointerEvent) {
+    if (!endGesture) return;
+    endGesture = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -184,7 +283,8 @@
   function onPointerUp(e: PointerEvent) {
     if (!gesture) return;
     gesture = null;
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    const target = e.target as Element;
+    if (target.hasPointerCapture?.(e.pointerId)) target.releasePointerCapture(e.pointerId);
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -218,10 +318,14 @@
   data-placed-box=""
   role="group"
   tabindex="0"
-  aria-label="{label}. Drag to move, drag the corner handle to resize, Delete to remove."
-  class="absolute cursor-move touch-none outline-none {selected
-    ? 'ring-2 ring-blue-400/70'
-    : 'hover:ring-1 hover:ring-blue-300/60'}"
+  aria-label="{label}. Drag to move, {line
+    ? 'drag either end to reshape'
+    : 'drag the corner handle to resize'}, Delete to remove."
+  class="absolute cursor-move touch-none outline-none {line
+    ? 'pointer-events-none'
+    : selected
+      ? 'ring-2 ring-blue-400/70'
+      : 'hover:ring-1 hover:ring-blue-300/60'}"
   style:left="{box.x - pad}px"
   style:top="{box.y - pad}px"
   style:width="{box.width + pad * 2}px"
@@ -243,7 +347,63 @@
     {@render children()}
   </div>
 
-  {#if selected}
+  {#if ends}
+    <!-- Only the line itself (with some slack) grabs the pointer, not its whole box. -->
+    <svg
+      class="pointer-events-none absolute left-0 top-0 overflow-visible"
+      width={box.width + pad * 2}
+      height={box.height + pad * 2}
+      aria-hidden="true"
+    >
+      <line
+        x1={pad + ends.start[0]}
+        y1={pad + ends.start[1]}
+        x2={pad + ends.end[0]}
+        y2={pad + ends.end[1]}
+        stroke-width="14"
+        stroke-linecap="round"
+        pointer-events="stroke"
+        class="cursor-move {selected ? 'stroke-blue-400/25' : 'stroke-transparent hover:stroke-blue-300/25'}"
+      />
+    </svg>
+  {/if}
+
+  {#if selected && ends}
+    {#each [['start', ends.start], ['end', ends.end]] as const as [which, [x, y]]}
+      <div
+        role="button"
+        tabindex="-1"
+        aria-label={which === 'start' ? 'Move start point' : 'Move end point'}
+        use:tooltip={'Drag to move this end (Shift snaps to 15°)'}
+        class="pointer-events-auto absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 cursor-crosshair touch-none
+          rounded-full border border-white bg-blue-500 shadow"
+        style:left="{pad + x}px"
+        style:top="{pad + y}px"
+        onpointerdown={(e) => onEndPointerDown(e, which)}
+        onpointermove={onEndPointerMove}
+        onpointerup={onEndPointerUp}
+        onpointercancel={onEndPointerUp}
+      ></div>
+    {/each}
+
+    <button
+      type="button"
+      aria-label="Remove"
+      class="pointer-events-auto absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 touch-none items-center
+        justify-center rounded-full border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
+      style:left="{removeAt![0]}px"
+      style:top="{removeAt![1]}px"
+      onpointerdown={(e) => e.stopPropagation()}
+      onclick={(e) => {
+        e.stopPropagation();
+        onRemove();
+      }}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
+        <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </button>
+  {:else if selected}
     <div
       role="button"
       tabindex="-1"
