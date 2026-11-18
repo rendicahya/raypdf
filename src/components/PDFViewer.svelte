@@ -39,6 +39,17 @@
   import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import PlacedBox from './PlacedBox.svelte';
+  import ItemSelection from './ItemSelection.svelte';
+  import {
+    itemSelection,
+    itemRefOf,
+    sameItem,
+    alignSelection,
+    distributeSelection,
+    duplicateSelection,
+    deleteSelection,
+    duplicateItemsOnPage,
+  } from '../stores/itemSelection';
   import ShapeGraphic from './ShapeGraphic.svelte';
   import {
     shapeToolMode,
@@ -69,6 +80,7 @@
     type RedactionBox,
     type PlacedComment,
     type ShapeKind,
+    type ItemRef,
   } from '../stores/editor';
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
@@ -649,6 +661,69 @@
   const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
   const shapesOnCurrentPage = $derived($activeDocument?.shapes.filter((s) => s.page === pageNumber) ?? []);
   const imagesOnCurrentPage = $derived($activeDocument?.images.filter((img) => img.page === pageNumber) ?? []);
+
+  // The one item this page has selected on its own (not a group, see
+  // ItemSelection), for starting a group, duplicating, and the like.
+  function currentItem(): ItemRef | null {
+    if (selectedSignatureId) return { kind: 'signature', id: selectedSignatureId };
+    if ($selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)) {
+      return { kind: 'text', id: $selectedTextId };
+    }
+    if ($selectedShapeId && shapesOnCurrentPage.some((s) => s.id === $selectedShapeId)) {
+      return { kind: 'shape', id: $selectedShapeId };
+    }
+    if (selectedImageId) return { kind: 'image', id: selectedImageId };
+    return null;
+  }
+
+  function clearSingleSelection() {
+    selectedSignatureId = null;
+    selectedImageId = null;
+    selectedRedactionId = null;
+    if ($selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)) $selectedTextId = null;
+    if ($selectedShapeId && shapesOnCurrentPage.some((s) => s.id === $selectedShapeId)) $selectedShapeId = null;
+  }
+
+  function selectSingle(ref: ItemRef) {
+    clearSingleSelection();
+    if (ref.kind === 'signature') selectedSignatureId = ref.id;
+    else if (ref.kind === 'text') $selectedTextId = ref.id;
+    else if (ref.kind === 'shape') $selectedShapeId = ref.id;
+    else selectedImageId = ref.id;
+  }
+
+  /** Copies one item next to itself and selects the copy. */
+  function duplicateItem(ref: ItemRef) {
+    const [copy] = duplicateItemsOnPage([ref], canvasBounds());
+    if (copy) selectSingle(copy);
+  }
+
+  /** Everything on this page that can be selected together, in drawing order. */
+  function pageItemRefs(): ItemRef[] {
+    return [
+      ...imagesOnCurrentPage.map((i) => ({ kind: 'image' as const, id: i.id })),
+      ...shapesOnCurrentPage.map((s) => ({ kind: 'shape' as const, id: s.id })),
+      ...signaturesOnCurrentPage.map((s) => ({ kind: 'signature' as const, id: s.id })),
+      ...textsOnCurrentPage.map((t) => ({ kind: 'text' as const, id: t.id })),
+    ];
+  }
+
+  function selectAllItems() {
+    const items = pageItemRefs();
+    if (!$activeDocument || items.length === 0) return;
+    clearSingleSelection();
+    itemSelection.set({ docId: $activeDocument.id, page: pageNumber, items });
+  }
+
+  // Ctrl+D duplicates the item selected on this page (a group handles its own).
+  function onWindowKeydown(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'd') return;
+    if ((e.target as Element | null)?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    const ref = currentItem();
+    if (!ref || editingTextId) return;
+    e.preventDefault();
+    duplicateItem(ref);
+  }
 
   function canvasBounds() {
     const rect = canvasEl.getBoundingClientRect();
@@ -2040,15 +2115,64 @@
       onSelect: remove,
     });
 
+    const duplicate = (ref: ItemRef): ContextMenuItem => ({
+      label: 'Duplicate',
+      icon: MENU_ICONS.duplicate,
+      hint: 'Ctrl+D',
+      onSelect: () => duplicateItem(ref),
+    });
+
+    // An item in a group selection: the group's menu.
+    const group = $itemSelection;
+    const hit = itemRefOf(target);
+    if (group && hit && group.docId === doc.id && group.page === pageNumber && group.items.some((i) => sameItem(i, hit))) {
+      const count = group.items.length;
+      const bounds = canvasBounds();
+      const alignTo = count === 1 ? ' of the page' : '';
+      return [
+        { label: `Align left${alignTo}`, icon: MENU_ICONS.alignLeft, onSelect: () => alignSelection('left', bounds) },
+        { label: `Align center${alignTo}`, icon: MENU_ICONS.alignCenter, onSelect: () => alignSelection('center', bounds) },
+        { label: `Align right${alignTo}`, icon: MENU_ICONS.alignRight, onSelect: () => alignSelection('right', bounds) },
+        { label: `Align top${alignTo}`, icon: MENU_ICONS.alignTop, separatorBefore: true, onSelect: () => alignSelection('top', bounds) },
+        { label: `Align middle${alignTo}`, icon: MENU_ICONS.alignMiddle, onSelect: () => alignSelection('middle', bounds) },
+        { label: `Align bottom${alignTo}`, icon: MENU_ICONS.alignBottom, onSelect: () => alignSelection('bottom', bounds) },
+        {
+          label: 'Distribute horizontally',
+          icon: MENU_ICONS.distributeH,
+          separatorBefore: true,
+          disabled: count < 3,
+          onSelect: () => distributeSelection('horizontal'),
+        },
+        {
+          label: 'Distribute vertically',
+          icon: MENU_ICONS.distributeV,
+          disabled: count < 3,
+          onSelect: () => distributeSelection('vertical'),
+        },
+        {
+          label: count === 1 ? 'Duplicate' : `Duplicate ${count} items`,
+          icon: MENU_ICONS.duplicate,
+          hint: 'Ctrl+D',
+          separatorBefore: true,
+          onSelect: () => duplicateSelection(bounds),
+        },
+        { ...deleteItem(count === 1 ? 'Delete' : `Delete ${count} items`, deleteSelection) },
+      ];
+    }
+
     const shapeId = idOf('data-placed-shape');
     const shape = shapeId ? doc.shapes.find((s) => s.id === shapeId) : undefined;
     if (shape) {
       $selectedShapeId = shape.id;
       return [
-        deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
-          editorStore.removeShape(shape.id);
-          $selectedShapeId = null;
-        }),
+        duplicate({ kind: 'shape', id: shape.id }),
+        {
+          ...deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
+            editorStore.removeShape(shape.id);
+            $selectedShapeId = null;
+          }),
+          separatorBefore: true,
+        },
       ];
     }
 
@@ -2056,10 +2180,14 @@
     if (placedImageId) {
       selectedImageId = placedImageId;
       return [
-        deleteItem('Delete image', () => {
-          editorStore.removeImage(placedImageId);
-          selectedImageId = null;
-        }),
+        duplicate({ kind: 'image', id: placedImageId }),
+        {
+          ...deleteItem('Delete image', () => {
+            editorStore.removeImage(placedImageId);
+            selectedImageId = null;
+          }),
+          separatorBefore: true,
+        },
       ];
     }
 
@@ -2069,6 +2197,7 @@
       const angle = doc.placedSignatures.find((s) => s.id === signatureId)?.angle ?? 0;
       return [
         { label: 'Edit signature', icon: MENU_ICONS.edit, onSelect: () => editSignature(signatureId) },
+        duplicate({ kind: 'signature', id: signatureId }),
         {
           label: 'Rotate left',
           icon: MENU_ICONS.rotateLeft,
@@ -2116,10 +2245,14 @@
             startEditingText(text.id, text.text);
           },
         },
-        deleteItem('Delete text', () => {
-          editorStore.removeText(text.id);
-          $selectedTextId = null;
-        }),
+        duplicate({ kind: 'text', id: text.id }),
+        {
+          ...deleteItem('Delete text', () => {
+            editorStore.removeText(text.id);
+            $selectedTextId = null;
+          }),
+          separatorBefore: true,
+        },
       ];
     }
 
@@ -2234,6 +2367,13 @@
           imageInputEl?.click();
         },
       },
+      {
+        label: 'Select all objects',
+        icon: MENU_ICONS.selectAll,
+        separatorBefore: true,
+        disabled: pageItemRefs().length === 0,
+        onSelect: selectAllItems,
+      },
       { label: 'Zoom in', icon: MENU_ICONS.zoomIn, separatorBefore: true, onSelect: editorStore.zoomIn },
       { label: 'Zoom out', icon: MENU_ICONS.zoomOut, onSelect: editorStore.zoomOut },
       {
@@ -2270,7 +2410,7 @@
   }
 </script>
 
-<svelte:window onpointerdown={onWindowPointerDown} />
+<svelte:window onpointerdown={onWindowPointerDown} onkeydown={onWindowKeydown} />
 
 <div
   bind:this={wrapperEl}
@@ -3170,6 +3310,14 @@
   {#if $cropToolMode}
     <CropOverlay {pageNumber} />
   {/if}
+
+  <!-- Several items selected together: outlines, the arrange bar, group moves. -->
+  <ItemSelection
+    {pageNumber}
+    bounds={canvasBounds}
+    {currentItem}
+    clearSingle={clearSingleSelection}
+  />
 </div>
 
 {#if menu}

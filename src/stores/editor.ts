@@ -430,6 +430,20 @@ type PageItems = Pick<
   'placedSignatures' | 'redactions' | 'texts' | 'comments' | 'highlights' | 'shapes' | 'images'
 >;
 
+/** Things the user placed that can be selected together, aligned, and duplicated. */
+export type ItemKind = 'signature' | 'text' | 'shape' | 'image';
+export const ITEM_KINDS: readonly ItemKind[] = ['signature', 'text', 'shape', 'image'];
+export interface ItemRef {
+  kind: ItemKind;
+  id: string;
+}
+export const ITEM_LISTS = {
+  signature: 'placedSignatures',
+  text: 'texts',
+  shape: 'shapes',
+  image: 'images',
+} as const satisfies Record<ItemKind, keyof PageItems>;
+
 /** Runs `fn` over each of a document's item lists — for edits (rotation, page edits) that move all of them alike. */
 async function mapPageItems(
   doc: PageItems,
@@ -1083,6 +1097,78 @@ function createEditorStore() {
     editActiveList('images', `remove-image-${id}-${Date.now()}`, (images) => images.filter((img) => img.id !== id));
   }
 
+  /**
+   * Moves several items at once (aligning, distributing, dragging a group),
+   * one undo step. Calls with the same `actionKey` coalesce like a drag.
+   */
+  function moveItems(moves: (ItemRef & { x: number; y: number })[], actionKey = `move-items-${crypto.randomUUID()}`) {
+    if (moves.length === 0) return;
+    recordActiveHistory(actionKey);
+    update((state) =>
+      updateActiveDocument(state, (doc) => {
+        const next = { ...doc, exported: false };
+        for (const kind of ITEM_KINDS) {
+          const key = ITEM_LISTS[kind];
+          const forKind = new Map(moves.filter((m) => m.kind === kind).map((m) => [m.id, m]));
+          if (forKind.size === 0) continue;
+          (next[key] as PageItem[]) = (doc[key] as PageItem[]).map((item) => {
+            const m = forKind.get(item.id);
+            return m ? { ...item, x: m.x, y: m.y } : item;
+          });
+        }
+        return next;
+      }),
+    );
+  }
+
+  /**
+   * Copies items, shifted by (dx, dy), as one undo step. Returns the copies,
+   * in the order given.
+   */
+  function duplicateItems(refs: ItemRef[], dx: number, dy: number): ItemRef[] {
+    const doc = getActiveDocument(currentState());
+    if (!doc || refs.length === 0) return [];
+    const copies: ItemRef[] = [];
+    const added: Partial<Record<ItemKind, PageItem[]>> = {};
+    for (const ref of refs) {
+      const item = (doc[ITEM_LISTS[ref.kind]] as PageItem[]).find((i) => i.id === ref.id);
+      if (!item) continue;
+      const id = crypto.randomUUID();
+      (added[ref.kind] ??= []).push({ ...item, id, x: item.x + dx, y: item.y + dy });
+      copies.push({ kind: ref.kind, id });
+    }
+    if (copies.length === 0) return [];
+    recordActiveHistory(`duplicate-items-${crypto.randomUUID()}`);
+    update((state) =>
+      updateActiveDocument(state, (d) => {
+        const next = { ...d, exported: false };
+        for (const kind of ITEM_KINDS) {
+          const extra = added[kind];
+          if (extra) (next[ITEM_LISTS[kind]] as PageItem[]) = [...(d[ITEM_LISTS[kind]] as PageItem[]), ...extra];
+        }
+        return next;
+      }),
+    );
+    return copies;
+  }
+
+  /** Removes several items at once, one undo step. */
+  function removeItems(refs: ItemRef[]) {
+    if (refs.length === 0) return;
+    recordActiveHistory(`remove-items-${crypto.randomUUID()}`);
+    update((state) =>
+      updateActiveDocument(state, (doc) => {
+        const next = { ...doc, exported: false };
+        for (const kind of ITEM_KINDS) {
+          const ids = new Set(refs.filter((r) => r.kind === kind).map((r) => r.id));
+          if (ids.size === 0) continue;
+          (next[ITEM_LISTS[kind]] as PageItem[]) = (doc[ITEM_LISTS[kind]] as PageItem[]).filter((i) => !ids.has(i.id));
+        }
+        return next;
+      }),
+    );
+  }
+
   /** Records a value typed or picked into one of the PDF's own form fields. */
   function setFormValue(fieldName: string, value: string | boolean) {
     recordActiveHistory(`form-${fieldName}`);
@@ -1498,6 +1584,9 @@ function createEditorStore() {
     addImage,
     updateImage,
     removeImage,
+    moveItems,
+    duplicateItems,
+    removeItems,
     setFormValue,
     setPageNumbers,
     setHeaderFooter,

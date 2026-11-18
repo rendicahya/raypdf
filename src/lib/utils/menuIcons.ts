@@ -31,4 +31,13 @@ export const MENU_ICONS = {
   recognize: 'M4 8V5a1 1 0 0 1 1-1h3 M16 4h3a1 1 0 0 1 1 1v3 M20 16v3a1 1 0 0 1-1 1h-3 M8 20H5a1 1 0 0 1-1-1v-3 M8 9h8 M8 12h8 M8 15h5',
   recognizeArea: 'M4 8V4h4 M11 4h2 M16 4h4v4 M20 11v2 M20 16v4h-4 M13 20h-2 M8 20H4v-4 M4 13v-2 M8 10h8 M8 14h5',
   camera:'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z M12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+  alignLeft: 'M4 3v18 M8 6h11v4H8Z M8 14h6v4H8Z',
+  alignCenter: 'M12 3v18 M6 6h12v4H6Z M8.5 14h7v4h-7Z',
+  alignRight: 'M20 3v18 M5 6h11v4H5Z M10 14h6v4h-6Z',
+  alignTop: 'M3 4h18 M6 8h4v11H6Z M14 8h4v6h-4Z',
+  alignMiddle: 'M3 12h18 M6 6h4v12H6Z M14 8.5h4v7h-4Z',
+  alignBottom: 'M3 20h18 M6 5h4v11H6Z M14 10h4v6h-4Z',
+  distributeH: 'M3 3v18 M21 3v18 M7 8h3v8H7Z M14 8h3v8h-3Z',
+  distributeV: 'M3 3h18 M3 21h18 M8 7h8v3H8Z M8 14h8v3H8Z',
+  selectAll: 'M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4 M8 9h8v6H8Z',
 };

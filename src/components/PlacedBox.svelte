@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { isMultiSelectClick } from '../stores/itemSelection';
 
   // A placed item on a page that can be selected, dragged, resized from its
   // corner handle, nudged with the arrow keys, and removed (its × or
@@ -63,6 +64,8 @@
     if (!selected) return;
     const target = e.target as Element | null;
     if (el?.contains(target) || target?.closest?.('[data-tool-panel]')) return;
+    // Shift-clicking another item starts a group with this one (ItemSelection).
+    if (isMultiSelectClick(e)) return;
     onDeselect();
   }
 

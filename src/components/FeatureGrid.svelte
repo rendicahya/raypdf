@@ -71,6 +71,7 @@
         'Highlights come in five colors.',
         'Selecting text shows its font and size, as stored in the PDF.',
         'Shapes and images can be moved, resized, and restyled at any time before you save.',
+        'Shift-click several items to align them, space them out evenly, or duplicate them.',
         'Markups and comments are saved as real PDF annotations that other PDF readers show.',
         'Text boxes support bold, italic, alignment, spacing, and a background color.',
       ],
