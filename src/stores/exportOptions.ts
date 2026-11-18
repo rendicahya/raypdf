@@ -15,6 +15,13 @@ export const compressionLevel = persistedWritable<CompressionLevel>('compression
 export const stripEmbeddedScripts = persistedWritable<boolean>('stripEmbeddedScripts', false);
 
 /**
+ * Whether placed items (signatures, text, shapes, images) stay editable when
+ * the saved PDF is opened in RayPDF again (see `lib/pdf/editableItems.ts`).
+ * Other readers show the file the same either way.
+ */
+export const keepItemsEditable = persistedWritable<boolean>('keepItemsEditable', true);
+
+/**
  * Whether to lock the exported PDF's copy/extract permission at export time
  * (see `applyProtection` in `lib/pdf/password.ts`). Opt-in and persisted
  * like the script-stripping preference above.

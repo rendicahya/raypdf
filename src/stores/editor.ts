@@ -1,5 +1,8 @@
 import { writable, derived } from 'svelte/store';
 import { getCachedPdf } from '../lib/pdf/docCache';
+import { hasEditableItemsMarker, restoreEditableItems, scaleItem } from '../lib/pdf/editableItems';
+import { signatureStore } from './signature';
+import { addStoredImage } from './images';
 import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
 import {
   movePdfPage,
@@ -587,6 +590,69 @@ function createEditorStore() {
       });
   }
 
+  /** The ids of the signatures saved in this browser, once they've loaded. */
+  function savedSignatureIds(): Promise<Set<string>> {
+    return new Promise((resolve) => {
+      let done = false;
+      let unsubscribe: (() => void) | undefined;
+      unsubscribe = signatureStore.subscribe((s) => {
+        if (s.loading || done) return;
+        done = true;
+        resolve(new Set(s.signatures.map((sig) => sig.id)));
+        unsubscribe?.();
+      });
+      // Already loaded: the callback ran before `unsubscribe` was set.
+      if (done) unsubscribe();
+    });
+  }
+
+  /**
+   * Brings back the items an earlier RayPDF save kept editable (see
+   * lib/pdf/editableItems.ts): the file loses their drawings and the
+   * document gets the items themselves. Becomes the document as opened, so
+   * there's nothing to undo and nothing unsaved.
+   */
+  async function restorePlacedItems(id: string) {
+    const doc = currentState().documents.find((d) => d.id === id);
+    if (!doc) return;
+    const file = doc.file;
+    try {
+      const pdfjsDoc = await getCachedPdf(id, file);
+      const { info } = await pdfjsDoc.getMetadata();
+      if (!hasEditableItemsMarker(info)) return;
+      const signatureIds = await savedSignatureIds();
+      const restored = await restoreEditableItems(file, (signatureId) => signatureIds.has(signatureId));
+      if (!restored) return;
+
+      let applied = false;
+      update((state) => {
+        const current = state.documents.find((d) => d.id === id);
+        // Changed while this was reading the file: leave it alone.
+        if (!current || current.file !== file || current.rotation !== 0) return state;
+        applied = true;
+        const scale = state.renderScale;
+        const placed = { ...current };
+        for (const r of restored.items) {
+          const base = { id: crypto.randomUUID(), page: r.page };
+          if (r.kind === 'signature') placed.placedSignatures = [...placed.placedSignatures, { ...scaleItem('signature', r.item, scale), ...base }];
+          else if (r.kind === 'text') placed.texts = [...placed.texts, { ...scaleItem('text', r.item, scale), ...base }];
+          else if (r.kind === 'shape') placed.shapes = [...placed.shapes, { ...scaleItem('shape', r.item, scale), ...base }];
+          else placed.images = [...placed.images, { ...scaleItem('image', r.item, scale), imageId: addStoredImage(r.image), ...base }];
+        }
+        const untouched =
+          current.placedSignatures.length + current.texts.length + current.shapes.length + current.images.length === 0 &&
+          current.redactions.length + current.comments.length + current.highlights.length === 0;
+        placed.file = restored.file;
+        placed.originalFile = restored.file;
+        placed.exported = current.exported || untouched;
+        return { ...state, documents: state.documents.map((d) => (d.id === id ? placed : d)) };
+      });
+      if (applied) clearHistory(id);
+    } catch {
+      // Unreadable or locked: the items stay drawn on the pages, as any reader shows them.
+    }
+  }
+
   /** Replaces the whole document list, e.g. the initial upload. */
   function loadPdfs(files: File[]) {
     histories.clear();
@@ -599,6 +665,7 @@ function createEditorStore() {
       hasExported: false,
     });
     documents.forEach(resolvePageCount);
+    documents.forEach((d) => restorePlacedItems(d.id));
   }
 
   /** Appends more PDFs to an already-started session. */
@@ -610,6 +677,7 @@ function createEditorStore() {
       activeId: state.activeId ?? added[0]?.id ?? null,
     }));
     added.forEach(resolvePageCount);
+    added.forEach((d) => restorePlacedItems(d.id));
   }
 
   /**
@@ -624,7 +692,10 @@ function createEditorStore() {
       documents: state.documents.map((doc) => (doc.id === id ? { ...doc, file, originalFile: file } : doc)),
     }));
     const doc = currentState().documents.find((d) => d.id === id);
-    if (doc) resolvePageCount(doc);
+    if (doc) {
+      resolvePageCount(doc);
+      restorePlacedItems(id);
+    }
   }
 
   function removeDocument(id: string) {

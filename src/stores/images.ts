@@ -68,6 +68,13 @@ export async function addImageFile(file: File): Promise<{ id: string; width: num
   }
 }
 
+/** Keeps an image that's already a PNG or JPEG (one read back from a saved PDF) and returns its id. */
+export function addStoredImage(image: Omit<StoredImage, 'url'>): string {
+  const id = crypto.randomUUID();
+  images.set(id, { ...image, url: URL.createObjectURL(image.blob) });
+  return id;
+}
+
 /** Draws a decoded image onto a canvas (which applies EXIF rotation) and encodes it. */
 function redraw(img: HTMLImageElement, width: number, height: number, asJpeg: boolean): Promise<Blob> {
   const canvas = document.createElement('canvas');

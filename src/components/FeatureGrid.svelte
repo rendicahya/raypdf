@@ -161,6 +161,7 @@
       description:
         'Save the whole document, just the current page, or each page as its own PDF. Compress large scans, save several documents at once, merge them in the order you choose, or print. Or take the text out as a Word document or Markdown.',
       points: [
+        'Reopen a saved PDF in RayPDF and what you placed on it is still editable.',
         'Save pages as PNG or JPG images.',
         'Turn a PDF into an editable Word document.',
         'Convert it to Markdown, with simple tables and without headers, footers, or page numbers: preview it, then save or copy.',

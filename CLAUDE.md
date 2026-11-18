@@ -178,6 +178,8 @@ Files can also come from Google Drive (DriveButton: below the upload card, "+ Fr
 
 Every export embeds a small verification record in the PDF metadata (`lib/pdf/verification.ts`).
 
+Placed items stay editable across a save (`lib/pdf/editableItems.ts`, on unless `keepItemsEditable` is off): export draws each signature, text box, shape, and image into a content stream of its own (`EditableItemRecorder.begin` / `end` around the drawing; `drawShapes` / `drawImages` take the recorder) and the page dictionary's `/RayPDFItems` holds a record per item (JSON settings at scale 1, the stream, the image XObject, the resources it added), with an Info marker so opening checks pdf.js metadata before parsing. `restorePlacedItems` in the editor store (on load, add, and unlock) lifts them back off: the streams leave the page, unused resources and unreachable objects are dropped, and the stripped file becomes the document as opened. A signature returns only if its `signatureId` is saved in this browser (the clean image is never stored in the file); records that can't come back stay for a later try. Pages copied into a new document need `markEditableItems`. A new placeable kind needs a case in `restoreRecord` and `SCALED_FIELDS`.
+
 ---
 
 # Visible Watermark
@@ -257,7 +259,7 @@ components/
 
 lib/
 
-- pdf/ — loader, docCache, export, compress, textLayout, docx, markdown, embeddedImages, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, fontInfo, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
+- pdf/ — loader, docCache, export, editableItems, compress, textLayout, docx, markdown, embeddedImages, pageImages, pageNumbers, headerFooter, pageWatermark, contentBounds, password, shapes, forms, highlight, fontInfo, search, ocr, pageOps, redact, sanitize, placement, screenshot, textLayer, textRender, verification
 - watermark/ — visible watermark
 - signature/ — IndexedDB storage (several signatures), sizing, drawn/typed creation
 - utils/ — persist, fileValidation, pageRange, portal, tooltip, wheelRange, arrange, menuIcons

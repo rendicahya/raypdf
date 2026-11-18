@@ -1,5 +1,6 @@
-import { degrees, LineCapStyle, type PDFDocument, type PDFImage } from '@cantoo/pdf-lib';
+import { degrees, LineCapStyle, type PDFDocument, type PDFImage, type PDFPage } from '@cantoo/pdf-lib';
 import { getTotalRotation, type PdfDocument } from './loader';
+import type { EditableItemRecorder } from './editableItems';
 import { hexToRgb } from './textRender';
 import type { PlacedImage, PlacedShape } from '../../stores/editor';
 import type { StoredImage } from '../../stores/images';
@@ -45,51 +46,64 @@ export async function drawShapes(
   shapes: PlacedShape[],
   renderScale: number,
   rotation: number,
+  recorder?: EditableItemRecorder,
 ): Promise<void> {
   for (const s of shapes) {
-    const pdfjsPage = await pdfjsDoc.getPage(s.page);
-    const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: getTotalRotation(pdfjsPage, rotation) });
-    const toPdf = (x: number, y: number) => viewport.convertToPdfPoint(x, y) as Point;
     const page = pdfDoc.getPage(s.page - 1);
-    const thickness = s.strokeWidth / renderScale;
-    const stroke = hexToRgb(s.stroke);
-
-    if (s.kind === 'line' || s.kind === 'arrow') {
-      if (thickness <= 0) continue;
-      const { start, end, head } = lineGeometry(s);
-      for (const [a, b] of [[start, end], ...head]) {
-        const [x1, y1] = toPdf(...a);
-        const [x2, y2] = toPdf(...b);
-        page.drawLine({
-          start: { x: x1, y: y1 },
-          end: { x: x2, y: y2 },
-          thickness,
-          color: stroke,
-          opacity: s.opacity,
-          lineCap: LineCapStyle.Round,
-        });
-      }
-      continue;
-    }
-
-    if (thickness <= 0 && !s.fill) continue;
-    const box = insetBox(s);
-    const [x1, y1] = toPdf(box.x, box.y);
-    const [x2, y2] = toPdf(box.x + box.width, box.y + box.height);
-    const x = Math.min(x1, x2);
-    const y = Math.min(y1, y2);
-    const width = Math.abs(x2 - x1);
-    const height = Math.abs(y2 - y1);
-    const paint = {
-      color: s.fill ? hexToRgb(s.fill) : undefined,
-      opacity: s.opacity,
-      borderColor: thickness > 0 ? stroke : undefined,
-      borderWidth: thickness,
-      borderOpacity: s.opacity,
-    };
-    if (s.kind === 'rectangle') page.drawRectangle({ x, y, width, height, ...paint });
-    else page.drawEllipse({ x: x + width / 2, y: y + height / 2, xScale: width / 2, yScale: height / 2, ...paint });
+    recorder?.begin(page);
+    await drawShape(page, pdfjsDoc, s, renderScale, rotation);
+    recorder?.end(page, 'shape', s);
   }
+}
+
+async function drawShape(
+  page: PDFPage,
+  pdfjsDoc: PdfDocument,
+  s: PlacedShape,
+  renderScale: number,
+  rotation: number,
+): Promise<void> {
+  const pdfjsPage = await pdfjsDoc.getPage(s.page);
+  const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: getTotalRotation(pdfjsPage, rotation) });
+  const toPdf = (x: number, y: number) => viewport.convertToPdfPoint(x, y) as Point;
+  const thickness = s.strokeWidth / renderScale;
+  const stroke = hexToRgb(s.stroke);
+
+  if (s.kind === 'line' || s.kind === 'arrow') {
+    if (thickness <= 0) return;
+    const { start, end, head } = lineGeometry(s);
+    for (const [a, b] of [[start, end], ...head]) {
+      const [x1, y1] = toPdf(...a);
+      const [x2, y2] = toPdf(...b);
+      page.drawLine({
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        thickness,
+        color: stroke,
+        opacity: s.opacity,
+        lineCap: LineCapStyle.Round,
+      });
+    }
+    return;
+  }
+
+  if (thickness <= 0 && !s.fill) return;
+  const box = insetBox(s);
+  const [x1, y1] = toPdf(box.x, box.y);
+  const [x2, y2] = toPdf(box.x + box.width, box.y + box.height);
+  const x = Math.min(x1, x2);
+  const y = Math.min(y1, y2);
+  const width = Math.abs(x2 - x1);
+  const height = Math.abs(y2 - y1);
+  const paint = {
+    color: s.fill ? hexToRgb(s.fill) : undefined,
+    opacity: s.opacity,
+    borderColor: thickness > 0 ? stroke : undefined,
+    borderWidth: thickness,
+    borderOpacity: s.opacity,
+  };
+  if (s.kind === 'rectangle') page.drawRectangle({ x, y, width, height, ...paint });
+  else page.drawEllipse({ x: x + width / 2, y: y + height / 2, xScale: width / 2, yScale: height / 2, ...paint });
 }
 
 /**
@@ -104,6 +118,7 @@ export async function drawImages(
   imageFor: (id: string) => StoredImage | undefined,
   renderScale: number,
   rotation: number,
+  recorder?: EditableItemRecorder,
 ): Promise<void> {
   // Each image is embedded once, however many times it's placed.
   const embedded = new Map<string, PDFImage>();
@@ -121,7 +136,9 @@ export async function drawImages(
     const totalRotation = getTotalRotation(pdfjsPage, rotation);
     const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: totalRotation });
     const [x, y] = viewport.convertToPdfPoint(placed.x, placed.y + placed.height);
-    pdfDoc.getPage(placed.page - 1).drawImage(image, {
+    const page = pdfDoc.getPage(placed.page - 1);
+    recorder?.begin(page);
+    page.drawImage(image, {
       x,
       y,
       width: placed.width / renderScale,
@@ -129,5 +146,6 @@ export async function drawImages(
       rotate: degrees(totalRotation),
       opacity: placed.opacity,
     });
+    recorder?.end(page, 'image', placed, image.ref);
   }
 }

@@ -105,7 +105,7 @@ async function canvasToJpeg(canvas: OffscreenCanvas | HTMLCanvasElement, quality
 }
 
 /** Decodes an image XObject to something drawable, or null if it isn't a kind this handles. */
-async function decodeImage(stream: PDFRawStream): Promise<ImageBitmap | null> {
+export async function decodeImage(stream: PDFRawStream): Promise<ImageBitmap | null> {
   const { dict } = stream;
   const width = numberOf(dict, 'Width');
   const height = numberOf(dict, 'Height');

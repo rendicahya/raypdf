@@ -13,7 +13,10 @@ import { headerFooterDate, pageLabels, type HeaderFooterSettings } from './heade
 import { drawPageWatermark, type PageWatermarkSettings } from './pageWatermark';
 import { applyProtection, loadEditablePdf, type SaveProtection } from './password';
 import { drawImages, drawShapes } from './shapes';
+import { EditableItemRecorder, markEditableItems, removeEditableItems } from './editableItems';
 import { imageFor } from '../../stores/images';
+import { keepItemsEditable } from '../../stores/exportOptions';
+import { get } from 'svelte/store';
 import type {
   PdfDocumentState,
   PlacedComment,
@@ -65,6 +68,8 @@ export interface ExportParams {
   headerFooter?: HeaderFooterSettings | null;
   /** Text or a picture stamped across the pages, if any (see `lib/pdf/pageWatermark.ts`). */
   pageWatermark?: PageWatermarkSettings | null;
+  /** Keep placed items editable when the file is opened in RayPDF again (see `lib/pdf/editableItems.ts`). Defaults to the user's export setting. */
+  keepEditable?: boolean;
 }
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
@@ -151,10 +156,14 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
     pageNumbers = null,
     headerFooter = null,
     pageWatermark = null,
+    keepEditable = get(keepItemsEditable),
   } = params;
 
   const pdfBytes = await blobToBytes(pdfFile);
   const pdfDoc = await loadEditablePdf(pdfBytes);
+  // Without it, records kept from an earlier save go too, so the file is plainly flat.
+  const recorder = keepEditable ? new EditableItemRecorder(pdfDoc, renderScale) : undefined;
+  if (!keepEditable) removeEditableItems(pdfDoc);
 
   // Flatten any redacted pages — including pages with signatures — before
   // drawing signatures, so each signature ends up as a normal image on top of
@@ -164,8 +173,8 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
   // The watermark goes right over the page's own content, under everything placed on it.
   if (pageWatermark) await drawPageWatermark(pdfDoc, pdfjsDoc, pageWatermark, imageFor, rotation);
 
-  if (images.length > 0) await drawImages(pdfDoc, pdfjsDoc, images, imageFor, renderScale, rotation);
-  if (shapes.length > 0) await drawShapes(pdfDoc, pdfjsDoc, shapes, renderScale, rotation);
+  if (images.length > 0) await drawImages(pdfDoc, pdfjsDoc, images, imageFor, renderScale, rotation, recorder);
+  if (shapes.length > 0) await drawShapes(pdfDoc, pdfjsDoc, shapes, renderScale, rotation, recorder);
 
   if (signatureFor && placements.length > 0) {
     // Each distinct signature image is watermarked and embedded once, then
@@ -205,7 +214,9 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       const y = cy - (width / 2) * Math.sin(t) - (height / 2) * Math.cos(t);
 
       const targetPage = pdfDoc.getPage(placement.page - 1); // pdf-lib pages are 0-indexed
+      recorder?.begin(targetPage);
       targetPage.drawImage(pngImage, { x, y, width, height, rotate: degrees(turn) });
+      recorder?.end(targetPage, 'signature', placement);
     }
   }
 
@@ -241,6 +252,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       const pxToPt = t.width > 0 ? boxWidth / t.width : renderScale;
 
       const targetPage = pdfDoc.getPage(t.page - 1);
+      recorder?.begin(targetPage);
       drawTextBox(targetPage, {
         text: t.text,
         x,
@@ -260,8 +272,10 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
         script: t.script,
         align: t.align,
       });
+      recorder?.end(targetPage, 'text', t);
     }
   }
+  recorder?.finish();
 
   if (pageNumbers || headerFooter) {
     const date = headerFooterDate();
@@ -327,6 +341,7 @@ async function exportWithPdfjs(params: ExportParams, pdfjsDoc: PdfDocument): Pro
       onlyPages.map((p) => p - 1),
     );
     copiedPages.forEach((page) => subsetDoc.addPage(page));
+    markEditableItems(subsetDoc);
     embedVerificationRecord(subsetDoc, verificationRecord);
     applyProtection(subsetDoc, protection);
     return subsetDoc.save(SAVE_OPTIONS);
@@ -644,6 +659,7 @@ export async function exportMergedPdf(
     copiedPages.forEach((page) => merged.addPage(page));
   }
 
+  markEditableItems(merged);
   // Applied to the merged document itself, not the per-source exports above —
   // those still need to be readable (unencrypted) for `copyPages` to read them.
   applyProtection(merged, protection);

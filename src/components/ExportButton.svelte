@@ -4,6 +4,7 @@
   import { currentWatermarkOptions } from '../stores/watermark';
   import {
     stripEmbeddedScripts,
+    keepItemsEditable,
     securePdf,
     passwordProtect,
     savePassword,
@@ -731,6 +732,16 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       </button>
 
       <div class="mt-1 flex flex-col gap-2 border-t border-neutral-200 px-3 py-2 pt-3 dark:border-neutral-700">
+        <label class="flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+          <input
+            type="checkbox"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-neutral-300 text-blue-600
+              focus:ring-blue-500 dark:border-neutral-600"
+            bind:checked={$keepItemsEditable}
+          />
+          <span>Keep signatures, text, shapes, and images editable when reopened in RayPDF</span>
+        </label>
+
         <label class="flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">
           <input
             type="checkbox"
