@@ -24,6 +24,20 @@ export function lineGeometry(s: Pick<PlacedShape, 'x' | 'y' | 'width' | 'height'
   return { start, end, head: [[wing(spread), end], [wing(-spread), end]] };
 }
 
+/**
+ * Turns a point by the shape's angle (degrees clockwise as shown, y down)
+ * about the centre of its box: how a turned shape's geometry is placed.
+ */
+export function shapeTurner(s: Pick<PlacedShape, 'x' | 'y' | 'width' | 'height' | 'angle'>): (p: Point) => Point {
+  if (!s.angle) return (p) => p;
+  const a = (s.angle * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  const cx = s.x + s.width / 2;
+  const cy = s.y + s.height / 2;
+  return ([x, y]) => [cx + (x - cx) * cos - (y - cy) * sin, cy + (x - cx) * sin + (y - cy) * cos];
+}
+
 /** A rectangle's or ellipse's outline sits inside its box, so a thick outline doesn't grow it. */
 export function insetBox(s: Pick<PlacedShape, 'x' | 'y' | 'width' | 'height' | 'strokeWidth'>) {
   const half = s.strokeWidth / 2;
@@ -65,7 +79,8 @@ async function drawShape(
 ): Promise<void> {
   const pdfjsPage = await pdfjsDoc.getPage(s.page);
   const viewport = pdfjsPage.getViewport({ scale: renderScale, rotation: getTotalRotation(pdfjsPage, rotation) });
-  const toPdf = (x: number, y: number) => viewport.convertToPdfPoint(x, y) as Point;
+  const turn = shapeTurner(s);
+  const toPdf = (x: number, y: number) => viewport.convertToPdfPoint(...turn([x, y])) as Point;
   const thickness = s.strokeWidth / renderScale;
   const stroke = hexToRgb(s.stroke);
 
@@ -89,12 +104,6 @@ async function drawShape(
 
   if (thickness <= 0 && !s.fill) return;
   const box = insetBox(s);
-  const [x1, y1] = toPdf(box.x, box.y);
-  const [x2, y2] = toPdf(box.x + box.width, box.y + box.height);
-  const x = Math.min(x1, x2);
-  const y = Math.min(y1, y2);
-  const width = Math.abs(x2 - x1);
-  const height = Math.abs(y2 - y1);
   const paint = {
     color: s.fill ? hexToRgb(s.fill) : undefined,
     opacity: s.opacity,
@@ -102,6 +111,43 @@ async function drawShape(
     borderWidth: thickness,
     borderOpacity: s.opacity,
   };
+
+  if (s.angle) {
+    // A turned shape is drawn as a path, every point turned and mapped to the
+    // page. Both are affine, so the ellipse's Bézier arcs stay exact.
+    // drawSvgPath flips y, hence the minus.
+    const pt = (x: number, y: number) => {
+      const [px, py] = toPdf(x, y);
+      return `${px},${-py}`;
+    };
+    const { x: l, y: t, width: w, height: h } = box;
+    let d: string;
+    if (s.kind === 'rectangle') {
+      d = `M${pt(l, t)} L${pt(l + w, t)} L${pt(l + w, t + h)} L${pt(l, t + h)} Z`;
+    } else {
+      // Four quarter arcs, the usual cubic approximation of a circle.
+      const k = 0.5523;
+      const cx = l + w / 2;
+      const cy = t + h / 2;
+      const rx = w / 2;
+      const ry = h / 2;
+      d =
+        `M${pt(cx + rx, cy)} ` +
+        `C${pt(cx + rx, cy + ry * k)} ${pt(cx + rx * k, cy + ry)} ${pt(cx, cy + ry)} ` +
+        `C${pt(cx - rx * k, cy + ry)} ${pt(cx - rx, cy + ry * k)} ${pt(cx - rx, cy)} ` +
+        `C${pt(cx - rx, cy - ry * k)} ${pt(cx - rx * k, cy - ry)} ${pt(cx, cy - ry)} ` +
+        `C${pt(cx + rx * k, cy - ry)} ${pt(cx + rx, cy - ry * k)} ${pt(cx + rx, cy)} Z`;
+    }
+    page.drawSvgPath(d, { x: 0, y: 0, ...paint });
+    return;
+  }
+
+  const [x1, y1] = toPdf(box.x, box.y);
+  const [x2, y2] = toPdf(box.x + box.width, box.y + box.height);
+  const x = Math.min(x1, x2);
+  const y = Math.min(y1, y2);
+  const width = Math.abs(x2 - x1);
+  const height = Math.abs(y2 - y1);
   if (s.kind === 'rectangle') page.drawRectangle({ x, y, width, height, ...paint });
   else page.drawEllipse({ x: x + width / 2, y: y + height / 2, xScale: width / 2, yScale: height / 2, ...paint });
 }

@@ -2754,6 +2754,8 @@
         $selectedShapeId = s.id;
         openShapeTool();
       }}
+      angle={s.angle}
+      onRotate={(angle) => editorStore.updateShape(s.id, { angle })}
     >
       <ShapeGraphic shape={s} />
     </PlacedBox>

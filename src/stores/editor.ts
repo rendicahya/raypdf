@@ -149,6 +149,8 @@ export interface PlacedShape {
   /** Where a line starts: the right (flipX) or bottom (flipY) edge instead of the left or top. Arrows point to the other end. */
   flipX: boolean;
   flipY: boolean;
+  /** Degrees clockwise as shown, about the box's centre (the box itself is unturned). Unset for upright. */
+  angle?: number;
 }
 
 /** An image placed on the page, in canvas pixel coordinates. The image itself is in stores/images.ts. */

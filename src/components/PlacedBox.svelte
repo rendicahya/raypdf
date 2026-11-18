@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { isMultiSelectClick } from '../stores/itemSelection';
+  import { tooltip } from '../lib/utils/tooltip';
 
   // A placed item on a page that can be selected, dragged, resized from its
   // corner handle, nudged with the arrow keys, and removed (its × or
@@ -35,6 +36,10 @@
     onRemove: () => void;
     /** Double-click, e.g. to open the item's options panel. */
     onDoubleClick?: () => void;
+    /** Degrees clockwise about the box's centre; the box itself stays unturned. */
+    angle?: number;
+    /** Given, the box shows a rotate handle above it while selected. */
+    onRotate?: (angle: number | undefined) => void;
     children: Snippet;
   }
 
@@ -53,13 +58,16 @@
     onChange,
     onRemove,
     onDoubleClick,
+    angle,
+    onRotate,
     children,
   }: Props = $props();
 
   const KEYBOARD_MOVE_STEP = 10;
 
   let el: HTMLDivElement;
-  let gesture: { kind: 'move' | 'resize'; pointerX: number; pointerY: number; start: Geometry } | null = null;
+  let gesture: { kind: 'move' | 'resize'; pointerX: number; pointerY: number; start: Geometry; angle?: number } | null =
+    null;
 
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
 
@@ -76,7 +84,7 @@
     if (e.button !== 0) return;
     e.stopPropagation();
     onSelect();
-    gesture = { kind, pointerX: e.clientX, pointerY: e.clientY, start: { ...box } };
+    gesture = { kind, pointerX: e.clientX, pointerY: e.clientY, start: { ...box }, angle };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -93,18 +101,84 @@
       });
       return;
     }
-    let width = clamp(start.width + dx, 0, page.width - start.x);
-    let height = clamp(start.height + dy, 0, page.height - start.y);
+    // A turned box grows along its own sides, from its turned top-left
+    // corner, and the page only limits it to the page's own size.
+    const a = ((gesture.angle ?? 0) * Math.PI) / 180;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    const maxWidth = a ? page.width : page.width - start.x;
+    const maxHeight = a ? page.height : page.height - start.y;
+    let width = clamp(start.width + dx * cos + dy * sin, 0, maxWidth);
+    let height = clamp(start.height - dx * sin + dy * cos, 0, maxHeight);
     if (keepAspect && start.width > 0 && start.height > 0) {
       const aspect = start.width / start.height;
       height = width / aspect;
-      if (height > page.height - start.y) {
-        height = page.height - start.y;
+      if (height > maxHeight) {
+        height = maxHeight;
         width = height * aspect;
       }
     }
     if (Math.max(width, height) < minSize) return;
-    onChange({ width, height });
+    if (!a) {
+      onChange({ width, height });
+      return;
+    }
+    // Keep the turned top-left corner where it is: from the old centre to
+    // that corner, then on to the new centre.
+    const turn = (x: number, y: number) => [x * cos - y * sin, x * sin + y * cos];
+    const [ox, oy] = turn(-start.width / 2, -start.height / 2);
+    const [nx, ny] = turn(width / 2, height / 2);
+    const cx = start.x + start.width / 2 + ox + nx;
+    const cy = start.y + start.height / 2 + oy + ny;
+    onChange({ width, height, x: cx - width / 2, y: cy - height / 2 });
+  }
+
+  // Turning with the handle above the box: it points from the centre to the
+  // pointer, snapping to upright and the quarter turns when close, and to
+  // steps of 15° with Shift.
+  const ROTATE_SNAP = 5;
+  const KEYBOARD_ROTATE_STEP = 15;
+  let rotateCentre: { x: number; y: number } | null = null;
+
+  function normalizedAngle(value: number): number | undefined {
+    const a = ((Math.round(value) % 360) + 360) % 360;
+    return a === 0 ? undefined : a;
+  }
+
+  function onRotatePointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    // A turned element's bounding box still has the same centre.
+    const rect = el.getBoundingClientRect();
+    rotateCentre = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onRotatePointerMove(e: PointerEvent) {
+    if (!rotateCentre || !onRotate) return;
+    // 0° is the handle straight above the centre.
+    let value = (Math.atan2(e.clientY - rotateCentre.y, e.clientX - rotateCentre.x) * 180) / Math.PI + 90;
+    if (e.shiftKey) value = Math.round(value / 15) * 15;
+    else {
+      const quarter = Math.round(value / 90) * 90;
+      if (Math.abs(value - quarter) < ROTATE_SNAP) value = quarter;
+    }
+    onRotate(normalizedAngle(value));
+  }
+
+  function onRotatePointerUp(e: PointerEvent) {
+    if (!rotateCentre) return;
+    rotateCentre = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  }
+
+  function onRotateKeydown(e: KeyboardEvent) {
+    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
+    e.preventDefault();
+    // Not also a move of the whole box.
+    e.stopPropagation();
+    const step = e.shiftKey ? 1 : KEYBOARD_ROTATE_STEP;
+    onRotate?.(normalizedAngle((angle ?? 0) + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? step : -step)));
   }
 
   function onPointerUp(e: PointerEvent) {
@@ -152,6 +226,7 @@
   style:top="{box.y - pad}px"
   style:width="{box.width + pad * 2}px"
   style:height="{box.height + pad * 2}px"
+  style:transform={angle ? `rotate(${angle}deg)` : undefined}
   onpointerdown={(e) => begin(e, 'move')}
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}
@@ -180,6 +255,31 @@
       onpointerup={onPointerUp}
       onpointercancel={onPointerUp}
     ></div>
+
+    {#if onRotate}
+      <div class="pointer-events-none absolute -top-5 left-1/2 h-5 w-px -translate-x-1/2 bg-blue-500"></div>
+      <div
+        role="slider"
+        tabindex="0"
+        aria-label="Rotate"
+        aria-valuemin={0}
+        aria-valuemax={359}
+        aria-valuenow={angle ?? 0}
+        aria-valuetext="{angle ?? 0} degrees"
+        use:tooltip={'Rotate (drag; Shift snaps to 15°). Double-click to straighten'}
+        class="absolute -top-7 left-1/2 h-3.5 w-3.5 -translate-x-1/2 cursor-grab touch-none rounded-full border
+          border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
+        onpointerdown={onRotatePointerDown}
+        onpointermove={onRotatePointerMove}
+        onpointerup={onRotatePointerUp}
+        onpointercancel={onRotatePointerUp}
+        ondblclick={(e) => {
+          e.stopPropagation();
+          onRotate(undefined);
+        }}
+        onkeydown={onRotateKeydown}
+      ></div>
+    {/if}
 
     <button
       type="button"

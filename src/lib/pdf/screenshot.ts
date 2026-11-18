@@ -278,6 +278,12 @@ function drawShape(ctx: CanvasRenderingContext2D, s: PlacedShape): void {
   ctx.strokeStyle = s.stroke;
   ctx.lineWidth = s.strokeWidth;
   ctx.lineCap = 'round';
+  if (s.angle) {
+    // Turned about the box's centre, as on screen.
+    ctx.translate(s.x + s.width / 2, s.y + s.height / 2);
+    ctx.rotate((s.angle * Math.PI) / 180);
+    ctx.translate(-(s.x + s.width / 2), -(s.y + s.height / 2));
+  }
   ctx.beginPath();
   if (s.kind === 'line' || s.kind === 'arrow') {
     const { start, end, head } = lineGeometry(s);
