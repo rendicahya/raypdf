@@ -3039,7 +3039,7 @@
             textToolMode.set(false);
           }}
           class="h-full w-full resize-none border border-dashed border-blue-400 bg-white/70 p-0
-            outline-none dark:bg-neutral-900/70"
+            outline-none"
           style:font-family={FONT_FAMILY_CSS[t.fontFamily]}
           style:font-size="{t.script === 'normal' ? t.fontSize : t.fontSize * SCRIPT_SCALE}px"
           style:font-weight={t.bold ? 700 : 400}
