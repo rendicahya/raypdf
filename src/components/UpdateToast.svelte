@@ -1,7 +1,22 @@
 <script lang="ts">
   import { useRegisterSW } from 'virtual:pwa-register/svelte';
 
-  const { needRefresh, updateServiceWorker } = useRegisterSW();
+  /** How often an open tab asks the server for a newer version. */
+  const UPDATE_CHECK_MS = 10_000;
+
+  const { needRefresh, updateServiceWorker } = useRegisterSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      const check = () => {
+        // Skip while offline, while a new version is already installing, or in a background tab.
+        if (!navigator.onLine || registration.installing || document.visibilityState !== 'visible') return;
+        registration.update().catch(() => {});
+      };
+      setInterval(check, UPDATE_CHECK_MS);
+      // Coming back to the tab checks straight away instead of waiting for the next tick.
+      document.addEventListener('visibilitychange', check);
+    },
+  });
 </script>
 
 {#if $needRefresh}
