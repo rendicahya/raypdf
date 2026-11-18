@@ -33,6 +33,8 @@
     onDeselect: () => void;
     onChange: (geometry: Partial<Geometry>) => void;
     onRemove: () => void;
+    /** Double-click, e.g. to open the item's options panel. */
+    onDoubleClick?: () => void;
     children: Snippet;
   }
 
@@ -50,6 +52,7 @@
     onDeselect,
     onChange,
     onRemove,
+    onDoubleClick,
     children,
   }: Props = $props();
 
@@ -154,6 +157,11 @@
   onpointerup={onPointerUp}
   onpointercancel={onPointerUp}
   onfocus={onSelect}
+  ondblclick={(e) => {
+    if (!onDoubleClick) return;
+    e.stopPropagation();
+    onDoubleClick();
+  }}
   onkeydown={onKeydown}
 >
   <div class="pointer-events-none absolute" style:inset="{pad}px">

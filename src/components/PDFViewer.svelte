@@ -110,7 +110,7 @@
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
   import { openSignatureTool } from '../stores/signatureTool';
-  import { openTextTool } from '../stores/toolPanel';
+  import { openTextTool, openShapeTool } from '../stores/toolPanel';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import {
     watermarkText,
@@ -2167,6 +2167,14 @@
     if (shape) {
       $selectedShapeId = shape.id;
       return [
+        {
+          label: `Edit ${SHAPE_LABELS[shape.kind].toLowerCase()}`,
+          icon: MENU_ICONS.edit,
+          onSelect: () => {
+            $selectedShapeId = shape.id;
+            openShapeTool();
+          },
+        },
         duplicate({ kind: 'shape', id: shape.id }),
         {
           ...deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
@@ -2754,6 +2762,10 @@
       onRemove={() => {
         editorStore.removeShape(s.id);
         $selectedShapeId = null;
+      }}
+      onDoubleClick={() => {
+        $selectedShapeId = s.id;
+        openShapeTool();
       }}
     >
       <ShapeGraphic shape={s} />

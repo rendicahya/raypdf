@@ -52,27 +52,31 @@ export const activePanelTool = derived(
                         : null,
 );
 
-/**
- * Turns the Add Text tool on (and every other tool off) and shows its panel,
- * e.g. when a placed text box is double-clicked to edit it.
- */
-export function openTextTool() {
-  for (const tool of [
-    signatureToolMode,
-    redactMode,
-    commentToolMode,
-    textSelectMode,
-    screenshotToolMode,
-    pageNumbersToolMode,
-    pageWatermarkToolMode,
-    shapeToolMode,
-    cropToolMode,
-  ]) {
-    tool.set(false);
-  }
-  textToolMode.set(true);
+const TOOL_MODES = [
+  signatureToolMode,
+  redactMode,
+  textToolMode,
+  commentToolMode,
+  textSelectMode,
+  screenshotToolMode,
+  pageNumbersToolMode,
+  pageWatermarkToolMode,
+  shapeToolMode,
+  cropToolMode,
+];
+
+/** Turns one tool on (and every other tool off) and shows its panel. */
+function openPanelTool(mode: (typeof TOOL_MODES)[number]) {
+  for (const tool of TOOL_MODES) if (tool !== mode) tool.set(false);
+  mode.set(true);
   toolPanelOpen.set(true);
 }
+
+/** Opens Add Text and its panel, e.g. when a placed text box is double-clicked to edit it. */
+export const openTextTool = () => openPanelTool(textToolMode);
+
+/** Opens Shapes and its panel, e.g. when a placed shape is double-clicked to restyle it. */
+export const openShapeTool = () => openPanelTool(shapeToolMode);
 
 /** The tool whose options the right-hand panel is showing right now, if any. */
 export const shownPanelTool = derived([activePanelTool, toolPanelOpen], ([tool, open]) =>
