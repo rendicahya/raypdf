@@ -68,6 +68,7 @@
   import { cropToolMode } from '../stores/cropTool';
   import CropOverlay from './CropOverlay.svelte';
   import { addImageFile, imageFor, isImageFile, pendingImage, IMAGE_ACCEPT } from '../stores/images';
+  import { isDocumentFile } from '../stores/addDocuments';
   import { applyVisibleWatermark } from '../lib/watermark/visible';
   import {
     screenshotToolMode,
@@ -1005,13 +1006,22 @@
   function onDragOver(e: DragEvent) {
     if (isPageDrag(e)) return;
     e.preventDefault();
-    isDragOver = true;
+    isDragOver = !isDocumentDrag(e);
+  }
+
+  // A PDF being dragged in from outside opens as a tab (App handles that), so
+  // the page doesn't light up for it as it does for a signature or picture.
+  function isDocumentDrag(e: DragEvent) {
+    return Array.from(e.dataTransfer?.items ?? []).some((item) => item.kind === 'file' && item.type === 'application/pdf');
   }
 
   function onDrop(e: DragEvent) {
     if (isPageDrag(e)) return;
-    e.preventDefault();
     isDragOver = false;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    // Documents are left to bubble up to App, which opens each in a tab.
+    if (files.some(isDocumentFile)) return;
+    e.preventDefault();
     // The signature panel tags each dragged signature with its id. Checked
     // first: Chrome also attaches a dragged <img> as a file, which would
     // otherwise be added as a plain image, without the watermark.
@@ -1020,12 +1030,9 @@
       placeSignatureAt(e, signatureId);
       return;
     }
-    const imageFile = Array.from(e.dataTransfer?.files ?? []).find(isImageFile);
-    if (imageFile) {
-      addImageAt(imageFile, { clientX: e.clientX, clientY: e.clientY });
-      return;
-    }
-    placeSignatureAt(e);
+    // Anything else (a .txt, a zip, text from another app) is nothing to place.
+    const imageFile = files.find(isImageFile);
+    if (imageFile) addImageAt(imageFile, { clientX: e.clientX, clientY: e.clientY });
   }
 
   function onCanvasMouseMove(e: PointerEvent) {

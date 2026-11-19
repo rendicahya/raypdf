@@ -34,6 +34,7 @@
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf, isLockedPdf } from './lib/pdf/docCache';
   import { DOCUMENT_ACCEPT, toPdfFiles } from './lib/pdf/importFiles';
+  import { addDocumentFiles, isDocumentFile } from './stores/addDocuments';
   import DriveButton from './components/DriveButton.svelte';
   import UnlockPdf from './components/UnlockPdf.svelte';
 
@@ -149,6 +150,10 @@
   }
 
   function onPageDragOver(e: DragEvent) {
+    if (isEditorFileDrag(e)) {
+      e.preventDefault();
+      return;
+    }
     if (!isFileDrag(e)) return;
     e.preventDefault();
   }
@@ -159,7 +164,20 @@
     if (pageDragDepth === 0) isPageDragging = false;
   }
 
+  // In the editor, files dropped anywhere (a page included, which leaves
+  // documents to this) open as tabs of their own. Every file drag is taken,
+  // so a stray drop never makes the browser leave the editor to open the file.
+  function isEditorFileDrag(e: DragEvent): boolean {
+    return readyForEditor && !!e.dataTransfer?.types.includes('Files');
+  }
+
   async function onPageDrop(e: DragEvent) {
+    if (isEditorFileDrag(e)) {
+      e.preventDefault();
+      const documents = Array.from(e.dataTransfer?.files ?? []).filter(isDocumentFile);
+      if (documents.length > 0) await addDocumentFiles(documents);
+      return;
+    }
     if (!isFileDrag(e)) return;
     e.preventDefault();
     pageDragDepth = 0;

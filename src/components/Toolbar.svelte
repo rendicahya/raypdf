@@ -5,49 +5,17 @@
   import DocumentTabs from './DocumentTabs.svelte';
   import ExportButton from './ExportButton.svelte';
   import DriveButton from './DriveButton.svelte';
-  import { editorStore } from '../stores/editor';
   import { openSearch } from '../stores/search';
-  import { isFileAccepted, dedupeFiles, formatFileSize, MAX_PDF_SIZE_BYTES } from '../lib/utils/fileValidation';
-  import { DOCUMENT_ACCEPT, toPdfFiles } from '../lib/pdf/importFiles';
+  import { addDocumentFiles, addDocumentsMessage, showAddDocumentsMessage } from '../stores/addDocuments';
+  import { DOCUMENT_ACCEPT } from '../lib/pdf/importFiles';
 
   const findShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘F' : 'Ctrl+F';
-
-  let addPdfsError: string | null = $state(null);
-  let errorTimeout: ReturnType<typeof setTimeout> | undefined;
-
-  function showError(message: string | null) {
-    clearTimeout(errorTimeout);
-    addPdfsError = message;
-    if (message) errorTimeout = setTimeout(() => (addPdfsError = null), 4000);
-  }
 
   async function onAddDocument(e: Event) {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
-    await addFiles(files);
-  }
-
-  async function addFiles(files: File[]) {
-    const typeOk = files.filter((f) => isFileAccepted(f, DOCUMENT_ACCEPT));
-    const tooLarge = typeOk.filter((f) => f.size > MAX_PDF_SIZE_BYTES);
-    const sized = typeOk.filter((f) => f.size <= MAX_PDF_SIZE_BYTES);
-    const { pdfs, messages } = await toPdfFiles(sized);
-    const { unique, duplicates } = dedupeFiles(
-      pdfs,
-      $editorStore.documents.map((d) => d.file),
-    );
-
-
-    if (tooLarge.length > 0) {
-      messages.push(`Skipped (over ${formatFileSize(MAX_PDF_SIZE_BYTES)}): ${tooLarge.map((f) => f.name).join(', ')}`);
-    }
-    if (duplicates.length > 0) {
-      messages.push(`Already added: ${duplicates.map((f) => f.name).join(', ')}`);
-    }
-    showError(messages.length > 0 ? messages.join(' ') : null);
-
-    if (unique.length > 0) editorStore.addPdfs(unique);
+    await addDocumentFiles(files);
   }
 </script>
 
@@ -78,7 +46,7 @@
         </svg>
         <input type="file" accept={DOCUMENT_ACCEPT} multiple class="hidden" onchange={onAddDocument} />
       </label>
-      <DriveButton variant="icon" onFiles={addFiles} onError={showError} />
+      <DriveButton variant="icon" onFiles={addDocumentFiles} onError={showAddDocumentsMessage} />
     </div>
 
     <div class="ml-auto flex shrink-0 items-center gap-1 pb-2">
@@ -103,9 +71,9 @@
     </div>
   </div>
 
-  {#if addPdfsError}
+  {#if $addDocumentsMessage}
     <p class="border-t border-neutral-200 px-4 py-1 text-xs text-red-600 dark:border-neutral-800 dark:text-red-400">
-      {addPdfsError}
+      {$addDocumentsMessage}
     </p>
   {/if}
 </header>
