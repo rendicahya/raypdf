@@ -1619,8 +1619,27 @@
     movingRedactionId = null;
   }
 
-  // Resize via the corner handle — a redaction box is a plain rectangle, so
-  // unlike the signature's resize this doesn't need to preserve an aspect ratio.
+  // Holding Ctrl (Cmd on a Mac) while resizing keeps the box's proportions
+  // from when the drag began, as far as the page allows.
+  function withAspect(
+    e: PointerEvent,
+    start: { width: number; height: number },
+    width: number,
+    height: number,
+    maxHeight: number,
+  ): { width: number; height: number } {
+    if (!(e.ctrlKey || e.metaKey) || start.width <= 0 || start.height <= 0) return { width, height };
+    const aspect = start.width / start.height;
+    height = width / aspect;
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspect;
+    }
+    return { width, height };
+  }
+
+  // Resize via the corner handle: a redaction box is a plain rectangle, so
+  // it keeps its proportions only while Ctrl is held.
   const REDACT_MIN_SIZE = 12;
   let resizingRedactionId: string | null = null;
   let redactResizeStart: (RedactionBox & { pointerX: number; pointerY: number }) | null = null;
@@ -1647,7 +1666,7 @@
       REDACT_MIN_SIZE,
       rect.height - redactResizeStart.y,
     );
-    editorStore.updateRedaction(id, { width, height });
+    editorStore.updateRedaction(id, withAspect(e, redactResizeStart, width, height, rect.height - redactResizeStart.y));
   }
 
   function onRedactionResizePointerUp(e: PointerEvent) {
@@ -1844,7 +1863,7 @@
       TEXT_MIN_HEIGHT,
       rect.height - textResizeStart.y,
     );
-    editorStore.updateText(id, { width, height });
+    editorStore.updateText(id, withAspect(e, textResizeStart, width, height, rect.height - textResizeStart.y));
   }
 
   function onTextResizePointerUp(e: PointerEvent) {
@@ -2150,8 +2169,17 @@
     const shape = shapeId ? doc.shapes.find((s) => s.id === shapeId) : undefined;
     if (shape) {
       $selectedShapeId = shape.id;
-      // No Edit item: a shape is edited in place (double-click opens its style).
+      // No Edit item: a shape is edited in place. Properties (or a
+      // double-click) opens its style in the side panel.
       return [
+        {
+          label: 'Properties',
+          icon: MENU_ICONS.properties,
+          onSelect: () => {
+            $selectedShapeId = shape.id;
+            openShapeTool();
+          },
+        },
         duplicate({ kind: 'shape', id: shape.id }),
         {
           ...deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
@@ -2231,6 +2259,14 @@
             $selectedTextId = text.id;
             openTextTool();
             startEditingText(text.id, text.text);
+          },
+        },
+        {
+          label: 'Properties',
+          icon: MENU_ICONS.properties,
+          onSelect: () => {
+            $selectedTextId = text.id;
+            openTextTool();
           },
         },
         duplicate({ kind: 'text', id: text.id }),

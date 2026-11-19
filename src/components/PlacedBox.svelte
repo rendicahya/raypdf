@@ -209,7 +209,8 @@
     const maxHeight = a ? page.height : page.height - start.y;
     let width = clamp(start.width + dx * cos + dy * sin, 0, maxWidth);
     let height = clamp(start.height - dx * sin + dy * cos, 0, maxHeight);
-    if (keepAspect && start.width > 0 && start.height > 0) {
+    // Images always keep their proportions; anything else while Ctrl is held.
+    if ((keepAspect || e.ctrlKey || e.metaKey) && start.width > 0 && start.height > 0) {
       const aspect = start.width / start.height;
       height = width / aspect;
       if (height > maxHeight) {
