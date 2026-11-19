@@ -201,14 +201,27 @@
       return;
     }
     // A turned box grows along its own sides, from its turned top-left
-    // corner, and the page only limits it to the page's own size.
+    // corner, and the page only limits it to the page's own size. With
+    // Shift it grows from its centre instead: the opposite sides move too.
     const a = ((gesture.angle ?? 0) * Math.PI) / 180;
     const cos = Math.cos(a);
     const sin = Math.sin(a);
-    const maxWidth = a ? page.width : page.width - start.x;
-    const maxHeight = a ? page.height : page.height - start.y;
-    let width = clamp(start.width + dx * cos + dy * sin, 0, maxWidth);
-    let height = clamp(start.height - dx * sin + dy * cos, 0, maxHeight);
+    const fromCentre = e.shiftKey;
+    const grow = fromCentre ? 2 : 1;
+    const startCx = start.x + start.width / 2;
+    const startCy = start.y + start.height / 2;
+    const maxWidth = a
+      ? page.width
+      : fromCentre
+        ? 2 * Math.min(startCx, page.width - startCx)
+        : page.width - start.x;
+    const maxHeight = a
+      ? page.height
+      : fromCentre
+        ? 2 * Math.min(startCy, page.height - startCy)
+        : page.height - start.y;
+    let width = clamp(start.width + grow * (dx * cos + dy * sin), 0, maxWidth);
+    let height = clamp(start.height + grow * (-dx * sin + dy * cos), 0, maxHeight);
     // Images always keep their proportions; anything else while Ctrl is held.
     if ((keepAspect || e.ctrlKey || e.metaKey) && start.width > 0 && start.height > 0) {
       const aspect = start.width / start.height;
@@ -219,6 +232,10 @@
       }
     }
     if (Math.max(width, height) < minSize) return;
+    if (fromCentre) {
+      onChange({ width, height, x: startCx - width / 2, y: startCy - height / 2 });
+      return;
+    }
     if (!a) {
       onChange({ width, height });
       return;

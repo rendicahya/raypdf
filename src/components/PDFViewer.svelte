@@ -1128,8 +1128,14 @@
 
   // The new box for a resize toward `targetWidth`, with the corner across
   // from the handle (the top-left one, turned with the signature) kept in place.
-  function resizedFromCorner(origin: PlacedSignature, targetWidth: number) {
-    const { width, height } = clampedResize(targetWidth, origin);
+  // With `fromCentre` (Shift while dragging) the centre stays put instead.
+  function resizedFromCorner(origin: PlacedSignature, targetWidth: number, fromCentre = false) {
+    const { width, height } = clampedResize(targetWidth, origin, fromCentre);
+    if (fromCentre) {
+      const cx = origin.x + origin.width / 2;
+      const cy = origin.y + origin.height / 2;
+      return { width, height, x: cx - width / 2, y: cy - height / 2 };
+    }
     if (!origin.angle) return { width, height };
     const a = (origin.angle * Math.PI) / 180;
     const turn = (dx: number, dy: number) => [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
@@ -1144,17 +1150,33 @@
   // Shared by the pointer-drag and keyboard paths: grows/shrinks toward
   // `targetWidth` from `origin`'s position, preserving aspect ratio and
   // clamping so the signature never overflows the page or drops below MIN_SIZE.
-  function clampedResize(targetWidth: number, origin: PlacedSignature): { width: number; height: number } {
+  function clampedResize(
+    targetWidth: number,
+    origin: PlacedSignature,
+    fromCentre = false,
+  ): { width: number; height: number } {
     const rect = canvasEl.getBoundingClientRect();
     const aspect = origin.width / origin.height;
     // A turned signature grows from its turned corner, so the page edges
-    // only limit it to the page's own size.
+    // only limit it to the page's own size. Growing from the centre, the
+    // nearer edge does.
     const turned = !!origin.angle;
+    const cx = origin.x + origin.width / 2;
+    const cy = origin.y + origin.height / 2;
+    const maxWidth = turned
+      ? rect.width
+      : fromCentre
+        ? 2 * Math.min(cx, rect.width - cx)
+        : rect.width - origin.x;
+    const maxHeight = turned
+      ? rect.height
+      : fromCentre
+        ? 2 * Math.min(cy, rect.height - cy)
+        : rect.height - origin.y;
 
-    let width = clamp(targetWidth, MIN_SIZE, turned ? rect.width : rect.width - origin.x);
+    let width = clamp(targetWidth, MIN_SIZE, maxWidth);
     let height = width / aspect;
 
-    const maxHeight = turned ? rect.height : rect.height - origin.y;
     if (height > maxHeight) {
       height = maxHeight;
       width = height * aspect;
@@ -1181,7 +1203,8 @@
     // How far the pointer moved along the signature's own width, turned with it.
     const a = ((resizeStart.angle ?? 0) * Math.PI) / 180;
     const along = (e.clientX - resizeStart.pointerX) * Math.cos(a) + (e.clientY - resizeStart.pointerY) * Math.sin(a);
-    editorStore.updateSignature(id, resizedFromCorner(resizeStart, resizeStart.width + along));
+    const grow = e.shiftKey ? 2 : 1;
+    editorStore.updateSignature(id, resizedFromCorner(resizeStart, resizeStart.width + grow * along, e.shiftKey));
   }
 
   // Turn via the handle above the signature: it points from the centre to
@@ -1638,6 +1661,33 @@
     return { width, height };
   }
 
+  // Resizing a plain, unturned box by its bottom-right handle: it grows from
+  // its top-left corner, or from its centre while Shift is held (the
+  // opposite sides move too), and keeps its proportions while Ctrl is held.
+  function resizedBox(
+    e: PointerEvent,
+    start: { x: number; y: number; width: number; height: number; pointerX: number; pointerY: number },
+    minWidth: number,
+    minHeight: number,
+  ): { x: number; y: number; width: number; height: number } {
+    const rect = canvasEl.getBoundingClientRect();
+    const fromCentre = e.shiftKey;
+    const grow = fromCentre ? 2 : 1;
+    const cx = start.x + start.width / 2;
+    const cy = start.y + start.height / 2;
+    const maxWidth = fromCentre ? 2 * Math.min(cx, rect.width - cx) : rect.width - start.x;
+    const maxHeight = fromCentre ? 2 * Math.min(cy, rect.height - cy) : rect.height - start.y;
+    const sized = withAspect(
+      e,
+      start,
+      clamp(start.width + grow * (e.clientX - start.pointerX), minWidth, maxWidth),
+      clamp(start.height + grow * (e.clientY - start.pointerY), minHeight, maxHeight),
+      maxHeight,
+    );
+    if (!fromCentre) return { x: start.x, y: start.y, ...sized };
+    return { x: cx - sized.width / 2, y: cy - sized.height / 2, ...sized };
+  }
+
   // Resize via the corner handle: a redaction box is a plain rectangle, so
   // it keeps its proportions only while Ctrl is held.
   const REDACT_MIN_SIZE = 12;
@@ -1655,18 +1705,7 @@
 
   function onRedactionResizePointerMove(e: PointerEvent, id: string) {
     if (resizingRedactionId !== id || !redactResizeStart) return;
-    const rect = canvasEl.getBoundingClientRect();
-    const width = clamp(
-      redactResizeStart.width + (e.clientX - redactResizeStart.pointerX),
-      REDACT_MIN_SIZE,
-      rect.width - redactResizeStart.x,
-    );
-    const height = clamp(
-      redactResizeStart.height + (e.clientY - redactResizeStart.pointerY),
-      REDACT_MIN_SIZE,
-      rect.height - redactResizeStart.y,
-    );
-    editorStore.updateRedaction(id, withAspect(e, redactResizeStart, width, height, rect.height - redactResizeStart.y));
+    editorStore.updateRedaction(id, resizedBox(e, redactResizeStart, REDACT_MIN_SIZE, REDACT_MIN_SIZE));
   }
 
   function onRedactionResizePointerUp(e: PointerEvent) {
@@ -1852,18 +1891,7 @@
 
   function onTextResizePointerMove(e: PointerEvent, id: string) {
     if (resizingTextId !== id || !textResizeStart) return;
-    const rect = canvasEl.getBoundingClientRect();
-    const width = clamp(
-      textResizeStart.width + (e.clientX - textResizeStart.pointerX),
-      TEXT_MIN_WIDTH,
-      rect.width - textResizeStart.x,
-    );
-    const height = clamp(
-      textResizeStart.height + (e.clientY - textResizeStart.pointerY),
-      TEXT_MIN_HEIGHT,
-      rect.height - textResizeStart.y,
-    );
-    editorStore.updateText(id, withAspect(e, textResizeStart, width, height, rect.height - textResizeStart.y));
+    editorStore.updateText(id, resizedBox(e, textResizeStart, TEXT_MIN_WIDTH, TEXT_MIN_HEIGHT));
   }
 
   function onTextResizePointerUp(e: PointerEvent) {
