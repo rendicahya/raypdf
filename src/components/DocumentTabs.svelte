@@ -5,9 +5,51 @@
   import { clearCachedPdf } from '../lib/pdf/docCache';
   import { hasDocumentEdits } from '../lib/pdf/export';
   import { portal } from '../lib/utils/portal';
+  import { showAddDocumentsMessage } from '../stores/addDocuments';
 
   function selectDocument(id: string) {
     editorStore.setActiveDocument(id);
+  }
+
+  // ── Selecting several tabs ──────────────────────────────────────────────
+  // Ctrl/⌘-click adds or removes a tab, Shift-click selects a run of them,
+  // like browser tabs. Empty means just the active tab.
+  let picked = $state<string[]>([]);
+  let anchorId: string | null = null;
+
+  /** The selected tabs in tab order, the active one always among them. */
+  const selectedIds = $derived.by(() => {
+    const docs = $editorStore.documents;
+    const active = $activeDocument?.id;
+    const ids = docs.filter((d) => picked.includes(d.id) || d.id === active).map((d) => d.id);
+    return ids.length > 1 ? ids : [];
+  });
+
+  function onTabClick(e: MouseEvent, id: string) {
+    const ids = $editorStore.documents.map((d) => d.id);
+    if (e.shiftKey) {
+      const from = ids.indexOf(anchorId ?? $activeDocument?.id ?? id);
+      const to = ids.indexOf(id);
+      picked = from === -1 ? [id] : ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+      selectDocument(id);
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      const current = selectedIds.length > 0 ? selectedIds : [$activeDocument?.id ?? id];
+      if (current.includes(id)) {
+        if (current.length === 1) return;
+        picked = current.filter((p) => p !== id);
+        if (id === $activeDocument?.id) selectDocument(picked[0]);
+      } else {
+        picked = [...current, id];
+        selectDocument(id);
+      }
+      anchorId = id;
+      return;
+    }
+    picked = [];
+    anchorId = id;
+    selectDocument(id);
   }
 
   function onTabKeydown(e: KeyboardEvent, id: string) {
@@ -51,7 +93,7 @@
   }
 
   function onTabPointerDown(e: PointerEvent, id: string) {
-    if (e.button !== 0 || (e.target as Element).closest('button')) return;
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || (e.target as Element).closest('button')) return;
     pressedId = id;
     dragStartX = e.clientX;
     grabOffset = e.clientX - (e.currentTarget as HTMLElement).getBoundingClientRect().left;
@@ -184,9 +226,38 @@
     return idx === -1 ? [] : $editorStore.documents.slice(idx + 1).map((d) => d.id);
   });
 
+  /** The tabs the menu acts on: the selection when it was opened on one of them, otherwise just its own tab. */
+  const menuIds = $derived.by(() => {
+    const docId = menu ? menu!.docId : null;
+    if (!docId) return [];
+    return selectedIds.includes(docId) ? selectedIds : [docId];
+  });
+  const allIds = $derived($editorStore.documents.map((d) => d.id));
+
   function openMenu(e: MouseEvent, id: string) {
     e.preventDefault();
+    // Right-clicking outside the selection drops it, as browsers do.
+    if (!selectedIds.includes(id)) picked = [];
     menu = { x: e.clientX, y: e.clientY, docId: id };
+  }
+
+  let merging = $state(false);
+
+  async function mergeTabs(ids: string[]) {
+    if (merging || ids.length < 2) return;
+    merging = true;
+    try {
+      const mergedId = await editorStore.mergeDocuments(ids);
+      if (mergedId) {
+        ids.forEach(clearCachedPdf);
+        picked = [];
+        anchorId = mergedId;
+      }
+    } catch (e) {
+      showAddDocumentsMessage(e instanceof Error ? `Couldn't merge the tabs: ${e.message}` : "Couldn't merge the tabs.");
+    } finally {
+      merging = false;
+    }
   }
 
   function closeMenu() {
@@ -239,6 +310,8 @@
     'border-neutral-200 bg-neutral-100 text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100';
   const INACTIVE_TAB_CLASS =
     'border-neutral-200 text-neutral-500 hover:bg-neutral-100/60 dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800/60';
+  const PICKED_TAB_CLASS =
+    'border-neutral-200 bg-blue-50 text-blue-800 hover:bg-blue-100/70 dark:border-neutral-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-900/40';
   const MENU_ITEM_CLASS =
     'flex w-full items-center px-3 py-1.5 text-left text-xs text-neutral-700 transition-colors hover:bg-neutral-100 disabled:pointer-events-none disabled:opacity-40 dark:text-neutral-200 dark:hover:bg-neutral-800';
 </script>
@@ -253,19 +326,24 @@
   {#each $editorStore.documents as doc (doc.id)}
     {@const isActive = doc.id === $activeDocument?.id}
     {@const isDragging = doc.id === draggingId}
+    {@const isPicked = selectedIds.includes(doc.id)}
     <div
       animate:flip={{ duration: isDragging ? 0 : 150 }}
       data-tab-id={doc.id}
       role="tab"
       tabindex="0"
-      aria-selected={isActive}
-      title={$editorStore.documents.length > 1 ? `${doc.file.name} (drag to reorder)` : doc.file.name}
+      aria-selected={isActive || isPicked}
+      title={$editorStore.documents.length > 1
+        ? `${doc.file.name} (drag to reorder, Ctrl+click or Shift+click to select several)`
+        : doc.file.name}
       class="group flex min-w-0 max-w-[10rem] shrink-0 cursor-pointer touch-none select-none items-center gap-1.5
         rounded-t-lg border border-b-0 px-3 py-1.5 text-xs transition-colors
-        {isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS} {isDragging ? 'relative z-10 cursor-grabbing shadow-md' : ''}"
+        {isActive ? ACTIVE_TAB_CLASS : isPicked ? PICKED_TAB_CLASS : INACTIVE_TAB_CLASS}
+        {isPicked ? 'shadow-[inset_0_2px_0_0_rgb(59_130_246)]' : ''}
+        {isDragging ? 'relative z-10 cursor-grabbing shadow-md' : ''}"
       style:transform={isDragging ? `translateX(${dragShift}px)` : null}
       onpointerdown={(e) => onTabPointerDown(e, doc.id)}
-      onclick={() => selectDocument(doc.id)}
+      onclick={(e) => onTabClick(e, doc.id)}
       onkeydown={(e) => onTabKeydown(e, doc.id)}
       oncontextmenu={(e) => openMenu(e, doc.id)}
       onmousedown={onTabMouseDown}
@@ -308,6 +386,28 @@
     role="menu"
     aria-label="Tab actions for {menuDoc.file.name}"
   >
+    {#if menuIds.length > 1}
+      <button
+        type="button"
+        role="menuitem"
+        class={MENU_ITEM_CLASS}
+        disabled={merging}
+        onclick={() => runMenuAction(() => mergeTabs(menuIds))}
+      >
+        Merge {menuIds.length} tabs into one
+      </button>
+    {:else}
+      <button
+        type="button"
+        role="menuitem"
+        class={MENU_ITEM_CLASS}
+        disabled={merging || allIds.length < 2}
+        onclick={() => runMenuAction(() => mergeTabs(allIds))}
+      >
+        Merge all tabs into one
+      </button>
+    {/if}
+    <div role="separator" class="my-1 border-t border-neutral-200 dark:border-neutral-800"></div>
     <button
       type="button"
       role="menuitem"
@@ -331,9 +431,14 @@
       type="button"
       role="menuitem"
       class={MENU_ITEM_CLASS}
-      onclick={() => runMenuAction(() => requestClose([menu!.docId], menuDoc!.file.name))}
+      onclick={() =>
+        runMenuAction(() =>
+          menuIds.length > 1
+            ? requestClose(menuIds, 'the selected tabs')
+            : requestClose([menu!.docId], menuDoc!.file.name),
+        )}
     >
-      Close
+      {menuIds.length > 1 ? `Close ${menuIds.length} tabs` : 'Close'}
     </button>
     <button
       type="button"

@@ -36,7 +36,7 @@ It is **not** a replacement for PKI-based digital signatures.
 
 ### Editor
 
-- **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Drag tabs to reorder them (or use Ctrl+Shift+←/→, or Move left/right in the tab menu). Add more PDFs any time, from the + tab or by dropping them anywhere in the editor; each opens in a tab of its own.
+- **Document tabs** for every open PDF, with a close-confirmation for unsaved work and a tab context menu. Drag tabs to reorder them (or use Ctrl+Shift+←/→, or Move left/right in the tab menu). Add more PDFs any time, from the + tab or by dropping them anywhere in the editor; each opens in a tab of its own. Ctrl+click or Shift+click tabs to select several, then right-click to close them together or merge them into one document in a single tab, with everything placed on their pages still editable.
 - **Continuous scrolling**: all pages sit in one column, so you can scroll from page to page. The page you're looking at (or last worked on) is the current page for the toolbar, the page picker, and the sidebar, and jumping to a page scrolls to it. Only pages near the view are drawn, so long documents stay quick.
 - **Page sidebar** (toggle with `Ctrl+B`): thumbnails of every page, rendered as they scroll into view so long documents open quickly. Redaction boxes show on the thumbnails as you draw them. Click to jump; **drag and drop to reorder pages**.
 - **Select several pages** with Ctrl/⌘-click, Shift-click for a range, the checkbox on each thumbnail, or Ctrl+A. A bar at the top of the sidebar then rotates, saves (as one PDF with just those pages), or deletes them all at once; `Delete` and `Esc` work too.

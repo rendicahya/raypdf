@@ -12,6 +12,7 @@ import {
   cropPdfPages,
   uncropPdfPages,
   addInvisibleText,
+  mergePdfFiles,
 } from '../lib/pdf/pageOps';
 import type { OcrPage } from '../lib/pdf/ocr';
 import type { FormValues } from '../lib/pdf/forms';
@@ -720,6 +721,62 @@ function createEditorStore() {
 
       return { ...state, documents, activeId };
     });
+  }
+
+  /**
+   * Merges documents into one, in the given order, which takes the first one's
+   * place in the tabs and replaces them all. Everything placed on their pages
+   * comes along and stays editable; the first document with page numbers, a
+   * header and footer, or a page watermark gives them to the whole result.
+   * Returns the merged document's id.
+   */
+  async function mergeDocuments(ids: string[]): Promise<string | null> {
+    const before = ids
+      .map((id) => currentState().documents.find((d) => d.id === id))
+      .filter((d): d is PdfDocumentState => !!d);
+    if (before.length < 2) return null;
+
+    const base = before[0].file.name.replace(/\.pdf$/i, '');
+    const { file, pageCounts } = await mergePdfFiles(
+      before.map((d) => ({ file: d.file, rotation: d.rotation })),
+      `${base}_merged.pdf`,
+    );
+
+    // Read again, for anything placed while the files were being joined.
+    const docs = before.map((d) => currentState().documents.find((c) => c.id === d.id));
+    if (docs.some((d, i) => !d || d.file !== before[i].file || d.rotation !== before[i].rotation)) {
+      throw new Error('A document changed while merging. Please try again.');
+    }
+
+    const merged = createDocumentState(file);
+    merged.pageCount = pageCounts.reduce((a, b) => a + b, 0);
+    let offset = 0;
+    for (const [i, doc] of (docs as PdfDocumentState[]).entries()) {
+      const shift = offset;
+      const items = await mapPageItems(doc, async (list) => list.map((item) => ({ ...item, page: item.page + shift })));
+      merged.placedSignatures.push(...items.placedSignatures);
+      merged.redactions.push(...items.redactions);
+      merged.texts.push(...items.texts);
+      merged.comments.push(...items.comments);
+      merged.highlights.push(...items.highlights);
+      merged.shapes.push(...items.shapes);
+      merged.images.push(...items.images);
+      merged.formValues = { ...doc.formValues, ...merged.formValues };
+      merged.pageNumbers ??= doc.pageNumbers;
+      merged.headerFooter ??= doc.headerFooter;
+      merged.pageWatermark ??= doc.pageWatermark;
+      offset += pageCounts[i];
+    }
+
+    const removed = new Set(ids);
+    removed.forEach(clearHistory);
+    update((state) => {
+      const at = state.documents.findIndex((d) => removed.has(d.id));
+      const documents = state.documents.filter((d) => !removed.has(d.id));
+      documents.splice(Math.min(at, documents.length), 0, merged);
+      return { ...state, documents, activeId: merged.id };
+    });
+    return merged.id;
   }
 
   /** Moves a document's tab to position `toIndex` (0-based) in the tab order. */
@@ -1624,6 +1681,7 @@ function createEditorStore() {
     addPdfs,
     unlockDocument,
     removeDocument,
+    mergeDocuments,
     moveDocument,
     setActiveDocument,
     prevDocument,

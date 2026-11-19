@@ -203,7 +203,7 @@
   // Everything else the editor does, too small for a row of its own.
   const extras = [
     'Undo and redo every change until you save.',
-    'Open several PDFs at once, each in its own tab.',
+    'Open several PDFs at once, each in its own tab, and merge tabs into one document.',
     'Drop files anywhere on the page to add them.',
     'Zoom in and out, fit the width or the whole page, and rotate the view.',
     'Page thumbnails in a sidebar you can resize.',

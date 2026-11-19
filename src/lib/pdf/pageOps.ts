@@ -1,5 +1,9 @@
 import {
+  PDFDict,
   PDFDocument,
+  PDFName,
+  PDFObjectCopier,
+  PDFRef,
   StandardFonts,
   TextRenderingMode,
   beginText,
@@ -10,6 +14,7 @@ import {
   setTextRenderingMode,
   showText,
   type PDFFont,
+  type PDFPage,
 } from '@cantoo/pdf-lib';
 import { loadEditablePdf } from './password';
 import type { OcrPage } from './ocr';
@@ -166,6 +171,97 @@ export function addInvisibleText(file: File, pages: OcrPage[]): Promise<File> {
       target.pushOperators(...operators);
     }
   });
+}
+
+/**
+ * Joins several PDFs into one, in the given order, for merging tabs. The
+ * first file is the base, so its outline, metadata, and form stay; the
+ * others' pages are copied in after it, and their form fields join the
+ * base's form. Each file's view rotation is written into its pages, so the
+ * pages look the same at no extra rotation and whatever was placed on them
+ * keeps its position as is. Returns the file and each part's page count.
+ */
+export async function mergePdfFiles(
+  parts: { file: File; rotation: number }[],
+  name: string,
+): Promise<{ file: File; pageCounts: number[] }> {
+  const [first, ...rest] = parts;
+  const base = await loadEditablePdf(await first.file.arrayBuffer(), { updateMetadata: false });
+  turnPages(base.getPages(), first.rotation);
+  const pageCounts = [base.getPageCount()];
+
+  for (const part of rest) {
+    const source = await loadEditablePdf(await part.file.arrayBuffer(), { updateMetadata: false });
+    const pages = await base.copyPages(source, source.getPageIndices());
+    pages.forEach((page) => base.addPage(page));
+    turnPages(pages, part.rotation);
+    try {
+      joinFormFields(base, source, pages);
+    } catch {
+      // The pages and their drawn fields are there; only filling them in may not work.
+    }
+    pageCounts.push(pages.length);
+  }
+
+  const bytes = await base.save();
+  return { file: new File([bytes as BlobPart], name, { type: 'application/pdf' }), pageCounts };
+}
+
+function turnPages(pages: PDFPage[], delta: number) {
+  if (delta % 360 === 0) return;
+  for (const page of pages) page.setRotation(degrees((((page.getRotation().angle + delta) % 360) + 360) % 360));
+}
+
+/**
+ * Adds the form fields of pages copied from `source` to `target`'s form, so
+ * they can be filled in and saved like its own. copyPages brings the widgets
+ * and their fields along but leaves them out of the form; the source form's
+ * default fonts are copied too, as field appearances refer to them by name.
+ */
+function joinFormFields(target: PDFDocument, source: PDFDocument, pages: PDFPage[]) {
+  const sourceForm = source.catalog.getAcroForm();
+  if (!sourceForm) return;
+  const form = target.catalog.getOrCreateAcroForm();
+  const known = new Set((form.Fields()?.asArray() ?? []).map(String));
+
+  for (const page of pages) {
+    const annots = page.node.Annots();
+    if (!annots) continue;
+    for (let i = 0; i < annots.size(); i++) {
+      const ref = annots.get(i);
+      const widget = target.context.lookup(ref);
+      if (!(ref instanceof PDFRef) || !(widget instanceof PDFDict)) continue;
+      if (widget.get(PDFName.of('Subtype')) !== PDFName.of('Widget')) continue;
+      let root: PDFRef = ref;
+      let dict: PDFDict = widget;
+      for (let parent = dict.get(PDFName.of('Parent')); parent instanceof PDFRef; parent = dict.get(PDFName.of('Parent'))) {
+        const parentDict = target.context.lookup(parent);
+        if (!(parentDict instanceof PDFDict)) break;
+        root = parent;
+        dict = parentDict;
+      }
+      if (!dict.has(PDFName.of('T')) || known.has(root.toString())) continue;
+      form.addField(root);
+      known.add(root.toString());
+    }
+  }
+
+  const sourceFonts = sourceForm.dict.lookupMaybe(PDFName.of('DR'), PDFDict)?.lookupMaybe(PDFName.of('Font'), PDFDict);
+  if (!sourceFonts) return;
+  let resources = form.dict.lookupMaybe(PDFName.of('DR'), PDFDict);
+  if (!resources) {
+    resources = target.context.obj({});
+    form.dict.set(PDFName.of('DR'), resources);
+  }
+  let fonts = resources.lookupMaybe(PDFName.of('Font'), PDFDict);
+  if (!fonts) {
+    fonts = target.context.obj({});
+    resources.set(PDFName.of('Font'), fonts);
+  }
+  const copier = PDFObjectCopier.for(source.context, target.context);
+  for (const [key, font] of sourceFonts.entries()) {
+    if (!fonts.has(key)) fonts.set(key, copier.copy(font));
+  }
 }
 
 /** Rotates the given pages (1-indexed) by `delta` degrees (a multiple of 90), saved into the file itself. */
