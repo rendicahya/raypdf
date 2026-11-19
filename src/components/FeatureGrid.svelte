@@ -208,6 +208,7 @@
     'Zoom in and out, fit the width or the whole page, and rotate the view.',
     'Page thumbnails in a sidebar you can resize.',
     "Select and copy the PDF's own text.",
+    "Click the PDF's own links to open web pages or jump to another page.",
     "Right-click menus that fit what's under the pointer.",
     'Keyboard shortcuts for undo, search, pages, and tools.',
     'Dark mode and fullscreen.',

@@ -13,6 +13,7 @@
   import { headerFooterDate, pageLabels } from '../lib/pdf/headerFooter';
   import { watermarkCenters, watermarkSize } from '../lib/pdf/pageWatermark';
   import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
+  import { getPageLinks, type PageLink } from '../lib/pdf/links';
   import { getTotalRotation } from '../lib/pdf/loader';
   import type { PDFPageProxy } from 'pdfjs-dist';
   import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
@@ -481,6 +482,42 @@
     };
   });
 
+  // The PDF's own links on this page (lib/pdf/links.ts), in canvas pixels.
+  type LinkBox = PageLink & { left: number; top: number; boxWidth: number; boxHeight: number };
+  let linkBoxes: LinkBox[] = $state([]);
+
+  $effect(() => {
+    const loaded = pdfDoc;
+    const rotation = viewRotation;
+    const scale = $editorStore.renderScale;
+    if (!pageExists) {
+      linkBoxes = [];
+      return;
+    }
+    let cancelled = false;
+    Promise.all([getPageLinks(loaded, pageNumber), loaded.getPage(pageNumber)])
+      .then(([links, page]) => {
+        if (cancelled) return;
+        const viewport = page.getViewport({ scale, rotation: getTotalRotation(page, rotation) });
+        linkBoxes = links.map((l) => {
+          const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(l.rect);
+          return {
+            ...l,
+            left: Math.min(x1, x2),
+            top: Math.min(y1, y2),
+            boxWidth: Math.abs(x2 - x1),
+            boxHeight: Math.abs(y2 - y1),
+          };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) linkBoxes = [];
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
   $effect(() => {
     const loaded = pdfDoc;
     const rotation = viewRotation;
@@ -581,7 +618,10 @@
       resizingRedactionId ||
       resizingTextId ||
       drawingShape ||
-      !!(e.target as Element | null)?.closest?.('[data-placed-box]');
+      !!(e.target as Element | null)?.closest?.('[data-placed-box]') ||
+      // Resting on a link keeps it clickable rather than turning into text
+      // selection (a drag already selecting text carries on across it).
+      (e.buttons === 0 && !!(e.target as Element | null)?.closest?.('[data-pdf-link]'));
 
     if (explicitToolActive || otherInteractionInProgress) {
       clearHoverTimer();
@@ -2227,7 +2267,7 @@
         },
         duplicate({ kind: 'shape', id: shape.id }),
         {
-          ...deleteItem(`Delete ${SHAPE_LABELS[shape.kind].toLowerCase()}`, () => {
+          ...deleteItem('Delete', () => {
             editorStore.removeShape(shape.id);
             $selectedShapeId = null;
           }),
@@ -2704,6 +2744,39 @@
       </button>
     </div>
   {/each}
+
+  <!-- The PDF's own links, clickable whenever form fields are (Move mode). -->
+  {#if linkBoxes.length > 0 && formFieldsInteractive}
+    <div class="pointer-events-none absolute inset-0">
+      {#each linkBoxes as l (l.id)}
+        {@const linkClass = 'pointer-events-auto absolute block cursor-pointer rounded-sm hover:bg-blue-400/15'}
+        {@const position = `left:${l.left}px;top:${l.top}px;width:${l.boxWidth}px;height:${l.boxHeight}px;`}
+        {#if l.url}
+          <a
+            data-pdf-link
+            href={l.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={l.url}
+            use:tooltip={l.url}
+            class={linkClass}
+            style={position}
+          ></a>
+        {:else if l.page}
+          {@const target = l.page}
+          <button
+            type="button"
+            data-pdf-link
+            aria-label="Go to page {target}"
+            use:tooltip={`Go to page ${target}`}
+            class={linkClass}
+            style={position}
+            onclick={() => editorStore.goToPage(target)}
+          ></button>
+        {/if}
+      {/each}
+    </div>
+  {/if}
 
   <!-- The PDF's own form fields. The layer itself never takes clicks, only
        the inputs do, and only in Move mode (see formFieldsInteractive). -->
