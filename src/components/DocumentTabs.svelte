@@ -302,7 +302,7 @@
   <div
     bind:this={menuEl}
     use:portal
-    class="fixed z-50 min-w-[11rem] overflow-hidden rounded-lg border border-neutral-200 bg-white py-1
+    class="fixed z-[100] min-w-[11rem] overflow-hidden rounded-lg border border-neutral-200 bg-white py-1
       shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
     style="left: {menu.x}px; top: {menu.y}px;"
     role="menu"
@@ -357,7 +357,7 @@
 {/if}
 
 {#if pendingClose}
-  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  <div use:portal class="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
     <div
       class="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl
         dark:border-neutral-800 dark:bg-neutral-900"

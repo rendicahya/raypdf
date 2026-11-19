@@ -43,7 +43,7 @@
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+<div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
   <div
     class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl
       dark:border-neutral-800 dark:bg-neutral-900"
