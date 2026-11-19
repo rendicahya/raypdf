@@ -409,6 +409,7 @@
       role="button"
       tabindex="-1"
       aria-label="Resize"
+      data-resize-handle
       class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full border border-white
         bg-blue-500 shadow"
       onpointerdown={(e) => begin(e, 'resize')}

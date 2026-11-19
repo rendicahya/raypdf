@@ -54,11 +54,15 @@ export function itemRefOf(target: EventTarget | null): ItemRef | null {
   return null;
 }
 
-/** A Shift-, Ctrl-, or Cmd-click on a placed item: adds it to or removes it from the selection. */
+/**
+ * A Shift-, Ctrl-, or Cmd-click on a placed item: adds it to or removes it
+ * from the selection. Not on a resize handle (`data-resize-handle`), where
+ * Ctrl held from the start keeps the item's proportions instead.
+ */
 export function isMultiSelectClick(e: PointerEvent | MouseEvent): boolean {
   if (!(e.shiftKey || e.ctrlKey || e.metaKey)) return false;
   const target = e.target as Element | null;
-  if (target?.closest?.('textarea, input, select')) return false;
+  if (target?.closest?.('textarea, input, select, [data-resize-handle]')) return false;
   return !!itemRefOf(target);
 }
 

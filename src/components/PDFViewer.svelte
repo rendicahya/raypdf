@@ -2921,6 +2921,7 @@
             role="button"
             tabindex="0"
             aria-label="Resize signature"
+            data-resize-handle
             title="Resize signature (drag, or use arrow keys)"
             class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full
               border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -2992,6 +2993,7 @@
           role="button"
           tabindex="0"
           aria-label="Resize redacted area"
+          data-resize-handle
           title="Resize (drag, or use arrow keys)"
           class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full
             border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -3100,6 +3102,7 @@
           role="button"
           tabindex="0"
           aria-label="Resize text box"
+          data-resize-handle
           title="Resize (drag the handle)"
           class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full
             border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
