@@ -749,6 +749,9 @@ function createEditorStore() {
     }
 
     const merged = createDocumentState(file);
+    // The joined file exists only here until it's saved, so it counts as an
+    // edit: closing the tab asks first, and it can be saved with nothing placed.
+    merged.originalFile = docs[0]!.originalFile;
     merged.pageCount = pageCounts.reduce((a, b) => a + b, 0);
     let offset = 0;
     for (const [i, doc] of (docs as PdfDocumentState[]).entries()) {
