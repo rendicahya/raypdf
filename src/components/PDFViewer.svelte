@@ -734,8 +734,9 @@
     return { width: rect.width, height: rect.height };
   }
 
-  // Shapes tool: drag on the page to draw the chosen shape (Shift keeps a
-  // square, a circle, or a line at 45° steps); a plain click draws nothing.
+  // Shapes tool: drag on the page to draw the chosen shape (Ctrl keeps a
+  // square, a circle, or a line at 45° steps; Shift draws out from the
+  // starting point as the centre); a plain click draws nothing.
   // The tool stays on, so several can be drawn in a row.
   const SHAPE_DRAW_MIN = 6;
   let drawingShape: { x: number; y: number; width: number; height: number; flipX: boolean; flipY: boolean } | null =
@@ -748,30 +749,46 @@
 
   function shapeDraft(e: PointerEvent) {
     const rect = canvasEl.getBoundingClientRect();
-    let endX = clamp(e.clientX - rect.left, 0, rect.width);
-    let endY = clamp(e.clientY - rect.top, 0, rect.height);
-    if (e.shiftKey) {
-      const dx = endX - shapeStart.x;
-      const dy = endY - shapeStart.y;
+    const { x: sx, y: sy } = shapeStart;
+    let dx = e.clientX - rect.left - sx;
+    let dy = e.clientY - rect.top - sy;
+    const keepAspect = e.ctrlKey || e.metaKey;
+    const fromCentre = e.shiftKey;
+    if (keepAspect) {
       if (isLineKind($shapeKind)) {
         const step = Math.PI / 4;
         const angle = Math.round(Math.atan2(dy, dx) / step) * step;
         const length = Math.hypot(dx, dy);
-        endX = clamp(shapeStart.x + Math.round(Math.cos(angle) * length), 0, rect.width);
-        endY = clamp(shapeStart.y + Math.round(Math.sin(angle) * length), 0, rect.height);
+        dx = Math.cos(angle) * length;
+        dy = Math.sin(angle) * length;
       } else {
         const size = Math.max(Math.abs(dx), Math.abs(dy));
-        endX = clamp(shapeStart.x + (dx < 0 ? -size : size), 0, rect.width);
-        endY = clamp(shapeStart.y + (dy < 0 ? -size : size), 0, rect.height);
+        dx = dx < 0 ? -size : size;
+        dy = dy < 0 ? -size : size;
       }
     }
+    // How far the pointer's end may go on each side and still stay on the
+    // page; from the centre, the opposite end has to fit too.
+    const limitX = Math.min(dx < 0 ? sx : rect.width - sx, fromCentre ? Math.min(sx, rect.width - sx) : Infinity);
+    const limitY = Math.min(dy < 0 ? sy : rect.height - sy, fromCentre ? Math.min(sy, rect.height - sy) : Infinity);
+    if (keepAspect) {
+      // Shrink both together, so the square or the line's angle holds.
+      const t = Math.min(1, Math.abs(dx) > 0 ? limitX / Math.abs(dx) : 1, Math.abs(dy) > 0 ? limitY / Math.abs(dy) : 1);
+      dx *= t;
+      dy *= t;
+    } else {
+      dx = clamp(dx, -limitX, limitX);
+      dy = clamp(dy, -limitY, limitY);
+    }
+    const ox = fromCentre ? sx - dx : sx;
+    const oy = fromCentre ? sy - dy : sy;
     return {
-      x: Math.min(shapeStart.x, endX),
-      y: Math.min(shapeStart.y, endY),
-      width: Math.abs(endX - shapeStart.x),
-      height: Math.abs(endY - shapeStart.y),
-      flipX: endX < shapeStart.x,
-      flipY: endY < shapeStart.y,
+      x: Math.min(ox, sx + dx),
+      y: Math.min(oy, sy + dy),
+      width: Math.abs(dx) * (fromCentre ? 2 : 1),
+      height: Math.abs(dy) * (fromCentre ? 2 : 1),
+      flipX: dx < 0,
+      flipY: dy < 0,
     };
   }
 

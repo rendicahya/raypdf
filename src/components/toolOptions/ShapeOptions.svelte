@@ -131,7 +131,7 @@
   <p class="text-xs text-neutral-500 dark:text-neutral-400">
     {selected
       ? 'Changes apply to the selected shape, and to the next one you draw.'
-      : 'Drag on the page to draw. Hold Shift for a square, a circle, or a straight line.'}
+      : 'Drag on the page to draw. Hold Ctrl for a square, a circle, or a straight line, and Shift to draw out from the centre.'}
   </p>
 
   <div class="mt-4 flex flex-col gap-4 text-xs text-neutral-600 dark:text-neutral-300">
