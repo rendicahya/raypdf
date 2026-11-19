@@ -160,8 +160,8 @@
     editorStore.removeDocument(id);
   }
 
-  // Closing a tab whose signature/redactions were never saved/printed would
-  // silently throw away that work, so confirm first — mirrors StartOverButton's
+  // Closing a tab whose changes (anything placed, page edits, a merge) were
+  // never saved/printed would silently throw them away, so confirm first — mirrors StartOverButton's
   // "you haven't saved anything yet" guard, just scoped to the tabs being closed.
   let pendingClose = $state<{ ids: string[]; label: string } | null>(null);
   const pendingUnsaved = $derived(pendingClose ? docsWithUnsavedWork(pendingClose.ids) : []);
@@ -477,13 +477,12 @@
       </h2>
       <p class="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
         {#if pendingUnsaved.length === 1}
-          "{pendingUnsaved[0].file.name}" has a signature and/or redaction in place but hasn't been
-          saved or printed yet. Closing {pendingClose.ids.length === 1 ? 'this tab' : 'these tabs'} will
-          discard it. Are you sure you want to continue?
-        {:else}
-          {pendingUnsaved.length} of the tabs you're closing have a signature and/or redaction in place
-          but haven't been saved or printed yet. Closing them will discard that work. Are you sure you
+          "{pendingUnsaved[0].file.name}" has changes that haven't been saved or printed yet. Closing
+          {pendingClose.ids.length === 1 ? 'this tab' : 'these tabs'} will discard them. Are you sure you
           want to continue?
+        {:else}
+          {pendingUnsaved.length} of the tabs you're closing have changes that haven't been saved or
+          printed yet. Closing them will discard those changes. Are you sure you want to continue?
         {/if}
       </p>
       <div class="mt-5 flex justify-end gap-2">
