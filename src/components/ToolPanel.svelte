@@ -13,7 +13,8 @@
   import { pageNumbersToolMode } from '../stores/pageNumbersTool';
   import { pageWatermarkToolMode } from '../stores/pageWatermarkTool';
   import { cropToolMode } from '../stores/cropTool';
-  import { toolPanelOpen, type PanelTool } from '../stores/toolPanel';
+  import ImageOptions from './toolOptions/ImageOptions.svelte';
+  import { imagePropertiesId, toolPanelOpen, type PanelTool } from '../stores/toolPanel';
 
   interface Props {
     tool: PanelTool;
@@ -46,4 +47,6 @@
   <ShapeOptions onClose={hide} />
 {:else if tool === 'crop'}
   <CropOptions onClose={() => cropToolMode.set(false)} />
+{:else if tool === 'image'}
+  <ImageOptions onClose={() => imagePropertiesId.set(null)} />
 {/if}

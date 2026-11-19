@@ -113,7 +113,7 @@
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
   import { openSignatureTool } from '../stores/signatureTool';
-  import { openTextTool, openShapeTool } from '../stores/toolPanel';
+  import { openTextTool, openShapeTool, openImageProperties, imagePropertiesId } from '../stores/toolPanel';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import {
     watermarkText,
@@ -2195,6 +2195,14 @@
     if (placedImageId) {
       selectedImageId = placedImageId;
       return [
+        {
+          label: 'Properties',
+          icon: MENU_ICONS.properties,
+          onSelect: () => {
+            selectedImageId = placedImageId;
+            openImageProperties(placedImageId);
+          },
+        },
         duplicate({ kind: 'image', id: placedImageId }),
         {
           ...deleteItem('Delete image', () => {
@@ -2736,15 +2744,25 @@
         keepAspect
         minSize={16}
         bounds={canvasBounds}
-        onSelect={() => (selectedImageId = img.id)}
+        onSelect={() => {
+          selectedImageId = img.id;
+          // The properties panel follows the selection to another image.
+          if ($imagePropertiesId) $imagePropertiesId = img.id;
+        }}
         onDeselect={() => {
           if (selectedImageId === img.id) selectedImageId = null;
+          // Closed when the click went anywhere but another image, which
+          // takes the panel over in the same click.
+          setTimeout(() => {
+            if ($imagePropertiesId === img.id && selectedImageId !== img.id) $imagePropertiesId = null;
+          });
         }}
         onChange={(geometry) => editorStore.updateImage(img.id, geometry)}
         onRemove={() => {
           editorStore.removeImage(img.id);
           selectedImageId = null;
         }}
+        onDoubleClick={() => openImageProperties(img.id)}
       >
         <img
           src={stored.url}

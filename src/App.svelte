@@ -29,7 +29,7 @@
   import { shapeToolMode } from './stores/shapeTool';
   import { cropToolMode } from './stores/cropTool';
   import { ocrAreaMode, stopAreaSelection } from './stores/ocr';
-  import { activePanelTool, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
+  import { activePanelTool, imagePropertiesId, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from './stores/toolPanel';
   import { tooltip } from './lib/utils/tooltip';
   import { isFileAccepted, formatFileSize, dedupeFiles, MAX_PDF_SIZE_BYTES } from './lib/utils/fileValidation';
   import { clearCachedPdf, isLockedPdf } from './lib/pdf/docCache';
@@ -262,6 +262,11 @@
       if ($cropToolMode) {
         e.preventDefault();
         cropToolMode.set(false);
+        return;
+      }
+      if ($imagePropertiesId) {
+        e.preventDefault();
+        imagePropertiesId.set(null);
         return;
       }
       if ($ocrAreaMode) {
@@ -549,7 +554,7 @@
           </div>
         </aside>
       {/if}
-      {#if $activePanelTool && $activePanelTool !== 'signature' && $activePanelTool !== 'pageNumbers' && $activePanelTool !== 'watermark'}
+      {#if $activePanelTool && $activePanelTool !== 'signature' && $activePanelTool !== 'pageNumbers' && $activePanelTool !== 'watermark' && $activePanelTool !== 'image'}
         <button
           type="button"
           aria-label={$toolPanelOpen ? 'Hide tool options' : 'Show tool options'}
