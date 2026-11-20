@@ -1,4 +1,5 @@
 import { getContext, setContext } from 'svelte';
+import type { CommentEditing } from './commentEditing.svelte';
 
 /**
  * What one page has selected on its own, shared by PDFViewer and the layers
@@ -20,6 +21,8 @@ export class PageSelection {
 
 export interface PageContext {
   selection: PageSelection;
+  /** The comment note being typed on this page. */
+  commentEditing: CommentEditing;
   /** The page canvas's box on screen: item coordinates are relative to its top-left corner. */
   canvasRect(): DOMRect;
 }
