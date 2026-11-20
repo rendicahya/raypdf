@@ -17,6 +17,7 @@
   import PageLabelsPreview from './page/PageLabelsPreview.svelte';
   import PageLinks from './page/PageLinks.svelte';
   import PageFormFields, { type FormBox } from './page/PageFormFields.svelte';
+  import AreaDragOverlay from './page/AreaDragOverlay.svelte';
   import { getTotalRotation } from '../lib/pdf/loader';
   import type { PDFPageProxy } from 'pdfjs-dist';
   import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
@@ -1465,99 +1466,10 @@
   }
 
   // Screenshot tool: a click (or a drag too small to be deliberate) captures
-  // the whole page; a drag captures just the rectangle drawn. See
-  // lib/pdf/screenshot.ts — the area is handed over as fractions of the page
-  // so the capture can be rendered at its own, higher resolution.
-  const SHOT_DRAW_MIN_SIZE = 8;
-  let shotBox: { x: number; y: number; width: number; height: number } | null = $state(null);
-  let shotStart = { x: 0, y: 0 };
+  // the whole page; a drag captures just the rectangle drawn (AreaDragOverlay).
+  // See lib/pdf/screenshot.ts: the area is handed over as fractions of the
+  // page so the capture can be rendered at its own, higher resolution.
   let capturing = $state(false);
-
-  $effect(() => {
-    if (!$screenshotToolMode) shotBox = null;
-  });
-
-  function shotPoint(e: PointerEvent) {
-    const rect = canvasEl.getBoundingClientRect();
-    return { x: clamp(e.clientX - rect.left, 0, rect.width), y: clamp(e.clientY - rect.top, 0, rect.height) };
-  }
-
-  function onShotPointerDown(e: PointerEvent) {
-    if (e.button !== 0 || capturing) return;
-    e.stopPropagation();
-    shotStart = shotPoint(e);
-    shotBox = { ...shotStart, width: 0, height: 0 };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-
-  function onShotPointerMove(e: PointerEvent) {
-    if (!shotBox) return;
-    const { x, y } = shotPoint(e);
-    shotBox = {
-      x: Math.min(x, shotStart.x),
-      y: Math.min(y, shotStart.y),
-      width: Math.abs(x - shotStart.x),
-      height: Math.abs(y - shotStart.y),
-    };
-  }
-
-  function onShotPointerUp(e: PointerEvent) {
-    const box = shotBox;
-    shotBox = null;
-    if (!box) return;
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-
-    const rect = canvasEl.getBoundingClientRect();
-    const isArea = box.width >= SHOT_DRAW_MIN_SIZE && box.height >= SHOT_DRAW_MIN_SIZE;
-    const area = isArea
-      ? { x: box.x / rect.width, y: box.y / rect.height, width: box.width / rect.width, height: box.height / rect.height }
-      : null;
-    capturePageImage(area, $screenshotDestination);
-  }
-
-  // Recognize text in an area: the same drag as a screenshot, handed to
-  // stores/ocr.ts as fractions of the page as shown. A click without a drag
-  // does nothing, so the user can still scroll to another page to drag on.
-  let ocrBox: { x: number; y: number; width: number; height: number } | null = $state(null);
-  let ocrStart = { x: 0, y: 0 };
-
-  $effect(() => {
-    if (!$ocrAreaMode) ocrBox = null;
-  });
-
-  function onOcrPointerDown(e: PointerEvent) {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    ocrStart = shotPoint(e);
-    ocrBox = { ...ocrStart, width: 0, height: 0 };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-
-  function onOcrPointerMove(e: PointerEvent) {
-    if (!ocrBox) return;
-    const { x, y } = shotPoint(e);
-    ocrBox = {
-      x: Math.min(x, ocrStart.x),
-      y: Math.min(y, ocrStart.y),
-      width: Math.abs(x - ocrStart.x),
-      height: Math.abs(y - ocrStart.y),
-    };
-  }
-
-  function onOcrPointerUp(e: PointerEvent) {
-    const box = ocrBox;
-    ocrBox = null;
-    if (!box) return;
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    if (box.width < SHOT_DRAW_MIN_SIZE || box.height < SHOT_DRAW_MIN_SIZE) return;
-    const rect = canvasEl.getBoundingClientRect();
-    recognizeTextInArea(pageNumber, {
-      x: box.x / rect.width,
-      y: box.y / rect.height,
-      width: box.width / rect.width,
-      height: box.height / rect.height,
-    });
-  }
 
   /**
    * Captures the page (or an area of it, as fractions) at the Screenshot
@@ -3270,53 +3182,23 @@
     ></div>
   {/if}
 
-  <!-- Screenshot tool: covers the page (and every overlay on it) so a click
-       or drag is always a capture, never a move/resize of something below. -->
+  <!-- Screenshot, and Recognize text in an area: a drag over the page and
+       everything on it. A screenshot click (or tiny drag) captures the whole
+       page; for text recognition it does nothing, so the user can still
+       scroll to another page to drag on. -->
   {#if $screenshotToolMode}
-    <div
-      role="presentation"
-      class="absolute inset-0 z-[60] cursor-crosshair touch-none"
-      onpointerdown={onShotPointerDown}
-      onpointermove={onShotPointerMove}
-      onpointerup={onShotPointerUp}
-      onpointercancel={() => (shotBox = null)}
-    >
-      {#if shotBox && (shotBox.width > 0 || shotBox.height > 0)}
-        <div
-          class="pointer-events-none absolute border-2 border-dashed border-sky-500 bg-sky-400/15"
-          style:left="{shotBox.x}px"
-          style:top="{shotBox.y}px"
-          style:width="{shotBox.width}px"
-          style:height="{shotBox.height}px"
-        ></div>
-      {/if}
-      {#if capturing}
-        <div class="pointer-events-none absolute inset-0 animate-pulse bg-white/30 dark:bg-black/20"></div>
-      {/if}
-    </div>
+    <AreaDragOverlay
+      frameClass="border-sky-500 bg-sky-400/15"
+      disabled={capturing}
+      busy={capturing}
+      onDone={(area) => capturePageImage(area, $screenshotDestination)}
+    />
   {/if}
-
-  <!-- Recognize text in an area: like the Screenshot overlay, a drag over
-       the page and everything on it. -->
   {#if $ocrAreaMode}
-    <div
-      role="presentation"
-      class="absolute inset-0 z-[60] cursor-crosshair touch-none"
-      onpointerdown={onOcrPointerDown}
-      onpointermove={onOcrPointerMove}
-      onpointerup={onOcrPointerUp}
-      onpointercancel={() => (ocrBox = null)}
-    >
-      {#if ocrBox && (ocrBox.width > 0 || ocrBox.height > 0)}
-        <div
-          class="pointer-events-none absolute border-2 border-dashed border-blue-500 bg-blue-400/15"
-          style:left="{ocrBox.x}px"
-          style:top="{ocrBox.y}px"
-          style:width="{ocrBox.width}px"
-          style:height="{ocrBox.height}px"
-        ></div>
-      {/if}
-    </div>
+    <AreaDragOverlay
+      frameClass="border-blue-500 bg-blue-400/15"
+      onDone={(area) => area && recognizeTextInArea(pageNumber, area)}
+    />
   {/if}
 
   <!-- Crop tool: frames the part of the page to keep (CropOverlay). -->
