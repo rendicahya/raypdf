@@ -85,8 +85,12 @@
     type PlacedText,
     type RedactionBox,
     type PlacedComment,
+    type PlacedHighlight,
+    type PlacedShape,
+    type PlacedImage,
     type ItemRef,
   } from '../stores/editor';
+  import { pageFilter } from '../lib/utils/stableList';
   import { redactMode } from '../stores/redact';
   import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
@@ -354,6 +358,10 @@
     if (selectedHighlightGroup === groupId) selectedHighlightGroup = null;
   }
 
+  // The zoom and the view's rotation as values of their own: effects that read
+  // them re-run only when they change, not on every edit to the store (reading
+  // $editorStore or $activeDocument directly in an effect subscribes to all of it).
+  const renderScale = $derived($editorStore.renderScale);
   const viewRotation = $derived($activeDocument?.rotation ?? 0);
 
   // After a page edit or undo swaps the file, the page number can briefly point
@@ -364,7 +372,7 @@
   // Reads only those values, not the whole $activeDocument, so edits don't
   // re-render every visible page.
   $effect(() => {
-    const scale = $editorStore.renderScale;
+    const scale = renderScale;
     const rotation = viewRotation;
     if (!canvasEl || !pageExists) return;
     renderPageToCanvas(pdfDoc, pageNumber, canvasEl, scale, rotation).catch((e) => {
@@ -382,7 +390,7 @@
   // (see textLayer.ts) handles cancelling a previous in-flight build when a
   // newer one starts.
   $effect(() => {
-    const scale = $editorStore.renderScale;
+    const scale = renderScale;
     const rotation = viewRotation;
 
     if (!textLayerEl) return;
@@ -453,7 +461,7 @@
   $effect(() => {
     const loaded = pdfDoc;
     const rotation = viewRotation;
-    const scale = $editorStore.renderScale;
+    const scale = renderScale;
     if (!pageExists) {
       formBoxes = [];
       return;
@@ -490,7 +498,7 @@
   $effect(() => {
     const loaded = pdfDoc;
     const rotation = viewRotation;
-    const scale = $editorStore.renderScale;
+    const scale = renderScale;
     if (!pageExists) {
       linkBoxes = [];
       return;
@@ -654,23 +662,31 @@
   }
 
   // What's been placed on this page.
-  const signaturesOnCurrentPage = $derived(
-    $activeDocument?.placedSignatures.filter((sig) => sig.page === pageNumber) ?? [],
-  );
-  const redactionsOnCurrentPage = $derived($activeDocument?.redactions.filter((box) => box.page === pageNumber) ?? []);
-  const textsOnCurrentPage = $derived($activeDocument?.texts.filter((t) => t.page === pageNumber) ?? []);
+  // Each list keeps its identity while nothing on this page changes (see
+  // lib/utils/stableList.ts), so an edit elsewhere doesn't re-render this page.
+  const onPage = {
+    signatures: pageFilter<PlacedSignature>(),
+    redactions: pageFilter<RedactionBox>(),
+    texts: pageFilter<PlacedText>(),
+    comments: pageFilter<PlacedComment>(),
+    highlights: pageFilter<PlacedHighlight>(),
+    shapes: pageFilter<PlacedShape>(),
+    images: pageFilter<PlacedImage>(),
+  };
+  const signaturesOnCurrentPage = $derived(onPage.signatures($activeDocument?.placedSignatures, pageNumber));
+  const redactionsOnCurrentPage = $derived(onPage.redactions($activeDocument?.redactions, pageNumber));
+  const textsOnCurrentPage = $derived(onPage.texts($activeDocument?.texts, pageNumber));
   // Page number, header, and footer, previewed as lib/pdf/headerFooter.ts
   // will draw them.
+  // Read as values of their own, so the labels are worked out again only when
+  // one of them changes, not on every edit.
+  const docPageNumbers = $derived($activeDocument?.pageNumbers ?? null);
+  const docHeaderFooter = $derived($activeDocument?.headerFooter ?? null);
+  const docPageCount = $derived($activeDocument?.pageCount ?? 0);
+  const docFileName = $derived($activeDocument?.file.name ?? null);
   const edgeLabels = $derived(
-    $activeDocument
-      ? pageLabels(
-          $activeDocument.pageNumbers,
-          $activeDocument.headerFooter,
-          pageNumber,
-          $activeDocument.pageCount,
-          $activeDocument.file.name,
-          headerFooterDate(),
-        )
+    docFileName !== null
+      ? pageLabels(docPageNumbers, docHeaderFooter, pageNumber, docPageCount, docFileName, headerFooterDate())
       : [],
   );
   // The watermark, previewed as lib/pdf/pageWatermark.ts lays it out (in
@@ -702,10 +718,10 @@
     if (!size) return [];
     return watermarkCenters(watermark, size, pagePoints.width, pagePoints.height).map(([x, y]) => ({ x, y, ...size }));
   });
-  const commentsOnCurrentPage = $derived($activeDocument?.comments.filter((c) => c.page === pageNumber) ?? []);
-  const highlightsOnCurrentPage = $derived($activeDocument?.highlights.filter((h) => h.page === pageNumber) ?? []);
-  const shapesOnCurrentPage = $derived($activeDocument?.shapes.filter((s) => s.page === pageNumber) ?? []);
-  const imagesOnCurrentPage = $derived($activeDocument?.images.filter((img) => img.page === pageNumber) ?? []);
+  const commentsOnCurrentPage = $derived(onPage.comments($activeDocument?.comments, pageNumber));
+  const highlightsOnCurrentPage = $derived(onPage.highlights($activeDocument?.highlights, pageNumber));
+  const shapesOnCurrentPage = $derived(onPage.shapes($activeDocument?.shapes, pageNumber));
+  const imagesOnCurrentPage = $derived(onPage.images($activeDocument?.images, pageNumber));
 
   // The one item this page has selected on its own (not a group, see
   // ItemSelection), for starting a group, duplicating, and the like.
@@ -835,7 +851,7 @@
 
   function finishShape(box: NonNullable<typeof drawingShape>) {
     const kind = $shapeKind;
-    const scale = $editorStore.renderScale;
+    const scale = renderScale;
     // A click (or a tiny drag) draws nothing: a shape needs dragging out.
     if (Math.max(box.width, box.height) < SHAPE_DRAW_MIN) return;
     $selectedShapeId = editorStore.addShape({
@@ -1641,7 +1657,7 @@
       )
     ).filter((s) => s !== null);
     const overlays: CaptureOverlays = {
-      renderScale: $editorStore.renderScale,
+      renderScale: renderScale,
       fields: formBoxes.map((f) => {
         const value = widgetValue(f, formValues);
         const shown =
@@ -2578,7 +2594,7 @@
   <!-- Watermark preview: lib/pdf/pageWatermark.ts draws the same on export,
        each stamp turned around its centre. -->
   {#if watermark && watermarkStamps.length > 0}
-    {@const unit = $editorStore.renderScale}
+    {@const unit = renderScale}
     <div class="pointer-events-none absolute inset-0 select-none overflow-hidden rounded-lg" aria-hidden="true">
       {#each watermarkStamps as stamp}
         {#if watermarkImage}
@@ -2616,7 +2632,7 @@
        the same on export. With line-height 1 the baseline sits about 0.85em
        below the box top. -->
   {#each edgeLabels as s}
-    {@const unit = $editorStore.renderScale}
+    {@const unit = renderScale}
     {@const [vertical, horizontal] = s.position.split('-')}
     <div
       class="pointer-events-none absolute select-none whitespace-nowrap leading-none"
@@ -2947,7 +2963,7 @@
           ...drawingShape,
           kind,
           stroke: $shapeStroke,
-          strokeWidth: (isLineKind(kind) ? Math.max(1, $shapeStrokeWidth) : $shapeStrokeWidth) * $editorStore.renderScale,
+          strokeWidth: (isLineKind(kind) ? Math.max(1, $shapeStrokeWidth) : $shapeStrokeWidth) * renderScale,
           fill: isLineKind(kind) ? null : $shapeFill,
           opacity: $shapeOpacity,
           arrowHead: $shapeArrowHead,

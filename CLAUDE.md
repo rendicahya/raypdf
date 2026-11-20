@@ -316,6 +316,7 @@ stores/
 - Avoid unnecessary dependencies.
 - Write readable and maintainable code.
 - Optimize for GitHub Pages deployment.
+- In components, an $effect or expensive $derived reads store fields through a $derived of that field (const renderScale = $derived($editorStore.renderScale)), never $editorStore.x / $activeDocument.x directly: those subscribe to the whole store, which changes on every edit, each step of a drag included. Per-page item lists keep their identity with pageFilter (lib/utils/stableList.ts).
 
 ---
 
