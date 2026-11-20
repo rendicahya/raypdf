@@ -12,8 +12,11 @@
   import { capturePage, copyImageToClipboard, downloadBlob, type CaptureOverlays } from '../lib/pdf/screenshot';
   import { headerFooterDate, pageLabels } from '../lib/pdf/headerFooter';
   import { watermarkCenters, watermarkSize } from '../lib/pdf/pageWatermark';
-  import { getPageFormWidgets, widgetValue, type FormWidget } from '../lib/pdf/forms';
-  import { getPageLinks, type PageLink } from '../lib/pdf/links';
+  import { getPageFormWidgets, widgetValue } from '../lib/pdf/forms';
+  import WatermarkPreview from './page/WatermarkPreview.svelte';
+  import PageLabelsPreview from './page/PageLabelsPreview.svelte';
+  import PageLinks from './page/PageLinks.svelte';
+  import PageFormFields, { type FormBox } from './page/PageFormFields.svelte';
   import { getTotalRotation } from '../lib/pdf/loader';
   import type { PDFPageProxy } from 'pdfjs-dist';
   import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
@@ -454,7 +457,6 @@
   // canvas pixels. pdf.js leaves form widgets out of the canvas render, so
   // these HTML inputs are what the user sees and types into. Recomputed only
   // when the page view changes, not on every edit.
-  type FormBox = FormWidget & { left: number; top: number; boxWidth: number; boxHeight: number; fontPx: number };
   let formBoxes: FormBox[] = $state([]);
   const formValues = $derived($activeDocument?.formValues ?? {});
 
@@ -485,42 +487,6 @@
       })
       .catch(() => {
         if (!cancelled) formBoxes = [];
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
-
-  // The PDF's own links on this page (lib/pdf/links.ts), in canvas pixels.
-  type LinkBox = PageLink & { left: number; top: number; boxWidth: number; boxHeight: number };
-  let linkBoxes: LinkBox[] = $state([]);
-
-  $effect(() => {
-    const loaded = pdfDoc;
-    const rotation = viewRotation;
-    const scale = renderScale;
-    if (!pageExists) {
-      linkBoxes = [];
-      return;
-    }
-    let cancelled = false;
-    Promise.all([getPageLinks(loaded, pageNumber), loaded.getPage(pageNumber)])
-      .then(([links, page]) => {
-        if (cancelled) return;
-        const viewport = page.getViewport({ scale, rotation: getTotalRotation(page, rotation) });
-        linkBoxes = links.map((l) => {
-          const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(l.rect);
-          return {
-            ...l,
-            left: Math.min(x1, x2),
-            top: Math.min(y1, y2),
-            boxWidth: Math.abs(x2 - x1),
-            boxHeight: Math.abs(y2 - y1),
-          };
-        });
-      })
-      .catch(() => {
-        if (!cancelled) linkBoxes = [];
       });
     return () => {
       cancelled = true;
@@ -2591,63 +2557,11 @@
        below in every other mode. -->
   <div bind:this={textLayerEl} class="pdf-text-layer" class:pointer-events-none={!textSelectActive}></div>
 
-  <!-- Watermark preview: lib/pdf/pageWatermark.ts draws the same on export,
-       each stamp turned around its centre. -->
+  <!-- Watermark, page number, header, and footer previews: drawn as export draws them. -->
   {#if watermark && watermarkStamps.length > 0}
-    {@const unit = renderScale}
-    <div class="pointer-events-none absolute inset-0 select-none overflow-hidden rounded-lg" aria-hidden="true">
-      {#each watermarkStamps as stamp}
-        {#if watermarkImage}
-          <img
-            src={watermarkImage.url}
-            alt=""
-            class="absolute max-w-none"
-            style:left="{stamp.x * unit}px"
-            style:top="{stamp.y * unit}px"
-            style:width="{stamp.width * unit}px"
-            style:height="{stamp.height * unit}px"
-            style:opacity={watermark.opacity}
-            style:transform="translate(-50%, -50%) rotate({-watermark.angle}deg)"
-          />
-        {:else}
-          <div
-            class="absolute whitespace-nowrap leading-none"
-            style:left="{stamp.x * unit}px"
-            style:top="{stamp.y * unit}px"
-            style:font-family={FONT_FAMILY_CSS[watermark.font]}
-            style:font-weight={watermark.bold ? 700 : 400}
-            style:font-size="{watermark.fontSize * unit}px"
-            style:color={watermark.color}
-            style:opacity={watermark.opacity}
-            style:transform="translate(-50%, -50%) rotate({-watermark.angle}deg)"
-          >
-            {watermark.text.trim()}
-          </div>
-        {/if}
-      {/each}
-    </div>
+    <WatermarkPreview {watermark} stamps={watermarkStamps} image={watermarkImage} unit={renderScale} />
   {/if}
-
-  <!-- Page number, header, and footer preview: lib/pdf/pageNumbers.ts draws
-       the same on export. With line-height 1 the baseline sits about 0.85em
-       below the box top. -->
-  {#each edgeLabels as s}
-    {@const unit = renderScale}
-    {@const [vertical, horizontal] = s.position.split('-')}
-    <div
-      class="pointer-events-none absolute select-none whitespace-nowrap leading-none"
-      style:font-family={FONT_FAMILY_CSS[s.font]}
-      style:font-size="{s.fontSize * unit}px"
-      style:color={s.color}
-      style:left={horizontal === 'left' ? `${s.margin * unit}px` : horizontal === 'center' ? '50%' : null}
-      style:right={horizontal === 'right' ? `${s.margin * unit}px` : null}
-      style:transform={horizontal === 'center' ? 'translateX(-50%)' : null}
-      style:top={vertical === 'top' ? `${(s.margin - 0.13 * s.fontSize) * unit}px` : null}
-      style:bottom={vertical === 'bottom' ? `${(s.margin - 0.15 * s.fontSize) * unit}px` : null}
-    >
-      {s.text}
-    </div>
-  {/each}
+  <PageLabelsPreview labels={edgeLabels} unit={renderScale} />
 
   <!-- Search matches: drawn under everything else and never take clicks. -->
   {#each searchHits as hit}
@@ -2769,108 +2683,10 @@
   {/each}
 
   <!-- The PDF's own links, clickable whenever form fields are (Move mode). -->
-  {#if linkBoxes.length > 0 && formFieldsInteractive}
-    <div class="pointer-events-none absolute inset-0">
-      {#each linkBoxes as l (l.id)}
-        {@const linkClass = 'pointer-events-auto absolute block cursor-pointer rounded-sm hover:bg-blue-400/15'}
-        {@const position = `left:${l.left}px;top:${l.top}px;width:${l.boxWidth}px;height:${l.boxHeight}px;`}
-        {#if l.url}
-          <a
-            data-pdf-link
-            href={l.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={l.url}
-            use:tooltip={l.url}
-            class={linkClass}
-            style={position}
-          ></a>
-        {:else if l.page}
-          {@const target = l.page}
-          <button
-            type="button"
-            data-pdf-link
-            aria-label="Go to page {target}"
-            use:tooltip={`Go to page ${target}`}
-            class={linkClass}
-            style={position}
-            onclick={() => editorStore.goToPage(target)}
-          ></button>
-        {/if}
-      {/each}
-    </div>
-  {/if}
+  <PageLinks {pdfDoc} {pageNumber} rotation={viewRotation} scale={renderScale} active={formFieldsInteractive} />
 
-  <!-- The PDF's own form fields. The layer itself never takes clicks, only
-       the inputs do, and only in Move mode (see formFieldsInteractive). -->
-  {#if formBoxes.length > 0}
-    <div class="pointer-events-none absolute inset-0">
-      {#each formBoxes as f (f.id)}
-        {@const value = widgetValue(f, formValues)}
-        {@const fieldClass = `absolute m-0 rounded-sm border border-blue-400/50 bg-blue-100/40 text-black outline-none
-          focus:border-blue-500 focus:bg-white/90 disabled:cursor-not-allowed disabled:bg-transparent
-          ${formFieldsInteractive ? 'pointer-events-auto' : ''}`}
-        {@const position = `left:${f.left}px;top:${f.top}px;width:${f.boxWidth}px;height:${f.boxHeight}px;`}
-        {#if f.kind === 'text' && f.multiLine}
-          <textarea
-            aria-label={f.fieldName}
-            class="{fieldClass} resize-none p-0.5 leading-tight"
-            style="{position}font-size:{f.fontPx}px;text-align:{f.align};"
-            value={typeof value === 'string' ? value : ''}
-            maxlength={f.maxLen ?? undefined}
-            disabled={f.readOnly}
-            oninput={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.value)}
-          ></textarea>
-        {:else if f.kind === 'text'}
-          <input
-            type="text"
-            aria-label={f.fieldName}
-            class="{fieldClass} px-0.5"
-            style="{position}font-size:{f.fontPx}px;text-align:{f.align};"
-            value={typeof value === 'string' ? value : ''}
-            maxlength={f.maxLen ?? undefined}
-            disabled={f.readOnly}
-            oninput={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.value)}
-          />
-        {:else if f.kind === 'checkbox'}
-          <input
-            type="checkbox"
-            aria-label={f.fieldName}
-            class="{fieldClass} cursor-pointer accent-blue-600"
-            style={position}
-            checked={value === true}
-            disabled={f.readOnly}
-            onchange={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.checked)}
-          />
-        {:else if f.kind === 'radio'}
-          <input
-            type="radio"
-            aria-label="{f.fieldName}: {f.onValue}"
-            name="{docId}:{f.fieldName}"
-            class="{fieldClass} cursor-pointer accent-blue-600"
-            style={position}
-            checked={value === f.onValue}
-            disabled={f.readOnly}
-            onchange={() => editorStore.setFormValue(f.fieldName, f.onValue)}
-          />
-        {:else}
-          <select
-            aria-label={f.fieldName}
-            class="{fieldClass} cursor-pointer p-0"
-            style="{position}font-size:{f.fontPx}px;"
-            value={typeof value === 'string' ? value : ''}
-            disabled={f.readOnly}
-            onchange={(e) => editorStore.setFormValue(f.fieldName, e.currentTarget.value)}
-          >
-            <option value=""></option>
-            {#each f.options as option}
-              <option value={option.value}>{option.label}</option>
-            {/each}
-          </select>
-        {/if}
-      {/each}
-    </div>
-  {/if}
+  <!-- The PDF's own form fields, taking input only in Move mode (see formFieldsInteractive). -->
+  <PageFormFields boxes={formBoxes} values={formValues} interactive={formFieldsInteractive} {docId} />
 
   <!-- Images, then shapes: under signatures and text, as export draws them. -->
   {#each imagesOnCurrentPage as img (img.id)}
