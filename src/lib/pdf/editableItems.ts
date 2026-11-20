@@ -14,7 +14,8 @@ import {
 } from '@cantoo/pdf-lib';
 import { loadEditablePdf } from './password';
 import { decodeImage } from './compress';
-import type { ItemKind, PlacedImage, PlacedShape, PlacedSignature, PlacedText } from '../../stores/editor';
+import { ITEM_LISTS, type ItemKind, type PlacedImage, type PlacedShape, type PlacedSignature, type PlacedText } from '../../stores/editorTypes';
+import { scaleItem as scaleListItem } from '../../stores/editorGeometry';
 import type { StoredImage } from '../../stores/images';
 
 /**
@@ -48,21 +49,9 @@ export type RestoredItem =
 
 type AnyItem = PlacedSignature | PlacedText | PlacedShape | PlacedImage;
 
-/** Fields in canvas pixels, which change with the render scale. */
-const SCALED_FIELDS: Record<ItemKind, readonly string[]> = {
-  signature: ['x', 'y', 'width', 'height'],
-  text: ['x', 'y', 'width', 'height', 'fontSize', 'letterSpacing', 'wordSpacing'],
-  shape: ['x', 'y', 'width', 'height', 'strokeWidth'],
-  image: ['x', 'y', 'width', 'height'],
-};
-
-/** A copy of an item with its pixel sizes multiplied by `factor`. */
-export function scaleItem<T extends object>(kind: ItemKind, item: T, factor: number): T {
-  const out = { ...item } as Record<string, unknown>;
-  for (const field of SCALED_FIELDS[kind]) {
-    if (typeof out[field] === 'number') out[field] = (out[field] as number) * factor;
-  }
-  return out as T;
+/** A copy of an item with its pixel sizes multiplied by actor (see SCALED_FIELDS in stores/editorTypes.ts). */
+function scaleItem<T extends object>(kind: ItemKind, item: T, factor: number): T {
+  return scaleListItem(ITEM_LISTS[kind], item, factor);
 }
 
 function infoDict(pdfDoc: PDFDocument): PDFDict {

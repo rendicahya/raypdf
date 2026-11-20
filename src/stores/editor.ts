@@ -1,239 +1,48 @@
 import { writable, derived } from 'svelte/store';
 import { getCachedPdf } from '../lib/pdf/docCache';
 import { addStoredImage } from './images';
-import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
+import { getTotalRotation } from '../lib/pdf/loader';
 import type { OcrPage } from '../lib/pdf/ocr';
+import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
+import type { HeaderFooterSettings } from '../lib/pdf/headerFooter';
+import type { PageWatermarkSettings } from '../lib/pdf/pageWatermark';
+import {
+  ITEM_KINDS,
+  ITEM_LISTS,
+  type EditorState,
+  type Geometry,
+  type ItemKind,
+  type ItemRef,
+  type MarkupKind,
+  type PageItem,
+  type PageItems,
+  type PdfDocumentState,
+  type PlacedComment,
+  type PlacedImage,
+  type PlacedShape,
+  type PlacedSignature,
+  type PlacedText,
+  type RedactionBox,
+} from './editorTypes';
+import {
+  clamp,
+  convertGeometry,
+  mapPageItems,
+  rescale,
+  rotateGeometry,
+  scaleItem,
+  DEFAULT_RENDER_SCALE,
+  ZOOM_STEP,
+} from './editorGeometry';
+import { createHistory } from './editorHistory';
+
+export * from './editorTypes';
+export { DEFAULT_RENDER_SCALE } from './editorGeometry';
 
 // pdf-lib is only needed once a file is rewritten, so these load on first use
 // (keeping it off the front page's download).
 const pageOps = () => import('../lib/pdf/pageOps');
 const editableItems = () => import('../lib/pdf/editableItems');
-import type { FormValues } from '../lib/pdf/forms';
-import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
-import type { HeaderFooterSettings } from '../lib/pdf/headerFooter';
-import type { PageWatermarkSettings } from '../lib/pdf/pageWatermark';
-
-/** Signature instance placed on the page, in canvas pixel coordinates. */
-export interface PlacedSignature {
-  id: string;
-  /** Which saved signature this shows (see stores/signature.ts). */
-  signatureId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this placement belongs to. */
-  page: number;
-  /** Degrees clockwise, as shown, turned about the box's centre (none means upright). The box above is the unturned one. */
-  angle?: number;
-}
-
-/** A user-drawn area to permanently strip from the exported PDF, in canvas pixel coordinates. */
-export interface RedactionBox {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this box belongs to. */
-  page: number;
-}
-
-export type TextFontFamily = 'helvetica' | 'times' | 'courier' | 'arial' | 'consolas';
-
-export type TextAlign = 'left' | 'center' | 'right';
-export type TextScript = 'normal' | 'superscript' | 'subscript';
-
-/** A typed text box placed on the page, in canvas pixel coordinates. */
-export interface PlacedText {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this text belongs to. */
-  page: number;
-  text: string;
-  fontFamily: TextFontFamily;
-  /** In canvas pixels at the current render scale — rescaled alongside x/y/width/height on zoom. */
-  fontSize: number;
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  strikethrough: boolean;
-  /** CSS hex color. */
-  color: string;
-  /** CSS hex color filled behind the box, or null for none. */
-  background: string | null;
-  /** 0.1 to 1. */
-  opacity: number;
-  /** In canvas pixels at the current render scale. */
-  letterSpacing: number;
-  /** Extra space added to each space character, in canvas pixels at the current render scale. */
-  wordSpacing: number;
-  /** Line height as a multiple of the font size. */
-  lineHeight: number;
-  /** Superscript and subscript apply to the whole box: smaller text, raised or lowered within each line. */
-  script: TextScript;
-  align: TextAlign;
-}
-
-/** A sticky-note style comment marker placed on the page, in canvas pixel coordinates. */
-export interface PlacedComment {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this comment belongs to. */
-  page: number;
-  text: string;
-  /**
-   * The text markup (PlacedHighlight.groupId) this note is about, for a
-   * comment on selected text. Removing the markup removes the note; the note
-   * is saved as the markup annotation's own text rather than a sticky note.
-   */
-  groupId?: string;
-}
-
-export type MarkupKind = 'highlight' | 'underline' | 'strikeout';
-
-/**
- * One rectangle of a text markup (highlight, underline, or strikethrough), in
- * canvas pixel coordinates — the box around the marked text, whatever the
- * kind. Markup spanning several lines is several of these sharing a
- * `groupId`, so each stays a plain box that zoom, rotation, and page edits
- * already know how to move.
- */
-export interface PlacedHighlight {
-  id: string;
-  /** Shared by every rectangle made from the same selection — removed and recolored together. */
-  groupId: string;
-  kind: MarkupKind;
-  /** CSS hex color. */
-  color: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this highlight belongs to. */
-  page: number;
-}
-
-/** Closed shapes fill their box (outlines from `shapeOutline` in lib/pdf/shapes.ts); lines and arrows run corner to corner. */
-export type ShapeKind =
-  | 'rectangle'
-  | 'roundedRectangle'
-  | 'ellipse'
-  | 'triangle'
-  | 'rightTriangle'
-  | 'diamond'
-  | 'pentagon'
-  | 'hexagon'
-  | 'star'
-  | 'heart'
-  | 'callout'
-  | 'blockArrow'
-  | 'line'
-  | 'arrow';
-
-/** An arrow's tip: two open strokes, a filled triangle, or a filled triangle notched at the back. */
-export type ArrowHead = 'open' | 'triangle' | 'notched';
-
-/** How a shape's outline, or a line, is drawn: unbroken, or as a repeating pattern. */
-export type LineStyle = 'solid' | 'dashed' | 'dotted' | 'dashdot';
-
-/** A drawn shape, in canvas pixel coordinates. Lines and arrows run corner to corner across the box. */
-export interface PlacedShape {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this shape belongs to. */
-  page: number;
-  kind: ShapeKind;
-  /** CSS hex color of the outline, or of the line itself. */
-  stroke: string;
-  /** In canvas pixels at the current render scale — rescaled on zoom. 0 means no outline. */
-  strokeWidth: number;
-  /** CSS hex color filling a closed shape, or null for none. */
-  fill: string | null;
-  /** 0.1 to 1. */
-  opacity: number;
-  /** Where a line starts: the right (flipX) or bottom (flipY) edge instead of the left or top. Arrows point to the other end. */
-  flipX: boolean;
-  flipY: boolean;
-  /** An arrow's tip. Unset means 'open'. */
-  arrowHead?: ArrowHead;
-  /** The outline's or line's pattern. Unset means 'solid'. */
-  lineStyle?: LineStyle;
-  /** Degrees clockwise as shown, about the box's centre (the box itself is unturned). Unset for upright. */
-  angle?: number;
-}
-
-/** An image placed on the page, in canvas pixel coordinates. The image itself is in stores/images.ts. */
-export interface PlacedImage {
-  id: string;
-  imageId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** 1-indexed page this image belongs to. */
-  page: number;
-  /** 0.1 to 1. */
-  opacity: number;
-}
-
-/** Per-document editing state — one entry per uploaded PDF. */
-export interface PdfDocumentState {
-  id: string;
-  /** The current version of the PDF — replaced whenever pages are moved, deleted, duplicated, inserted, or rotated. */
-  file: File;
-  /** The file as uploaded, to tell whether any page edits have been made. */
-  originalFile: File;
-  pageNumber: number;
-  pageCount: number;
-  placedSignatures: PlacedSignature[];
-  redactions: RedactionBox[];
-  texts: PlacedText[];
-  comments: PlacedComment[];
-  highlights: PlacedHighlight[];
-  shapes: PlacedShape[];
-  images: PlacedImage[];
-  /** Values entered into the PDF's own form fields, by field name — only fields the user changed. */
-  formValues: FormValues;
-  /** How the pages are numbered on export, or null for no page numbers. */
-  pageNumbers: PageNumberSettings | null;
-  /** Text along the top and bottom of the pages, or null for none. */
-  headerFooter: HeaderFooterSettings | null;
-  /** Text or a picture stamped across the pages, or null for none. */
-  pageWatermark: PageWatermarkSettings | null;
-  /** Additional rotation (0/90/180/270) the user applied on top of the page's own rotation. */
-  rotation: number;
-  /** Whether the current placement/redactions have been saved/printed — cleared whenever either changes. Used to warn before closing an unsaved tab. */
-  exported: boolean;
-}
-
-export interface EditorState {
-  documents: PdfDocumentState[];
-  activeId: string | null;
-  /** pdf.js render scale for the visible canvas; shared across documents so switching between them keeps the same zoom level. */
-  renderScale: number;
-  /** Whether at least one PDF has been downloaded this session — used to warn before a "Start Over" that would discard undownloaded work. */
-  hasExported: boolean;
-}
-
-export const DEFAULT_RENDER_SCALE = 1.5;
-const MIN_RENDER_SCALE = 0.5;
-const MAX_RENDER_SCALE = 4;
-const ZOOM_STEP = 1.2;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
 function createDocumentState(file: File): PdfDocumentState {
   return {
     id: crypto.randomUUID(),
@@ -273,217 +82,6 @@ function updateActiveDocument(
   };
 }
 
-function rescale(state: EditorState, nextScale: number): EditorState {
-  const renderScale = clamp(nextScale, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
-  const factor = renderScale / state.renderScale;
-  // Zoom is shared across every document, so a placement/redaction on any of
-  // them — not just the active one — needs to be rescaled to stay over the
-  // same spot the next time that document is viewed.
-  const documents = state.documents.map((doc) => ({
-    ...doc,
-    placedSignatures: doc.placedSignatures.map((sig) => ({
-      ...sig,
-      x: sig.x * factor,
-      y: sig.y * factor,
-      width: sig.width * factor,
-      height: sig.height * factor,
-    })),
-    redactions: doc.redactions.map((box) => ({
-      ...box,
-      x: box.x * factor,
-      y: box.y * factor,
-      width: box.width * factor,
-      height: box.height * factor,
-    })),
-    texts: doc.texts.map((t) => ({
-      ...t,
-      x: t.x * factor,
-      y: t.y * factor,
-      width: t.width * factor,
-      height: t.height * factor,
-      fontSize: t.fontSize * factor,
-      letterSpacing: t.letterSpacing * factor,
-      wordSpacing: t.wordSpacing * factor,
-    })),
-    comments: doc.comments.map((c) => ({
-      ...c,
-      x: c.x * factor,
-      y: c.y * factor,
-      width: c.width * factor,
-      height: c.height * factor,
-    })),
-    highlights: doc.highlights.map((h) => ({
-      ...h,
-      x: h.x * factor,
-      y: h.y * factor,
-      width: h.width * factor,
-      height: h.height * factor,
-    })),
-    shapes: doc.shapes.map((s) => ({
-      ...s,
-      x: s.x * factor,
-      y: s.y * factor,
-      width: s.width * factor,
-      height: s.height * factor,
-      strokeWidth: s.strokeWidth * factor,
-    })),
-    images: doc.images.map((img) => ({
-      ...img,
-      x: img.x * factor,
-      y: img.y * factor,
-      width: img.width * factor,
-      height: img.height * factor,
-    })),
-  }));
-  return { ...state, renderScale, documents };
-}
-
-interface Geometry {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Re-derives a box's canvas-pixel position after the page's rotation changes,
- * by round-tripping through pdf.js's own PDF-point conversion (old viewport
- * pixels → PDF points → new viewport pixels) instead of discarding it — a
- * signature or redaction the user placed shouldn't vanish just because they
- * rotated the page afterward.
- */
-function rotateGeometry<T extends Geometry>(
-  pdfjsDoc: PdfDocument,
-  pageNumber: number,
-  renderScale: number,
-  oldRotation: number,
-  newRotation: number,
-  box: T,
-): Promise<T> {
-  return convertGeometry(
-    { pdfjsDoc, pageNumber, rotation: oldRotation },
-    { pdfjsDoc, pageNumber, rotation: newRotation },
-    renderScale,
-    box,
-  );
-}
-
-/**
- * The general form of rotateGeometry: maps a box from one page view to
- * another — possibly in a different version of the file, e.g. after a single
- * page's own rotation was changed by rewriting the PDF.
- */
-async function convertGeometry<T extends Geometry>(
-  from: { pdfjsDoc: PdfDocument; pageNumber: number; rotation: number },
-  to: { pdfjsDoc: PdfDocument; pageNumber: number; rotation: number },
-  renderScale: number,
-  box: T,
-): Promise<T> {
-  const oldPage = await from.pdfjsDoc.getPage(from.pageNumber);
-  const newPage = await to.pdfjsDoc.getPage(to.pageNumber);
-  const oldViewport = oldPage.getViewport({ scale: renderScale, rotation: getTotalRotation(oldPage, from.rotation) });
-  const newViewport = newPage.getViewport({ scale: renderScale, rotation: getTotalRotation(newPage, to.rotation) });
-
-  // A signature turns with the page instead of being reshaped: its centre
-  // follows the content and it keeps its size, turned by as much as the page.
-  if ('signatureId' in box) {
-    const [pcx, pcy] = oldViewport.convertToPdfPoint(box.x + box.width / 2, box.y + box.height / 2);
-    const [cx, cy] = newViewport.convertToViewportPoint(pcx, pcy);
-    const turn = newViewport.rotation - oldViewport.rotation;
-    const angle = (((((box as T & { angle?: number }).angle ?? 0) + turn) % 360) + 360) % 360;
-    return { ...box, x: cx - box.width / 2, y: cy - box.height / 2, angle: angle || undefined };
-  }
-
-  const [px1, py1] = oldViewport.convertToPdfPoint(box.x, box.y);
-  const [px2, py2] = oldViewport.convertToPdfPoint(box.x + box.width, box.y + box.height);
-  const [vx1, vy1] = newViewport.convertToViewportPoint(px1, py1);
-  const [vx2, vy2] = newViewport.convertToViewportPoint(px2, py2);
-
-  const converted = {
-    ...box,
-    x: Math.min(vx1, vx2),
-    y: Math.min(vy1, vy2),
-    width: Math.abs(vx2 - vx1),
-    height: Math.abs(vy2 - vy1),
-  };
-
-  // A line runs between two opposite corners; follow its start and end to
-  // see which corners they've landed on.
-  if ('flipX' in box && 'flipY' in box) {
-    const line = box as T & { flipX: boolean; flipY: boolean };
-    const toNew = (x: number, y: number) => {
-      const [px, py] = oldViewport.convertToPdfPoint(x, y);
-      return newViewport.convertToViewportPoint(px, py);
-    };
-    const [sx, sy] = toNew(line.flipX ? box.x + box.width : box.x, line.flipY ? box.y + box.height : box.y);
-    const [ex, ey] = toNew(line.flipX ? box.x : box.x + box.width, line.flipY ? box.y : box.y + box.height);
-    return { ...converted, flipX: sx > ex, flipY: sy > ey };
-  }
-  return converted;
-}
-
-/** The subset of a document's state that undo/redo tracks — everything the
- * user places or changes on the page, but not navigation (page number),
- * loading state (pageCount), or the "saved yet" flag. */
-interface DocSnapshot {
-  /** Replaced by page edits (move, delete, …), so undo/redo can swap it back. */
-  file: File;
-  /** Kept alongside `file` so the page count is right the moment undo/redo swaps the file. */
-  pageCount: number;
-  placedSignatures: PlacedSignature[];
-  redactions: RedactionBox[];
-  texts: PlacedText[];
-  comments: PlacedComment[];
-  highlights: PlacedHighlight[];
-  shapes: PlacedShape[];
-  images: PlacedImage[];
-  formValues: FormValues;
-  pageNumbers: PageNumberSettings | null;
-  headerFooter: HeaderFooterSettings | null;
-  pageWatermark: PageWatermarkSettings | null;
-  rotation: number;
-}
-
-/** Anything placed on a page. */
-type PageItem = Geometry & { id: string; page: number };
-
-/** Every list of things placed on a document's pages. */
-type PageItems = Pick<
-  PdfDocumentState,
-  'placedSignatures' | 'redactions' | 'texts' | 'comments' | 'highlights' | 'shapes' | 'images'
->;
-
-/** Things the user placed that can be selected together, aligned, and duplicated. */
-export type ItemKind = 'signature' | 'text' | 'shape' | 'image';
-export const ITEM_KINDS: readonly ItemKind[] = ['signature', 'text', 'shape', 'image'];
-export interface ItemRef {
-  kind: ItemKind;
-  id: string;
-}
-export const ITEM_LISTS = {
-  signature: 'placedSignatures',
-  text: 'texts',
-  shape: 'shapes',
-  image: 'images',
-} as const satisfies Record<ItemKind, keyof PageItems>;
-
-/** Runs `fn` over each of a document's item lists — for edits (rotation, page edits) that move all of them alike. */
-async function mapPageItems(
-  doc: PageItems,
-  fn: <T extends PageItem>(items: T[]) => Promise<T[]>,
-): Promise<PageItems> {
-  const [placedSignatures, redactions, texts, comments, highlights, shapes, images] = await Promise.all([
-    fn(doc.placedSignatures),
-    fn(doc.redactions),
-    fn(doc.texts),
-    fn(doc.comments),
-    fn(doc.highlights),
-    fn(doc.shapes),
-    fn(doc.images),
-  ]);
-  return { placedSignatures, redactions, texts, comments, highlights, shapes, images };
-}
-
 /** A page-level edit of the active document — see editPages. */
 interface PageEdit {
   rewrite: (file: File) => Promise<File>;
@@ -497,18 +95,6 @@ interface PageEdit {
   reshapesPages?: number[];
 }
 
-interface DocHistory {
-  past: DocSnapshot[];
-  future: DocSnapshot[];
-}
-
-const MAX_HISTORY = 50;
-// Repeated calls that share an action key within this window collapse into
-// the single history entry taken before the first of them — otherwise every
-// pointermove during a drag, every tick of a range slider, or every repeat
-// of a held-down arrow key would each get their own undo step.
-const HISTORY_COALESCE_MS = 600;
-
 function createEditorStore() {
   const { subscribe, update, set } = writable<EditorState>({
     documents: [],
@@ -517,71 +103,11 @@ function createEditorStore() {
     hasExported: false,
   });
 
-  // Undo/redo history lives outside the reactive store — nothing about it
-  // needs to drive rendering on its own, only canUndo/canRedo do, and those
-  // are answered on demand from historyTick below. Keyed by document id so
-  // each open document/tab keeps its own independent history.
-  const histories = new Map<string, DocHistory>();
-  const lastActionKeys = new Map<string, { key: string; time: number }>();
-  const historyTick = writable(0);
 
-  function getHistory(id: string): DocHistory {
-    let h = histories.get(id);
-    if (!h) {
-      h = { past: [], future: [] };
-      histories.set(id, h);
-    }
-    return h;
-  }
-
-  function snapshotOf(doc: PdfDocumentState): DocSnapshot {
-    return {
-      file: doc.file,
-      pageCount: doc.pageCount,
-      placedSignatures: doc.placedSignatures,
-      redactions: doc.redactions,
-      texts: doc.texts,
-      comments: doc.comments,
-      highlights: doc.highlights,
-      shapes: doc.shapes,
-      images: doc.images,
-      formValues: doc.formValues,
-      pageNumbers: doc.pageNumbers,
-      headerFooter: doc.headerFooter,
-      pageWatermark: doc.pageWatermark,
-      rotation: doc.rotation,
-    };
-  }
-
-  function applySnapshot(doc: PdfDocumentState, snap: DocSnapshot): PdfDocumentState {
-    return { ...doc, ...snap, pageNumber: clamp(doc.pageNumber, 1, snap.pageCount), exported: false };
-  }
-
-  // Records `doc`'s state *before* a mutation identified by `actionKey`.
-  // Calls sharing the same actionKey within HISTORY_COALESCE_MS of each
-  // other are treated as one continuous gesture (a drag, a resize, a slider
-  // being dragged) and don't get their own history entry — only the first
-  // one does. Pass a fresh/unique key (e.g. via crypto.randomUUID()) for
-  // actions that should never coalesce, like each individual add/remove.
-  function recordHistory(id: string, actionKey: string, doc: PdfDocumentState) {
-    const now = Date.now();
-    const last = lastActionKeys.get(id);
-    const coalescing = !!last && last.key === actionKey && now - last.time < HISTORY_COALESCE_MS;
-    if (!coalescing) {
-      const h = getHistory(id);
-      h.past.push(snapshotOf(doc));
-      if (h.past.length > MAX_HISTORY) h.past.shift();
-      h.future = [];
-    }
-    lastActionKeys.set(id, { key: actionKey, time: now });
-    historyTick.update((n) => n + 1);
-  }
-
-  function clearHistory(id: string) {
-    histories.delete(id);
-    lastActionKeys.delete(id);
-  }
-
+  // Each open document keeps its own undo/redo history (stores/editorHistory.ts).
+  const history = createHistory();
+  const recordHistory = history.record;
+  const clearHistory = history.clear;
   // Synchronous snapshot of the current state, for the rare action (rotate)
   // that needs to read-before an `await` rather than just transform via `update`.
   function currentState(): EditorState {
@@ -623,7 +149,7 @@ function createEditorStore() {
     try {
       const pdfjsDoc = await getCachedPdf(id, file);
       const { info } = await pdfjsDoc.getMetadata();
-      const { hasEditableItemsMarker, restoreEditableItems, scaleItem } = await editableItems();
+      const { hasEditableItemsMarker, restoreEditableItems } = await editableItems();
       if (!hasEditableItemsMarker(info)) return;
       const restored = await restoreEditableItems(file);
       if (!restored) return;
@@ -638,9 +164,9 @@ function createEditorStore() {
         const placed = { ...current };
         for (const r of restored.items) {
           const base = { id: crypto.randomUUID(), page: r.page };
-          if (r.kind === 'text') placed.texts = [...placed.texts, { ...scaleItem('text', r.item, scale), ...base }];
-          else if (r.kind === 'shape') placed.shapes = [...placed.shapes, { ...scaleItem('shape', r.item, scale), ...base }];
-          else placed.images = [...placed.images, { ...scaleItem('image', r.item, scale), imageId: addStoredImage(r.image), ...base }];
+          if (r.kind === 'text') placed.texts = [...placed.texts, { ...scaleItem('texts', r.item, scale), ...base }];
+          else if (r.kind === 'shape') placed.shapes = [...placed.shapes, { ...scaleItem('shapes', r.item, scale), ...base }];
+          else placed.images = [...placed.images, { ...scaleItem('images', r.item, scale), imageId: addStoredImage(r.image), ...base }];
         }
         const untouched =
           current.placedSignatures.length + current.texts.length + current.shapes.length + current.images.length === 0 &&
@@ -658,8 +184,7 @@ function createEditorStore() {
 
   /** Replaces the whole document list, e.g. the initial upload. */
   function loadPdfs(files: File[]) {
-    histories.clear();
-    lastActionKeys.clear();
+    history.clearAll();
     const documents = files.map(createDocumentState);
     set({
       documents,
@@ -850,257 +375,114 @@ function createEditorStore() {
     );
   }
 
-  function addSignature(placement: Omit<PlacedSignature, 'id'>): string {
+  // Signatures, redactions, text boxes, comments, shapes, and images share
+  // these: each add, change, or removal is an undo step, and changes to one
+  // item (a drag, a slider) coalesce into one.
+
+  type ListName = keyof PageItems;
+  type ItemOf<K extends ListName> = PdfDocumentState[K][number];
+
+  /** Changes one of the active document's item lists as an undo step identified by `actionKey`. */
+  function editActiveList<K extends ListName>(key: K, actionKey: string, fn: (items: PdfDocumentState[K]) => PageItem[]) {
+    recordActiveHistory(actionKey);
+    update((state) => updateActiveDocument(state, (doc) => ({ ...doc, [key]: fn(doc[key]), exported: false })));
+  }
+
+  function addItem<K extends ListName>(key: K, item: Omit<ItemOf<K>, 'id'>): string {
     const id = crypto.randomUUID();
-    recordActiveHistory(`add-signature-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        placedSignatures: [...doc.placedSignatures, { ...placement, id }],
-        exported: false,
-      })),
-    );
+    editActiveList(key, `add-${key}-${id}`, (items) => [...(items as PageItem[]), { ...item, id } as PageItem]);
     return id;
   }
 
-  function removeSignature(id: string) {
-    recordActiveHistory(`remove-signature-${id}-${Date.now()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        placedSignatures: doc.placedSignatures.filter((sig) => sig.id !== id),
-        exported: false,
-      })),
+  function updateItem<K extends ListName>(key: K, id: string, partial: Partial<ItemOf<K>>) {
+    editActiveList(key, `update-${key}-${id}`, (items) =>
+      (items as PageItem[]).map((item) => (item.id === id ? { ...item, ...partial } : item)),
     );
   }
 
-  function updateSignature(id: string, partial: Partial<PlacedSignature>) {
-    recordActiveHistory(`update-signature-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        placedSignatures: doc.placedSignatures.map((sig) => (sig.id === id ? { ...sig, ...partial } : sig)),
-        exported: false,
-      })),
+  function removeItem<K extends ListName>(key: K, id: string) {
+    editActiveList(key, `remove-${key}-${id}-${Date.now()}`, (items) =>
+      (items as PageItem[]).filter((item) => item.id !== id),
     );
+  }
+
+  /** Copies of `items` with fresh ids. */
+  function withIds<T extends object>(items: T[]): (T & { id: string })[] {
+    return items.map((item) => ({ ...item, id: crypto.randomUUID() }));
   }
 
   /**
-   * Replaces the active document's entire signature set — used by "Apply
-   * Signature to All Pages" to replicate one page's placement(s) across
-   * every page of the same document. Unlike setSignaturesForDocument below
-   * (which targets other documents for a cross-document sync), this is a
-   * same-document edit and goes through the active document's own undo
-   * history like any other placement change.
+   * Replaces one item list of any document (not just the active one) with
+   * copies of `items`, outside its undo history. Used by "Apply to All" to
+   * make every other document match the active one.
    */
-  function applySignaturesToAllPages(placements: Omit<PlacedSignature, 'id'>[]) {
-    recordActiveHistory(`apply-signature-all-pages-${crypto.randomUUID()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        placedSignatures: placements.map((placement) => ({ ...placement, id: crypto.randomUUID() })),
-        exported: false,
-      })),
-    );
-  }
-
-  /** Replaces an arbitrary document's entire signature set (not just the active one) — used by "Apply to All" to make every document have the same placement. */
-  function setSignaturesForDocument(id: string, placements: Omit<PlacedSignature, 'id'>[]) {
+  function setListForDocument<K extends ListName>(docId: string, key: K, items: Omit<ItemOf<K>, 'id'>[]) {
     update((state) => ({
       ...state,
       documents: state.documents.map((doc) =>
-        doc.id === id
-          ? {
-              ...doc,
-              placedSignatures: placements.map((placement) => ({ ...placement, id: crypto.randomUUID() })),
-              exported: false,
-            }
-          : doc,
+        doc.id === docId ? { ...doc, [key]: withIds(items), exported: false } : doc,
       ),
     }));
   }
 
-  function addRedaction(box: Omit<RedactionBox, 'id'>) {
-    recordActiveHistory(`add-redaction-${crypto.randomUUID()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        redactions: [...doc.redactions, { ...box, id: crypto.randomUUID() }],
-        exported: false,
-      })),
-    );
+  const addSignature = (placement: Omit<PlacedSignature, 'id'>) => addItem('placedSignatures', placement);
+  const updateSignature = (id: string, partial: Partial<PlacedSignature>) => updateItem('placedSignatures', id, partial);
+  const removeSignature = (id: string) => removeItem('placedSignatures', id);
+  const setSignaturesForDocument = (id: string, placements: Omit<PlacedSignature, 'id'>[]) =>
+    setListForDocument(id, 'placedSignatures', placements);
+
+  /**
+   * Replaces the active document's entire signature set: "Apply Signature to
+   * All Pages" replicates one page's placement(s) across every page. Unlike
+   * setSignaturesForDocument, this is a same-document edit and goes through
+   * the active document's own undo history like any other placement change.
+   */
+  function applySignaturesToAllPages(placements: Omit<PlacedSignature, 'id'>[]) {
+    editActiveList('placedSignatures', `apply-signature-all-pages-${crypto.randomUUID()}`, () => withIds(placements));
   }
 
-  function updateRedaction(id: string, partial: Partial<RedactionBox>) {
-    recordActiveHistory(`update-redaction-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        redactions: doc.redactions.map((box) => (box.id === id ? { ...box, ...partial } : box)),
-        exported: false,
-      })),
-    );
-  }
-
-  function removeRedaction(id: string) {
-    recordActiveHistory(`remove-redaction-${id}-${Date.now()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        redactions: doc.redactions.filter((box) => box.id !== id),
-        exported: false,
-      })),
-    );
-  }
+  const addRedaction = (box: Omit<RedactionBox, 'id'>) => addItem('redactions', box);
+  const updateRedaction = (id: string, partial: Partial<RedactionBox>) => updateItem('redactions', id, partial);
+  const removeRedaction = (id: string) => removeItem('redactions', id);
+  const setRedactionsForDocument = (id: string, boxes: Omit<RedactionBox, 'id'>[]) =>
+    setListForDocument(id, 'redactions', boxes);
 
   /** Adds several boxes to the active document as one undo step (e.g. copying a box to every page). */
   function addRedactions(boxes: Omit<RedactionBox, 'id'>[]) {
     if (boxes.length === 0) return;
-    recordActiveHistory(`add-redactions-${crypto.randomUUID()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        redactions: [...doc.redactions, ...boxes.map((box) => ({ ...box, id: crypto.randomUUID() }))],
-        exported: false,
-      })),
-    );
+    editActiveList('redactions', `add-redactions-${crypto.randomUUID()}`, (items) => [...items, ...withIds(boxes)]);
   }
 
   /** Removes every box on one page of the active document, as one undo step. */
   function removeRedactionsOnPage(page: number) {
-    recordActiveHistory(`remove-page-redactions-${page}-${Date.now()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        redactions: doc.redactions.filter((box) => box.page !== page),
-        exported: false,
-      })),
+    editActiveList('redactions', `remove-page-redactions-${page}-${Date.now()}`, (items) =>
+      items.filter((box) => box.page !== page),
     );
   }
 
   /** Removes every box in the active document, as one undo step. */
   function removeAllRedactions() {
-    recordActiveHistory(`remove-all-redactions-${Date.now()}`);
-    update((state) => updateActiveDocument(state, (doc) => ({ ...doc, redactions: [], exported: false })));
+    editActiveList('redactions', `remove-all-redactions-${Date.now()}`, () => []);
   }
 
-  /** Replaces an arbitrary document's entire redaction set (not just the active one) — used by "Apply to All" to make every other document match the active one exactly. */
-  function setRedactionsForDocument(id: string, boxes: Omit<RedactionBox, 'id'>[]) {
-    update((state) => ({
-      ...state,
-      documents: state.documents.map((doc) =>
-        doc.id === id
-          ? {
-              ...doc,
-              redactions: boxes.map((box) => ({ ...box, id: crypto.randomUUID() })),
-              exported: false,
-            }
-          : doc,
-      ),
-    }));
-  }
+  const addText = (text: Omit<PlacedText, 'id'>) => addItem('texts', text);
+  const updateText = (id: string, partial: Partial<PlacedText>) => updateItem('texts', id, partial);
+  const removeText = (id: string) => removeItem('texts', id);
+  const setTextsForDocument = (id: string, items: Omit<PlacedText, 'id'>[]) => setListForDocument(id, 'texts', items);
 
-  function addText(text: Omit<PlacedText, 'id'>): string {
-    const id = crypto.randomUUID();
-    recordActiveHistory(`add-text-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        texts: [...doc.texts, { ...text, id }],
-        exported: false,
-      })),
-    );
-    return id;
-  }
+  const addComment = (comment: Omit<PlacedComment, 'id'>) => addItem('comments', comment);
+  const updateComment = (id: string, partial: Partial<PlacedComment>) => updateItem('comments', id, partial);
+  const removeComment = (id: string) => removeItem('comments', id);
+  const setCommentsForDocument = (id: string, items: Omit<PlacedComment, 'id'>[]) =>
+    setListForDocument(id, 'comments', items);
 
-  function updateText(id: string, partial: Partial<PlacedText>) {
-    recordActiveHistory(`update-text-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        texts: doc.texts.map((t) => (t.id === id ? { ...t, ...partial } : t)),
-        exported: false,
-      })),
-    );
-  }
+  const addShape = (shape: Omit<PlacedShape, 'id'>) => addItem('shapes', shape);
+  const updateShape = (id: string, partial: Partial<PlacedShape>) => updateItem('shapes', id, partial);
+  const removeShape = (id: string) => removeItem('shapes', id);
 
-  function removeText(id: string) {
-    recordActiveHistory(`remove-text-${id}-${Date.now()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        texts: doc.texts.filter((t) => t.id !== id),
-        exported: false,
-      })),
-    );
-  }
-
-  /** Replaces an arbitrary document's entire text set (not just the active one) — mirrors setSignaturesForDocument/setRedactionsForDocument for "Apply to All". */
-  function setTextsForDocument(id: string, items: Omit<PlacedText, 'id'>[]) {
-    update((state) => ({
-      ...state,
-      documents: state.documents.map((doc) =>
-        doc.id === id
-          ? {
-              ...doc,
-              texts: items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-              exported: false,
-            }
-          : doc,
-      ),
-    }));
-  }
-
-  function addComment(comment: Omit<PlacedComment, 'id'>): string {
-    const id = crypto.randomUUID();
-    recordActiveHistory(`add-comment-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        comments: [...doc.comments, { ...comment, id }],
-        exported: false,
-      })),
-    );
-    return id;
-  }
-
-  function updateComment(id: string, partial: Partial<PlacedComment>) {
-    recordActiveHistory(`update-comment-${id}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        comments: doc.comments.map((c) => (c.id === id ? { ...c, ...partial } : c)),
-        exported: false,
-      })),
-    );
-  }
-
-  function removeComment(id: string) {
-    recordActiveHistory(`remove-comment-${id}-${Date.now()}`);
-    update((state) =>
-      updateActiveDocument(state, (doc) => ({
-        ...doc,
-        comments: doc.comments.filter((c) => c.id !== id),
-        exported: false,
-      })),
-    );
-  }
-
-  /** Replaces an arbitrary document's entire comment set (not just the active one) — mirrors setTextsForDocument for "Apply to All". */
-  function setCommentsForDocument(id: string, items: Omit<PlacedComment, 'id'>[]) {
-    update((state) => ({
-      ...state,
-      documents: state.documents.map((doc) =>
-        doc.id === id
-          ? {
-              ...doc,
-              comments: items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-              exported: false,
-            }
-          : doc,
-      ),
-    }));
-  }
+  const addImage = (image: Omit<PlacedImage, 'id'>) => addItem('images', image);
+  const updateImage = (id: string, partial: Partial<PlacedImage>) => updateItem('images', id, partial);
+  const removeImage = (id: string) => removeItem('images', id);
 
   /**
    * Marks up a text selection on the active document — one rectangle per
@@ -1190,45 +572,6 @@ function createEditorStore() {
     );
   }
 
-  /** Shapes and images: add, change, and remove, each an undo step (changes to one item coalesce like a drag). */
-  function editActiveList<K extends 'shapes' | 'images'>(
-    key: K,
-    actionKey: string,
-    fn: (items: PdfDocumentState[K]) => PdfDocumentState[K],
-  ) {
-    recordActiveHistory(actionKey);
-    update((state) => updateActiveDocument(state, (doc) => ({ ...doc, [key]: fn(doc[key]), exported: false })));
-  }
-
-  function addShape(shape: Omit<PlacedShape, 'id'>): string {
-    const id = crypto.randomUUID();
-    editActiveList('shapes', `add-shape-${id}`, (shapes) => [...shapes, { ...shape, id }]);
-    return id;
-  }
-
-  function updateShape(id: string, partial: Partial<PlacedShape>) {
-    editActiveList('shapes', `update-shape-${id}`, (shapes) => shapes.map((s) => (s.id === id ? { ...s, ...partial } : s)));
-  }
-
-  function removeShape(id: string) {
-    editActiveList('shapes', `remove-shape-${id}-${Date.now()}`, (shapes) => shapes.filter((s) => s.id !== id));
-  }
-
-  function addImage(image: Omit<PlacedImage, 'id'>): string {
-    const id = crypto.randomUUID();
-    editActiveList('images', `add-image-${id}`, (images) => [...images, { ...image, id }]);
-    return id;
-  }
-
-  function updateImage(id: string, partial: Partial<PlacedImage>) {
-    editActiveList('images', `update-image-${id}`, (images) =>
-      images.map((img) => (img.id === id ? { ...img, ...partial } : img)),
-    );
-  }
-
-  function removeImage(id: string) {
-    editActiveList('images', `remove-image-${id}-${Date.now()}`, (images) => images.filter((img) => img.id !== id));
-  }
 
   /**
    * Moves several items at once (aligning, distributing, dragging a group),
@@ -1633,47 +976,26 @@ function createEditorStore() {
   }
 
   function reset() {
-    histories.clear();
-    lastActionKeys.clear();
+    history.clearAll();
     set({ documents: [], activeId: null, renderScale: DEFAULT_RENDER_SCALE, hasExported: false });
   }
 
-  function undo() {
+  /** Steps the active document back (`undo`) or forward through its history. */
+  function stepHistory(direction: 'undo' | 'redo') {
     const doc = getActiveDocument(currentState());
     if (!doc) return;
-    const h = getHistory(doc.id);
-    const prev = h.past.pop();
-    if (!prev) return;
-    h.future.push(snapshotOf(doc));
-    if (h.future.length > MAX_HISTORY) h.future.shift();
-    lastActionKeys.delete(doc.id); // whatever comes next shouldn't coalesce with actions from before the undo
-    update((state) => ({
-      ...state,
-      documents: state.documents.map((d) => (d.id === doc.id ? applySnapshot(d, prev) : d)),
-    }));
-    historyTick.update((n) => n + 1);
+    const restored = history.step(doc, direction);
+    if (!restored) return;
+    update((state) => ({ ...state, documents: state.documents.map((d) => (d.id === doc.id ? restored : d)) }));
   }
 
-  function redo() {
-    const doc = getActiveDocument(currentState());
-    if (!doc) return;
-    const h = getHistory(doc.id);
-    const next = h.future.pop();
-    if (!next) return;
-    h.past.push(snapshotOf(doc));
-    if (h.past.length > MAX_HISTORY) h.past.shift();
-    lastActionKeys.delete(doc.id);
-    update((state) => ({
-      ...state,
-      documents: state.documents.map((d) => (d.id === doc.id ? applySnapshot(d, next) : d)),
-    }));
-    historyTick.update((n) => n + 1);
-  }
+  const undo = () => stepHistory('undo');
+  const redo = () => stepHistory('redo');
 
   return {
     subscribe,
-    historyTick,
-    getHistory,
+    historyTick: history.tick,
+    getHistory: history.get,
     loadPdfs,
     addPdfs,
     unlockDocument,
