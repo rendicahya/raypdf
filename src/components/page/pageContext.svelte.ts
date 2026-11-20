@@ -1,5 +1,6 @@
 import { getContext, setContext } from 'svelte';
 import type { CommentEditing } from './commentEditing.svelte';
+import type { TextEditing } from './textEditing.svelte';
 
 /**
  * What one page has selected on its own, shared by PDFViewer and the layers
@@ -17,12 +18,16 @@ export class PageSelection {
   commentId: string | null = $state(null);
   /** The comment whose note is open for typing. */
   editingCommentId: string | null = $state(null);
+  /** The text box open for typing (its selection is `selectedTextId`). */
+  editingTextId: string | null = $state(null);
 }
 
 export interface PageContext {
   selection: PageSelection;
   /** The comment note being typed on this page. */
   commentEditing: CommentEditing;
+  /** The text box being typed in on this page. */
+  textEditing: TextEditing;
   /** The page canvas's box on screen: item coordinates are relative to its top-left corner. */
   canvasRect(): DOMRect;
 }

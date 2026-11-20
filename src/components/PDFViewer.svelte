@@ -22,9 +22,10 @@
   import MarkupOptionsBar from './page/MarkupOptionsBar.svelte';
   import RedactionLayer from './page/RedactionLayer.svelte';
   import CommentLayer from './page/CommentLayer.svelte';
+  import TextBoxLayer from './page/TextBoxLayer.svelte';
+  import { TextEditing } from './page/textEditing.svelte';
   import { CommentEditing } from './page/commentEditing.svelte';
   import { PageSelection, setPageContext } from './page/pageContext.svelte';
-  import { resizedBox } from '../lib/utils/boxGeometry';
   import { getTotalRotation } from '../lib/pdf/loader';
   import type { PDFPageProxy } from 'pdfjs-dist';
   import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
@@ -123,10 +124,6 @@
     defaultTextWordSpacing,
     defaultTextLineHeight,
     defaultTextScript,
-    FONT_FAMILY_CSS,
-    SCRIPT_SCALE,
-    SCRIPT_SHIFT,
-    textDecoration,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
   import { openSignatureTool } from '../stores/tools';
@@ -180,7 +177,8 @@
   const sel = new PageSelection();
   // Opening and saving comment notes, for this page and its CommentLayer.
   const commentEditing = new CommentEditing(sel, (groupId) => removeHighlight(groupId));
-  setPageContext({ selection: sel, commentEditing, canvasRect: () => canvasEl.getBoundingClientRect() });
+  const textEditing = new TextEditing(sel);
+  setPageContext({ selection: sel, commentEditing, textEditing, canvasRect: () => canvasEl.getBoundingClientRect() });
 
   // Tracks whether there's a live (non-collapsed) selection anchored inside
   // the text layer, independent of hoverTextSelect/$textSelectMode — so that
@@ -596,12 +594,10 @@
       isPanning ||
       drawingBox ||
       movingSignatureId ||
-      movingTextId ||
       resizingSignatureId ||
-      resizingTextId ||
       drawingShape ||
       // A layer's own drag (RedactionLayer): the pointer is captured by the item.
-      (e.buttons !== 0 && !!(e.target as Element | null)?.closest?.('[data-redaction], [data-placed-comment]')) ||
+      (e.buttons !== 0 && !!(e.target as Element | null)?.closest?.('[data-redaction], [data-placed-comment], [data-placed-text]')) ||
       !!(e.target as Element | null)?.closest?.('[data-placed-box]') ||
       // Resting on a link keeps it clickable rather than turning into text
       // selection (a drag already selecting text carries on across it).
@@ -756,7 +752,7 @@
     if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'd') return;
     if ((e.target as Element | null)?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
     const ref = currentItem();
-    if (!ref || editingTextId) return;
+    if (!ref || sel.editingTextId) return;
     e.preventDefault();
     duplicateItem(ref);
   }
@@ -923,7 +919,7 @@
       selectedHighlightGroup = null;
     }
 
-    // Deliberately doesn't touch editingTextId/commitTextEdit here: this
+    // Deliberately doesn't touch sel.editingTextId/commitTextEdit here: this
     // handler fires on the same pointerdown that creates a brand-new text
     // box, and at that point Svelte hasn't painted the box into the DOM yet
     // — the querySelector below would find nothing and wrongly treat the
@@ -943,7 +939,7 @@
       currentText !== undefined &&
       !currentText?.contains(e.target as Node) &&
       !inToolPanel &&
-      editingTextId !== $selectedTextId
+      sel.editingTextId !== $selectedTextId
     ) {
       $selectedTextId = null;
     }
@@ -1054,9 +1050,9 @@
       // Add Text mode stays on after placing one box (so several can be
       // added in a row), so a click elsewhere on the canvas to start a new
       // box arrives here too — commit whatever's currently being edited
-      // first, otherwise reassigning editingTextId to the new box below
+      // first, otherwise reassigning sel.editingTextId to the new box below
       // would discard the previous one's typed text unsaved.
-      if (editingTextId) commitTextEdit();
+      if (sel.editingTextId) textEditing.commit();
       addTextAt(e);
       return;
     }
@@ -1582,41 +1578,6 @@
   // into it. Move/resize mirror the redaction box (a plain rectangle, no
   // aspect-ratio lock) rather than the signature.
   const TEXT_DEFAULT_WIDTH = 220;
-  const TEXT_MIN_WIDTH = 40;
-  const TEXT_MIN_HEIGHT = 20;
-
-  let editingTextId: string | null = $state(null);
-  let textEditValue = $state('');
-
-  function autofocusTextarea(node: HTMLTextAreaElement) {
-    node.focus();
-    node.select();
-  }
-
-  function startEditingText(id: string, initialValue: string) {
-    editingTextId = id;
-    textEditValue = initialValue;
-  }
-
-  // `forId`, when given, is the id the caller believes it's committing (e.g.
-  // a textarea's own onblur). When Svelte unmounts a text box that just
-  // stopped being edited (its {#if isEditing} branch switching off), removing
-  // that DOM node from the document fires a genuine native 'blur' on it —
-  // but by then editingTextId may have already moved on to a *different* box
-  // the user clicked to create next. Without this guard, that stale blur
-  // would call commitTextEdit() and it'd blindly act on whatever
-  // editingTextId is *now*, wiping out the new box instead of the old one.
-  function commitTextEdit(forId?: string) {
-    if (forId !== undefined && forId !== editingTextId) return;
-    if (!editingTextId) return;
-    const id = editingTextId;
-    const value = textEditValue;
-    editingTextId = null;
-    // An empty box left after editing is just clutter — drop it rather than
-    // leaving an invisible placeholder on the page.
-    if (!value.trim()) editorStore.removeText(id);
-    else editorStore.updateText(id, { text: value });
-  }
 
   function addTextAt(e: ClientPoint) {
     const doc = $activeDocument;
@@ -1653,93 +1614,7 @@
       lineHeight: $defaultTextLineHeight,
       script: $defaultTextScript,
     });
-    $selectedTextId = id;
-    startEditingText(id, '');
-  }
-
-  function onTextDoubleClick(e: MouseEvent, t: PlacedText) {
-    e.stopPropagation();
-    $selectedTextId = t.id;
-    openTextTool();
-    startEditingText(t.id, t.text);
-  }
-
-  let movingTextId: string | null = null;
-  let textMoveOffset = { x: 0, y: 0 };
-
-  function onTextPointerDown(e: PointerEvent, id: string) {
-    if (editingTextId === id) return;
-    e.stopPropagation();
-    $selectedTextId = id;
-    movingTextId = id;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const boxRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    textMoveOffset = { x: e.clientX - boxRect.left, y: e.clientY - boxRect.top };
-  }
-
-  function onTextPointerMove(e: PointerEvent, id: string) {
-    if (movingTextId !== id) return;
-    const t = $activeDocument?.texts.find((x) => x.id === id);
-    if (!t) return;
-    const rect = canvasEl.getBoundingClientRect();
-    const x = clamp(e.clientX - rect.left - textMoveOffset.x, 0, rect.width - t.width);
-    const y = clamp(e.clientY - rect.top - textMoveOffset.y, 0, rect.height - t.height);
-    editorStore.updateText(id, { x, y });
-  }
-
-  function onTextPointerUp() {
-    movingTextId = null;
-  }
-
-  function onTextKeydown(e: KeyboardEvent, id: string) {
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      editorStore.removeText(id);
-      if ($selectedTextId === id) $selectedTextId = null;
-      return;
-    }
-
-    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
-    e.preventDefault();
-
-    const t = $activeDocument?.texts.find((x) => x.id === id);
-    if (!t) return;
-
-    const rect = canvasEl.getBoundingClientRect();
-    const dx = e.key === 'ArrowLeft' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowRight' ? KEYBOARD_MOVE_STEP : 0;
-    const dy = e.key === 'ArrowUp' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowDown' ? KEYBOARD_MOVE_STEP : 0;
-    const x = clamp(t.x + dx, 0, rect.width - t.width);
-    const y = clamp(t.y + dy, 0, rect.height - t.height);
-    editorStore.updateText(id, { x, y });
-  }
-
-  let resizingTextId: string | null = null;
-  let textResizeStart: (PlacedText & { pointerX: number; pointerY: number }) | null = null;
-
-  function onTextResizePointerDown(e: PointerEvent, id: string) {
-    e.stopPropagation();
-    const t = $activeDocument?.texts.find((x) => x.id === id);
-    if (!t) return;
-    resizingTextId = id;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    textResizeStart = { pointerX: e.clientX, pointerY: e.clientY, ...t };
-  }
-
-  function onTextResizePointerMove(e: PointerEvent, id: string) {
-    if (resizingTextId !== id || !textResizeStart) return;
-    editorStore.updateText(id, resizedBox(e, textResizeStart, TEXT_MIN_WIDTH, TEXT_MIN_HEIGHT, canvasEl.getBoundingClientRect()));
-  }
-
-  function onTextResizePointerUp(e: PointerEvent) {
-    resizingTextId = null;
-    textResizeStart = null;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  }
-
-  function removeText(e: MouseEvent, id: string) {
-    e.stopPropagation();
-    editorStore.removeText(id);
-    if ($selectedTextId === id) $selectedTextId = null;
+    textEditing.start(id, '');
   }
 
   // Comment tool: click to drop a fixed-size sticky-note marker (in
@@ -2032,7 +1907,7 @@
           onSelect: () => {
             $selectedTextId = text.id;
             openTextTool();
-            startEditingText(text.id, text.text);
+            textEditing.start(text.id, text.text);
           },
         },
         {
@@ -2144,7 +2019,7 @@
         label: 'Add text here',
         icon: MENU_ICONS.text,
         onSelect: () => {
-          if (editingTextId) commitTextEdit();
+          if (sel.editingTextId) textEditing.commit();
           addTextAt(point);
         },
       },
@@ -2589,114 +2464,7 @@
 
   <RedactionLayer boxes={redactionsOnCurrentPage} />
 
-  {#each textsOnCurrentPage as t (t.id)}
-    {@const isSelected = $selectedTextId === t.id}
-    {@const isEditing = editingTextId === t.id}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      data-placed-text={t.id}
-      role="group"
-      tabindex="0"
-      aria-label="Text box. Double-click to edit, drag to move, drag the corner handle to resize."
-      class="absolute touch-none {isEditing ? '' : 'cursor-move'} {isSelected
-        ? 'ring-2 ring-blue-400/70'
-        : 'hover:ring-1 hover:ring-blue-300/50'}"
-      style:left="{t.x}px"
-      style:top="{t.y}px"
-      style:width="{t.width}px"
-      style:height="{t.height}px"
-      onpointerdown={(e) => onTextPointerDown(e, t.id)}
-      onpointermove={(e) => onTextPointerMove(e, t.id)}
-      onpointerup={onTextPointerUp}
-      ondblclick={(e) => onTextDoubleClick(e, t)}
-      onfocus={() => ($selectedTextId = t.id)}
-      onkeydown={(e) => onTextKeydown(e, t.id)}
-    >
-      {#if isEditing}
-        <!-- svelte-ignore a11y_autofocus -->
-        <textarea
-          use:autofocusTextarea
-          bind:value={textEditValue}
-          onpointerdown={(e) => e.stopPropagation()}
-          onblur={() => commitTextEdit(t.id)}
-          onkeydown={(e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
-            e.stopPropagation();
-            // Escape attaches whatever's typed (same rule as clicking away)
-            // and leaves Add Text mode entirely, rather than staying active
-            // for another box — matches Escape's usual meaning of "I'm done".
-            commitTextEdit(t.id);
-            textToolMode.set(false);
-          }}
-          class="h-full w-full resize-none border border-dashed border-blue-400 bg-white/70 p-0
-            outline-none"
-          style:font-family={FONT_FAMILY_CSS[t.fontFamily]}
-          style:font-size="{t.script === 'normal' ? t.fontSize : t.fontSize * SCRIPT_SCALE}px"
-          style:font-weight={t.bold ? 700 : 400}
-          style:font-style={t.italic ? 'italic' : 'normal'}
-          style:text-decoration-line={textDecoration(t)}
-          style:color={t.color}
-          style:letter-spacing="{t.letterSpacing}px"
-          style:word-spacing="{t.wordSpacing}px"
-          style:line-height={t.lineHeight}
-          style:text-align={t.align}
-        ></textarea>
-      {:else}
-        <!-- The span carries superscript/subscript: smaller and shifted
-             within lines that keep the full font size's height. -->
-        <div
-          class="h-full w-full select-none overflow-hidden whitespace-pre-wrap break-words"
-          style:font-family={FONT_FAMILY_CSS[t.fontFamily]}
-          style:font-size="{t.fontSize}px"
-          style:font-weight={t.bold ? 700 : 400}
-          style:font-style={t.italic ? 'italic' : 'normal'}
-          style:color={t.color}
-          style:background-color={t.background}
-          style:opacity={t.opacity}
-          style:letter-spacing="{t.letterSpacing}px"
-          style:word-spacing="{t.wordSpacing}px"
-          style:line-height={t.lineHeight}
-          style:text-align={t.align}
-        ><span
-            class="relative"
-            style:font-size={t.script === 'normal' ? null : `${SCRIPT_SCALE}em`}
-            style:top="{SCRIPT_SHIFT[t.script] * t.fontSize}px"
-            style:text-decoration-line={textDecoration(t)}>{t.text}</span
-          ></div>
-      {/if}
-
-      {#if isSelected}
-        <div
-          role="button"
-          tabindex="0"
-          aria-label="Resize text box"
-          data-resize-handle
-          title="Resize (drag the handle)"
-          class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full
-            border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
-          onpointerdown={(e) => onTextResizePointerDown(e, t.id)}
-          onpointermove={(e) => onTextResizePointerMove(e, t.id)}
-          onpointerup={onTextResizePointerUp}
-        ></div>
-
-        <button
-          type="button"
-          aria-label="Remove text box"
-          title="Remove text box"
-          class="absolute -right-1.5 -top-1.5 flex h-5 w-5 touch-none items-center justify-center rounded-full
-            border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
-          onpointerdown={(e) => e.stopPropagation()}
-          onclick={(e) => removeText(e, t.id)}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
-            <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      {/if}
-    </div>
-  {/each}
+  <TextBoxLayer texts={textsOnCurrentPage} />
 
   <CommentLayer comments={commentsOnCurrentPage} />
 
