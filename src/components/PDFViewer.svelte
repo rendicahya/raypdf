@@ -20,6 +20,9 @@
   import AreaDragOverlay from './page/AreaDragOverlay.svelte';
   import SelectionMarkupBar from './page/SelectionMarkupBar.svelte';
   import MarkupOptionsBar from './page/MarkupOptionsBar.svelte';
+  import RedactionLayer from './page/RedactionLayer.svelte';
+  import { PageSelection, setPageContext } from './page/pageContext.svelte';
+  import { resizedBox } from '../lib/utils/boxGeometry';
   import { getTotalRotation } from '../lib/pdf/loader';
   import type { PDFPageProxy } from 'pdfjs-dist';
   import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
@@ -170,6 +173,10 @@
   const previewAlign = $derived(positionToFlex($watermarkPosition));
 
   const docId = $derived($activeDocument?.id ?? null);
+
+  // This page's own selection, shared with the layers it's built from (components/page/).
+  const sel = new PageSelection();
+  setPageContext({ selection: sel, canvasRect: () => canvasEl.getBoundingClientRect() });
 
   // Tracks whether there's a live (non-collapsed) selection anchored inside
   // the text layer, independent of hoverTextSelect/$textSelectMode — so that
@@ -589,13 +596,13 @@
       isPanning ||
       drawingBox ||
       movingSignatureId ||
-      movingRedactionId ||
       movingTextId ||
       movingCommentId ||
       resizingSignatureId ||
-      resizingRedactionId ||
       resizingTextId ||
       drawingShape ||
+      // A layer's own drag (RedactionLayer): the pointer is captured by the item.
+      (e.buttons !== 0 && !!(e.target as Element | null)?.closest?.('[data-redaction]')) ||
       !!(e.target as Element | null)?.closest?.('[data-placed-box]') ||
       // Resting on a link keeps it clickable rather than turning into text
       // selection (a drag already selecting text carries on across it).
@@ -709,7 +716,7 @@
   function clearSingleSelection() {
     selectedSignatureId = null;
     selectedImageId = null;
-    selectedRedactionId = null;
+    sel.redactionId = null;
     if ($selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)) $selectedTextId = null;
     if ($selectedShapeId && shapesOnCurrentPage.some((s) => s.id === $selectedShapeId)) $selectedShapeId = null;
   }
@@ -908,10 +915,10 @@
       : null;
     if (!current?.contains(e.target as Node)) selectedSignatureId = null;
 
-    const currentRedaction = selectedRedactionId
-      ? wrapperEl?.querySelector(`[data-redaction="${selectedRedactionId}"]`)
+    const currentRedaction = sel.redactionId
+      ? wrapperEl?.querySelector(`[data-redaction="${sel.redactionId}"]`)
       : null;
-    if (!currentRedaction?.contains(e.target as Node)) selectedRedactionId = null;
+    if (!currentRedaction?.contains(e.target as Node)) sel.redactionId = null;
 
     if ((e.target as Element | null)?.closest?.('[data-highlight-group]')?.getAttribute('data-highlight-group') !== selectedHighlightGroup) {
       selectedHighlightGroup = null;
@@ -1346,7 +1353,6 @@
   // something is stacked on top of them) starts a new box; releasing commits
   // it if it's big enough to be a deliberate box rather than a stray click.
   const REDACT_DRAW_MIN_SIZE = 8;
-  let selectedRedactionId: string | null = $state(null);
   let drawingBox: { x: number; y: number; width: number; height: number } | null = $state(null);
   let drawStart = { x: 0, y: 0 };
 
@@ -1386,7 +1392,7 @@
       const y = clamp(e.clientY - rect.top, 0, rect.height);
       drawStart = { x, y };
       drawingBox = { x, y, width: 0, height: 0 };
-      selectedRedactionId = null;
+      sel.redactionId = null;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
@@ -1573,135 +1579,6 @@
     return capturePage(loaded, pageNumber, doc.rotation, area, overlays, $screenshotScale);
   }
 
-  // Move an existing box. Looks the box up fresh by id on every step (rather
-  // than trusting a closure snapshot) since editorStore emits a new object on
-  // every pointermove, same reasoning as the signature's move handler above.
-  let movingRedactionId: string | null = null;
-  let redactMoveOffset = { x: 0, y: 0 };
-
-  function onRedactionPointerDown(e: PointerEvent, id: string) {
-    e.stopPropagation();
-    selectedRedactionId = id;
-    movingRedactionId = id;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const boxRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    redactMoveOffset = { x: e.clientX - boxRect.left, y: e.clientY - boxRect.top };
-  }
-
-  function onRedactionPointerMove(e: PointerEvent, id: string) {
-    if (movingRedactionId !== id) return;
-    const box = $activeDocument?.redactions.find((b) => b.id === id);
-    if (!box) return;
-    const rect = canvasEl.getBoundingClientRect();
-    const x = clamp(e.clientX - rect.left - redactMoveOffset.x, 0, rect.width - box.width);
-    const y = clamp(e.clientY - rect.top - redactMoveOffset.y, 0, rect.height - box.height);
-    editorStore.updateRedaction(id, { x, y });
-  }
-
-  function onRedactionPointerUp() {
-    movingRedactionId = null;
-  }
-
-  // Holding Ctrl (Cmd on a Mac) while resizing keeps the box's proportions
-  // from when the drag began, as far as the page allows.
-  function withAspect(
-    e: PointerEvent,
-    start: { width: number; height: number },
-    width: number,
-    height: number,
-    maxHeight: number,
-  ): { width: number; height: number } {
-    if (!(e.ctrlKey || e.metaKey) || start.width <= 0 || start.height <= 0) return { width, height };
-    const aspect = start.width / start.height;
-    height = width / aspect;
-    if (height > maxHeight) {
-      height = maxHeight;
-      width = height * aspect;
-    }
-    return { width, height };
-  }
-
-  // Resizing a plain, unturned box by its bottom-right handle: it grows from
-  // its top-left corner, or from its centre while Shift is held (the
-  // opposite sides move too), and keeps its proportions while Ctrl is held.
-  function resizedBox(
-    e: PointerEvent,
-    start: { x: number; y: number; width: number; height: number; pointerX: number; pointerY: number },
-    minWidth: number,
-    minHeight: number,
-  ): { x: number; y: number; width: number; height: number } {
-    const rect = canvasEl.getBoundingClientRect();
-    const fromCentre = e.shiftKey;
-    const grow = fromCentre ? 2 : 1;
-    const cx = start.x + start.width / 2;
-    const cy = start.y + start.height / 2;
-    const maxWidth = fromCentre ? 2 * Math.min(cx, rect.width - cx) : rect.width - start.x;
-    const maxHeight = fromCentre ? 2 * Math.min(cy, rect.height - cy) : rect.height - start.y;
-    const sized = withAspect(
-      e,
-      start,
-      clamp(start.width + grow * (e.clientX - start.pointerX), minWidth, maxWidth),
-      clamp(start.height + grow * (e.clientY - start.pointerY), minHeight, maxHeight),
-      maxHeight,
-    );
-    if (!fromCentre) return { x: start.x, y: start.y, ...sized };
-    return { x: cx - sized.width / 2, y: cy - sized.height / 2, ...sized };
-  }
-
-  // Resize via the corner handle: a redaction box is a plain rectangle, so
-  // it keeps its proportions only while Ctrl is held.
-  const REDACT_MIN_SIZE = 12;
-  let resizingRedactionId: string | null = null;
-  let redactResizeStart: (RedactionBox & { pointerX: number; pointerY: number }) | null = null;
-
-  function onRedactionResizePointerDown(e: PointerEvent, id: string) {
-    e.stopPropagation();
-    const box = $activeDocument?.redactions.find((b) => b.id === id);
-    if (!box) return;
-    resizingRedactionId = id;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    redactResizeStart = { pointerX: e.clientX, pointerY: e.clientY, ...box };
-  }
-
-  function onRedactionResizePointerMove(e: PointerEvent, id: string) {
-    if (resizingRedactionId !== id || !redactResizeStart) return;
-    editorStore.updateRedaction(id, resizedBox(e, redactResizeStart, REDACT_MIN_SIZE, REDACT_MIN_SIZE));
-  }
-
-  function onRedactionResizePointerUp(e: PointerEvent) {
-    resizingRedactionId = null;
-    redactResizeStart = null;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  }
-
-  function removeRedactionBox(e: MouseEvent, id: string) {
-    e.stopPropagation();
-    editorStore.removeRedaction(id);
-    if (selectedRedactionId === id) selectedRedactionId = null;
-  }
-
-  function onRedactionKeydown(e: KeyboardEvent, id: string) {
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      editorStore.removeRedaction(id);
-      selectedRedactionId = null;
-      return;
-    }
-
-    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
-    e.preventDefault();
-
-    const box = $activeDocument?.redactions.find((b) => b.id === id);
-    if (!box) return;
-
-    const rect = canvasEl.getBoundingClientRect();
-    const dx = e.key === 'ArrowLeft' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowRight' ? KEYBOARD_MOVE_STEP : 0;
-    const dy = e.key === 'ArrowUp' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowDown' ? KEYBOARD_MOVE_STEP : 0;
-    const x = clamp(box.x + dx, 0, rect.width - box.width);
-    const y = clamp(box.y + dy, 0, rect.height - box.height);
-    editorStore.updateRedaction(id, { x, y });
-  }
-
   // Text tool: click to drop a text box (in textToolMode), then type directly
   // into it. Move/resize mirror the redaction box (a plain rectangle, no
   // aspect-ratio lock) rather than the signature.
@@ -1851,7 +1728,7 @@
 
   function onTextResizePointerMove(e: PointerEvent, id: string) {
     if (resizingTextId !== id || !textResizeStart) return;
-    editorStore.updateText(id, resizedBox(e, textResizeStart, TEXT_MIN_WIDTH, TEXT_MIN_HEIGHT));
+    editorStore.updateText(id, resizedBox(e, textResizeStart, TEXT_MIN_WIDTH, TEXT_MIN_HEIGHT, canvasEl.getBoundingClientRect()));
   }
 
   function onTextResizePointerUp(e: PointerEvent) {
@@ -2234,11 +2111,11 @@
 
     const redactionId = idOf('data-redaction');
     if (redactionId) {
-      selectedRedactionId = redactionId;
+      sel.redactionId = redactionId;
       return [
         deleteItem('Delete redaction', () => {
           editorStore.removeRedaction(redactionId);
-          selectedRedactionId = null;
+          sel.redactionId = null;
         }),
       ];
     }
@@ -2810,56 +2687,7 @@
     {/if}
   {/each}
 
-  {#each redactionsOnCurrentPage as box (box.id)}
-    {@const isSelected = selectedRedactionId === box.id}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      data-redaction={box.id}
-      role="group"
-      tabindex="0"
-      aria-label="Redacted area, permanently removed on export. Use arrow keys to move, Delete to remove."
-      class="absolute cursor-move touch-none bg-black {isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : ''}"
-      style:left="{box.x}px"
-      style:top="{box.y}px"
-      style:width="{box.width}px"
-      style:height="{box.height}px"
-      onpointerdown={(e) => onRedactionPointerDown(e, box.id)}
-      onpointermove={(e) => onRedactionPointerMove(e, box.id)}
-      onpointerup={onRedactionPointerUp}
-      onfocus={() => (selectedRedactionId = box.id)}
-      onkeydown={(e) => onRedactionKeydown(e, box.id)}
-    >
-      {#if isSelected}
-        <div
-          role="button"
-          tabindex="0"
-          aria-label="Resize redacted area"
-          data-resize-handle
-          title="Resize (drag, or use arrow keys)"
-          class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full
-            border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
-          onpointerdown={(e) => onRedactionResizePointerDown(e, box.id)}
-          onpointermove={(e) => onRedactionResizePointerMove(e, box.id)}
-          onpointerup={onRedactionResizePointerUp}
-        ></div>
-
-        <button
-          type="button"
-          aria-label="Remove redacted area"
-          title="Remove redacted area"
-          class="absolute -right-1.5 -top-1.5 flex h-5 w-5 touch-none items-center justify-center rounded-full
-            border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
-          onpointerdown={(e) => e.stopPropagation()}
-          onclick={(e) => removeRedactionBox(e, box.id)}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
-            <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      {/if}
-    </div>
-  {/each}
+  <RedactionLayer boxes={redactionsOnCurrentPage} />
 
   {#each textsOnCurrentPage as t (t.id)}
     {@const isSelected = $selectedTextId === t.id}
