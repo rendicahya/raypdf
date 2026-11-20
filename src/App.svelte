@@ -8,6 +8,7 @@
   import Toolbar from './components/Toolbar.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
   import UpdateToast from './components/UpdateToast.svelte';
+  import DownloadToast from './components/DownloadToast.svelte';
   import VerifyResults from './components/VerifyResults.svelte';
   import FeatureGrid from './components/FeatureGrid.svelte';
   import Faq from './components/Faq.svelte';
@@ -344,6 +345,7 @@
   ondrop={onPageDrop}
 >
   <UpdateToast />
+  <DownloadToast />
 
   {#if $markdownExport && readyForEditor}
     <MarkdownExport initialPages={$markdownExport.pages} />

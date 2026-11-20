@@ -16,6 +16,7 @@ import { drawImages, drawShapes } from './shapes';
 import { EditableItemRecorder, markEditableItems, removeEditableItems } from './editableItems';
 import { imageFor } from '../../stores/images';
 import { keepItemsEditable } from '../../stores/exportOptions';
+import { downloadBlob } from '../utils/download';
 import { get } from 'svelte/store';
 import type {
   PdfDocumentState,
@@ -363,17 +364,6 @@ export function signedFileName(originalFileName: string): string {
 export function pageOnlyFileName(originalFileName: string, pageNumber: number): string {
   const base = originalFileName.replace(/\.pdf$/i, '');
   return `${base}_page${pageNumber}.pdf`;
-}
-
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-
-  URL.revokeObjectURL(url);
 }
 
 export function downloadSignedPdf(bytes: Uint8Array, originalFileName: string): void {

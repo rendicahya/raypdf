@@ -253,7 +253,7 @@ components/
 - ToolPanel, SignaturePanel, toolOptions/ (PanelHeader, RedactOptions, TextOptions, CommentOptions, SelectOptions, ScreenshotOptions, PageTextOptions, PageNumberOptions, HeaderFooterOptions, PageWatermarkOptions, ShapeOptions, CropOptions, ImageOptions)
 - ExportButton, MergeOrderDialog, MarkdownExport, StartOverButton
 - VerifyResults (the Verify choice on the front page; checks every added PDF in place)
-- ThemeToggle, FullscreenToggle, UpdateToast
+- ThemeToggle, FullscreenToggle, UpdateToast, DownloadToast (every download goes through `downloadBlob` in `lib/utils/download.ts`, which shows it)
 - PlacedBox (a movable, resizable item on a page: shapes, images), ItemSelection (several items selected together), ShapeGraphic, CropOverlay, UnlockPdf, OcrStatus
 - ContextMenu (reusable right-click menu; used by PageSidebar and PDFViewer, icons in `lib/utils/menuIcons.ts`)
 
