@@ -1,29 +1,9 @@
 import { derived, writable } from 'svelte/store';
 import { persistedWritable } from '../lib/utils/persist';
-import { signatureToolMode } from './signatureTool';
-import { redactMode } from './redact';
-import { textToolMode } from './textTool';
-import { commentToolMode } from './commentTool';
-import { textSelectMode } from './textSelect';
-import { screenshotToolMode } from './screenshotTool';
-import { pageNumbersToolMode } from './pageNumbersTool';
-import { pageWatermarkToolMode } from './pageWatermarkTool';
-import { shapeToolMode } from './shapeTool';
-import { cropToolMode } from './cropTool';
+import { TOOL_MODES, TOOL_NAMES, activeTool, activateTool, turnOffTools, type ToolName } from './tools';
 
 /** Tools whose options are shown in the right-hand panel while they're on. */
-export type PanelTool =
-  | 'signature'
-  | 'redact'
-  | 'text'
-  | 'comment'
-  | 'select'
-  | 'screenshot'
-  | 'pageNumbers'
-  | 'watermark'
-  | 'shapes'
-  | 'crop'
-  | 'image';
+export type PanelTool = ToolName | 'image';
 
 /**
  * The placed image whose properties the panel shows (ImageOptions), or null.
@@ -43,73 +23,36 @@ export const TOOL_PANEL_WIDTH = 288;
  */
 export const toolPanelOpen = persistedWritable<boolean>('toolPanelOpen', true);
 
-/** The active tool, if it's one with options (tools are mutually exclusive). */
+/** The active tool, if it's one with options (every tool has them), or an image's properties. */
 export const activePanelTool = derived(
-  [signatureToolMode, redactMode, textToolMode, commentToolMode, textSelectMode, screenshotToolMode, pageNumbersToolMode, pageWatermarkToolMode, shapeToolMode, cropToolMode, imagePropertiesId],
-  ([signature, redact, text, comment, select, screenshot, pageNumbers, watermark, shapes, crop, image]): PanelTool | null =>
-    signature
-      ? 'signature'
-      : redact
-        ? 'redact'
-        : text
-          ? 'text'
-          : comment
-            ? 'comment'
-            : select
-              ? 'select'
-              : screenshot
-                ? 'screenshot'
-                : pageNumbers
-                  ? 'pageNumbers'
-                  : watermark
-                    ? 'watermark'
-                    : shapes
-                      ? 'shapes'
-                      : crop
-                        ? 'crop'
-                        : image
-                          ? 'image'
-                          : null,
+  [activeTool, imagePropertiesId],
+  ([tool, image]): PanelTool | null => tool ?? (image ? 'image' : null),
 );
 
-const TOOL_MODES = [
-  signatureToolMode,
-  redactMode,
-  textToolMode,
-  commentToolMode,
-  textSelectMode,
-  screenshotToolMode,
-  pageNumbersToolMode,
-  pageWatermarkToolMode,
-  shapeToolMode,
-  cropToolMode,
-];
-
 /** Turns one tool on (and every other tool off) and shows its panel. */
-function openPanelTool(mode: (typeof TOOL_MODES)[number]) {
-  for (const tool of TOOL_MODES) if (tool !== mode) tool.set(false);
-  mode.set(true);
+function openPanelTool(name: ToolName) {
+  activateTool(name);
   toolPanelOpen.set(true);
 }
 
 // Any tool turning on closes an image's properties.
-for (const mode of TOOL_MODES) {
-  mode.subscribe((on) => {
+for (const name of TOOL_NAMES) {
+  TOOL_MODES[name].subscribe((on) => {
     if (on) imagePropertiesId.set(null);
   });
 }
 
 /** Shows a placed image's properties in the panel, with every tool off (Move). */
 export function openImageProperties(id: string) {
-  for (const tool of TOOL_MODES) tool.set(false);
+  turnOffTools();
   imagePropertiesId.set(id);
 }
 
 /** Opens Add Text and its panel, e.g. when a placed text box is double-clicked to edit it. */
-export const openTextTool = () => openPanelTool(textToolMode);
+export const openTextTool = () => openPanelTool('text');
 
 /** Opens Shapes and its panel, e.g. when a placed shape is double-clicked to restyle it. */
-export const openShapeTool = () => openPanelTool(shapeToolMode);
+export const openShapeTool = () => openPanelTool('shapes');
 
 /** The tool whose options the right-hand panel is showing right now, if any. */
 export const shownPanelTool = derived([activePanelTool, toolPanelOpen], ([tool, open]) =>

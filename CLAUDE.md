@@ -150,7 +150,7 @@ Recognize text (OCR; `stores/ocr.ts`, progress in OcrStatus; the languages in `l
 
 Several signatures can be saved (drawn, typed, or uploaded — `SignatureCreator`, `lib/signature/create.ts`); every `PlacedSignature` has a `signatureId`, and export takes a `signatureFor` lookup rather than one image.
 
-Tools are mutually exclusive: turning one on turns the others off, and Escape or Move returns to the default. A new tool must be added to every place that resets the others (FloatingControls, EditorView's Escape handler, PDFViewer's hover/pan checks). The Signature tool is the exception in PDFViewer: it leaves the canvas in Move behavior, so it isn't in those checks.
+Tools are mutually exclusive: turning one on turns the others off, and Escape or Move returns to the default. Every tool is listed once in `TOOL_MODES` (`stores/tools.ts`): `activateTool`, `toggleTool`, `turnOffTools`, and `activeTool` serve the toolbar (ToolButton), Escape, the options panel, and the text-recognition area, so a new tool is added there (and to PDFViewer's hover/pan checks). The Signature tool is the exception in PDFViewer: it leaves the canvas in Move behavior, so it isn't in those checks.
 
 Future:
 

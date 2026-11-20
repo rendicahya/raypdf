@@ -13,15 +13,7 @@
   import { search, openSearch, closeSearch } from '../stores/search';
   import { editorStore, activeDocument, DEFAULT_RENDER_SCALE } from '../stores/editor';
   import { pageSidebarOpen, pageSidebarWidth, togglePageSidebar } from '../stores/layout';
-  import { redactMode } from '../stores/redact';
-  import { textToolMode } from '../stores/textTool';
-  import { screenshotToolMode } from '../stores/screenshotTool';
-  import { textSelectMode } from '../stores/textSelect';
-  import { signatureToolMode } from '../stores/signatureTool';
-  import { pageNumbersToolMode } from '../stores/pageNumbersTool';
-  import { pageWatermarkToolMode } from '../stores/pageWatermarkTool';
-  import { shapeToolMode } from '../stores/shapeTool';
-  import { cropToolMode } from '../stores/cropTool';
+  import { activeTool, turnOffTools } from '../stores/tools';
   import { ocrAreaMode, stopAreaSelection } from '../stores/ocr';
   import { activePanelTool, imagePropertiesId, shownPanelTool, toolPanelOpen, TOOL_PANEL_WIDTH } from '../stores/toolPanel';
   import { tooltip } from '../lib/utils/tooltip';
@@ -52,15 +44,7 @@
 
   // Escape backs out of whichever click-driven canvas mode is active, in this order.
   const escapable: { isOn: () => boolean; turnOff: () => void }[] = [
-    { isOn: () => $redactMode, turnOff: () => redactMode.set(false) },
-    { isOn: () => $textToolMode, turnOff: () => textToolMode.set(false) },
-    { isOn: () => $textSelectMode, turnOff: () => textSelectMode.set(false) },
-    { isOn: () => $screenshotToolMode, turnOff: () => screenshotToolMode.set(false) },
-    { isOn: () => $signatureToolMode, turnOff: () => signatureToolMode.set(false) },
-    { isOn: () => $pageNumbersToolMode, turnOff: () => pageNumbersToolMode.set(false) },
-    { isOn: () => $pageWatermarkToolMode, turnOff: () => pageWatermarkToolMode.set(false) },
-    { isOn: () => $shapeToolMode, turnOff: () => shapeToolMode.set(false) },
-    { isOn: () => $cropToolMode, turnOff: () => cropToolMode.set(false) },
+    { isOn: () => $activeTool !== null, turnOff: () => turnOffTools() },
     { isOn: () => !!$imagePropertiesId, turnOff: () => imagePropertiesId.set(null) },
     { isOn: () => $ocrAreaMode, turnOff: stopAreaSelection },
     { isOn: () => $search.open, turnOff: closeSearch },

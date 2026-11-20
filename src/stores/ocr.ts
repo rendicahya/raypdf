@@ -1,21 +1,12 @@
-import { writable, derived, get, type Writable } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { editorStore, getActiveDocument } from './editor';
 import { getCachedPdf } from '../lib/pdf/docCache';
 import { pageHasText, recognizePages, recognizeArea, type OcrProgress } from '../lib/pdf/ocr';
 import type { CaptureArea } from '../lib/pdf/screenshot';
 import { OCR_LANGUAGES, type OcrLanguage } from '../lib/pdf/ocrLanguages';
 import { persistedWritable } from '../lib/utils/persist';
-import { redactMode } from './redact';
-import { textToolMode } from './textTool';
-import { commentToolMode } from './commentTool';
 import { clickToPlaceMode } from './clickToPlace';
-import { signatureToolMode } from './signatureTool';
-import { textSelectMode } from './textSelect';
-import { screenshotToolMode } from './screenshotTool';
-import { pageNumbersToolMode } from './pageNumbersTool';
-import { pageWatermarkToolMode } from './pageWatermarkTool';
-import { shapeToolMode } from './shapeTool';
-import { cropToolMode } from './cropTool';
+import { TOOL_MODES, TOOL_NAMES, turnOffTools } from './tools';
 
 /**
  * Recognize text (OCR) on the active document's scanned pages, or in an area
@@ -43,20 +34,7 @@ if (!OCR_LANGUAGES.some((l) => l.code === get(ocrLanguage))) ocrLanguage.set('en
 /** Whether the page is waiting for an area to be dragged. It works like a tool: turning on another tool ends it. */
 export const ocrAreaMode = derived(ocrStatus, (s) => s.state === 'selecting');
 
-const OTHER_TOOLS: Writable<boolean>[] = [
-  redactMode,
-  textToolMode,
-  commentToolMode,
-  clickToPlaceMode,
-  signatureToolMode,
-  textSelectMode,
-  screenshotToolMode,
-  pageNumbersToolMode,
-  pageWatermarkToolMode,
-  shapeToolMode,
-  cropToolMode,
-];
-for (const tool of OTHER_TOOLS) {
+for (const tool of [...TOOL_NAMES.map((name) => TOOL_MODES[name]), clickToPlaceMode]) {
   tool.subscribe((on) => {
     if (on) stopAreaSelection();
   });
@@ -143,7 +121,8 @@ export async function recognizeText(pages?: number[]): Promise<void> {
 /** Waits for the user to drag a rectangle on a page; the other tools turn off. */
 export function startAreaSelection() {
   if (isOcrRunning(get(ocrStatus))) return;
-  for (const tool of OTHER_TOOLS) tool.set(false);
+  turnOffTools();
+  clickToPlaceMode.set(false);
   clearTimeout(dismissTimer);
   ocrStatus.set({ state: 'selecting' });
 }

@@ -1,19 +1,12 @@
 <script lang="ts">
   import { editorStore, activeDocument, canUndo, canRedo, DEFAULT_RENDER_SCALE } from '../stores/editor';
-  import { redactMode } from '../stores/redact';
-  import { textToolMode } from '../stores/textTool';
-  import { commentToolMode } from '../stores/commentTool';
   import { clickToPlaceMode } from '../stores/clickToPlace';
-  import { signatureToolMode } from '../stores/signatureTool';
-  import { textSelectMode } from '../stores/textSelect';
+  import { activeTool, toggleTool, turnOffTools } from '../stores/tools';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation } from '../lib/pdf/loader';
   import { tooltip } from '../lib/utils/tooltip';
-  import { screenshotToolMode, screenshotResult } from '../stores/screenshotTool';
-  import { pageNumbersToolMode } from '../stores/pageNumbersTool';
-  import { pageWatermarkToolMode } from '../stores/pageWatermarkTool';
-  import { shapeToolMode } from '../stores/shapeTool';
-  import { cropToolMode } from '../stores/cropTool';
+  import { screenshotResult } from '../stores/screenshotTool';
+  import ToolButton from './ToolButton.svelte';
   import {
     ocrAreaMode,
     ocrStatus,
@@ -33,6 +26,7 @@
   const iconButtonClass =
     'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-100 ' +
     'disabled:cursor-not-allowed disabled:opacity-30 dark:text-neutral-300 dark:hover:bg-neutral-800';
+  // Add image is a file picker, not a tool, but looks like the ToolButtons beside it.
   const toolButtonClass = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors';
   // Separates the groups of tools: basics, sign and fill, mark up, protect, pages.
   const dividerClass = 'h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700';
@@ -42,185 +36,20 @@
     $activeDocument ? Array.from({ length: $activeDocument.pageCount }, (_, i) => i + 1) : [],
   );
 
-  // Redact and Add Text are mutually exclusive click-driven modes on the
-  // canvas — enabling one turns the other off so a click has one unambiguous meaning.
-  function toggleRedactMode() {
-    redactMode.update((v) => !v);
-    if ($redactMode) {
-      signatureToolMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
+  // Move is the default, non-click-driven mode: no tool is on, the canvas
+  // shows a hand/grab cursor, and dragging existing signatures/text/
+  // redaction boxes around works as normal. It has no state of its own (it's
+  // "none of the other modes") but gets its own button so the user has an
+  // explicit, one-click way back to it (same effect as Escape, without
+  // needing to know that shortcut). The Signature tool already behaves like
+  // Move on the canvas, so Move leaves its panel open and only ends
+  // click-to-place.
+  const moveModeActive = $derived($activeTool === null && !$clickToPlaceMode && !$ocrAreaMode);
 
-  function toggleSignatureToolMode() {
-    signatureToolMode.update((v) => !v);
-    if ($signatureToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function toggleTextToolMode() {
-    textToolMode.update((v) => !v);
-    if ($textToolMode) {
-      redactMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function toggleCommentToolMode() {
-    commentToolMode.update((v) => !v);
-    if ($commentToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function toggleTextSelectMode() {
-    textSelectMode.update((v) => !v);
-    if ($textSelectMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  // Move is the default, non-click-driven mode: no other tool is active, the
-  // canvas shows a hand/grab cursor, and dragging existing signatures/text/
-  // redaction boxes around works as normal. It has no state of its own — it's
-  // just "none of the other modes" — but gets its own button so the user has
-  // an explicit, one-click way back to it (same effect as Escape, without
-  // needing to know that shortcut).
-  const moveModeActive = $derived(
-    !$redactMode &&
-      !$textToolMode &&
-      !$commentToolMode &&
-      !$clickToPlaceMode &&
-      !$signatureToolMode &&
-      !$textSelectMode &&
-      !$screenshotToolMode &&
-      !$pageNumbersToolMode &&
-      !$pageWatermarkToolMode &&
-      !$shapeToolMode &&
-      !$cropToolMode &&
-      !$ocrAreaMode,
-  );
-
-  function toggleScreenshotToolMode() {
-    screenshotToolMode.update((v) => !v);
-    if ($screenshotToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function togglePageNumbersToolMode() {
-    pageNumbersToolMode.update((v) => !v);
-    if ($pageNumbersToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function togglePageWatermarkToolMode() {
-    pageWatermarkToolMode.update((v) => !v);
-    if ($pageWatermarkToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      shapeToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function toggleShapeToolMode() {
-    shapeToolMode.update((v) => !v);
-    if ($shapeToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      cropToolMode.set(false);
-    }
-  }
-
-  function toggleCropToolMode() {
-    cropToolMode.update((v) => !v);
-    if ($cropToolMode) {
-      redactMode.set(false);
-      textToolMode.set(false);
-      commentToolMode.set(false);
-      clickToPlaceMode.set(false);
-      signatureToolMode.set(false);
-      textSelectMode.set(false);
-      screenshotToolMode.set(false);
-      pageNumbersToolMode.set(false);
-      pageWatermarkToolMode.set(false);
-      shapeToolMode.set(false);
-    }
+  function activateMoveMode() {
+    turnOffTools('signature');
+    clickToPlaceMode.set(false);
+    stopAreaSelection();
   }
 
   // Recognize text: on the current page, on every page without text, or in
@@ -304,20 +133,6 @@
     if (!result?.ok) return;
     downloadBlob(result.blob, result.fileName);
     screenshotResult.set(null);
-  }
-
-  function activateMoveMode() {
-    redactMode.set(false);
-    textToolMode.set(false);
-    commentToolMode.set(false);
-    clickToPlaceMode.set(false);
-    textSelectMode.set(false);
-    screenshotToolMode.set(false);
-    pageNumbersToolMode.set(false);
-    pageWatermarkToolMode.set(false);
-    shapeToolMode.set(false);
-    cropToolMode.set(false);
-    stopAreaSelection();
   }
 
   // Fits the current page to the visible scroll area — width-only, or both
@@ -409,7 +224,7 @@
   });
 </script>
 
-<!-- Placed by App.svelte, which keeps it still when the tool panel opens. -->
+<!-- Placed by EditorView, which keeps it still when the tool panel opens. -->
 <div class="pointer-events-none flex flex-col items-center gap-1.5">
   {#if $screenshotResult}
     {@const result = $screenshotResult}
@@ -608,104 +423,53 @@
     </div>
 
     <!-- Basics -->
-    <button
-      type="button"
-      aria-label="Move"
-      aria-pressed={moveModeActive}
-      use:tooltip={'Move: drag existing signatures, text, or redactions around (default)'}
-      class={toolButtonClass}
-      class:border-neutral-200={!moveModeActive}
-      class:text-neutral-600={!moveModeActive}
-      class:hover:bg-neutral-100={!moveModeActive}
-      class:dark:border-neutral-800={!moveModeActive}
-      class:dark:text-neutral-300={!moveModeActive}
-      class:dark:hover:bg-neutral-800={!moveModeActive}
-      class:border-neutral-900={moveModeActive}
-      class:bg-neutral-900={moveModeActive}
-      class:text-white={moveModeActive}
-      class:dark:border-neutral-100={moveModeActive}
-      class:dark:bg-neutral-100={moveModeActive}
-      class:dark:text-neutral-900={moveModeActive}
+    <ToolButton
+      label="Move"
+      tip={'Move: drag existing signatures, text, or redactions around (default)'}
+      active={moveModeActive}
+      activeClass="border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
       onclick={activateMoveMode}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M9 11.5V6a1.5 1.5 0 0 1 3 0v5M12 11.5V5a1.5 1.5 0 0 1 3 0v6.5M15 11.5V7a1.5 1.5 0 0 1 3 0v7c0 3.31-2.69 6-6 6h-1c-2 0-3-.5-4-2l-2.7-3.6a1.4 1.4 0 0 1 .3-1.9 1.4 1.4 0 0 1 1.8.1L9 15"
-        />
-      </svg>
-    </button>
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M9 11.5V6a1.5 1.5 0 0 1 3 0v5M12 11.5V5a1.5 1.5 0 0 1 3 0v6.5M15 11.5V7a1.5 1.5 0 0 1 3 0v7c0 3.31-2.69 6-6 6h-1c-2 0-3-.5-4-2l-2.7-3.6a1.4 1.4 0 0 1 .3-1.9 1.4 1.4 0 0 1 1.8.1L9 15"
+      />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Select"
-      aria-pressed={$textSelectMode}
-      use:tooltip={'Select: drag over the document to select and copy its real text'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$textSelectMode}
-      class:text-neutral-600={!$textSelectMode}
-      class:hover:bg-neutral-100={!$textSelectMode}
-      class:dark:border-neutral-800={!$textSelectMode}
-      class:dark:text-neutral-300={!$textSelectMode}
-      class:dark:hover:bg-neutral-800={!$textSelectMode}
-      class:border-emerald-600={$textSelectMode}
-      class:bg-emerald-600={$textSelectMode}
-      class:text-white={$textSelectMode}
-      onclick={toggleTextSelectMode}
+    <ToolButton
+      label="Select"
+      tip={'Select: drag over the document to select and copy its real text'}
+      active={$activeTool === 'select'}
+      activeClass="border-emerald-600 bg-emerald-600 text-white"
+      onclick={() => toggleTool('select')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8 5h8M12 5v14M8 19h8" />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M8 5h8M12 5v14M8 19h8" />
+    </ToolButton>
 
     <div aria-hidden="true" class={dividerClass}></div>
 
     <!-- Sign and fill -->
-    <button
-      type="button"
-      aria-label="Signature"
-      aria-pressed={$signatureToolMode}
-      use:tooltip={'Signature: open the signature panel to place, manage, and watermark signatures'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$signatureToolMode}
-      class:text-neutral-600={!$signatureToolMode}
-      class:hover:bg-neutral-100={!$signatureToolMode}
-      class:dark:border-neutral-800={!$signatureToolMode}
-      class:dark:text-neutral-300={!$signatureToolMode}
-      class:dark:hover:bg-neutral-800={!$signatureToolMode}
-      class:border-indigo-600={$signatureToolMode}
-      class:bg-indigo-600={$signatureToolMode}
-      class:text-white={$signatureToolMode}
-      onclick={toggleSignatureToolMode}
+    <ToolButton
+      label="Signature"
+      tip={'Signature: open the signature panel to place, manage, and watermark signatures'}
+      active={$activeTool === 'signature'}
+      activeClass="border-indigo-600 bg-indigo-600 text-white"
+      onclick={() => toggleTool('signature')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4 20l4-1 10-10a2.121 2.121 0 0 0-3-3L5 16l-1 4z" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l3 3" />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Add Text"
-      aria-pressed={$textToolMode}
-      use:tooltip={'Add Text: click on the document to place a text box'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$textToolMode}
-      class:text-neutral-600={!$textToolMode}
-      class:hover:bg-neutral-100={!$textToolMode}
-      class:dark:border-neutral-800={!$textToolMode}
-      class:dark:text-neutral-300={!$textToolMode}
-      class:dark:hover:bg-neutral-800={!$textToolMode}
-      class:border-blue-600={$textToolMode}
-      class:bg-blue-600={$textToolMode}
-      class:text-white={$textToolMode}
-      onclick={toggleTextToolMode}
+    <ToolButton
+      label="Add Text"
+      tip={'Add Text: click on the document to place a text box'}
+      active={$activeTool === 'text'}
+      activeClass="border-blue-600 bg-blue-600 text-white"
+      onclick={() => toggleTool('text')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5 6h14M12 6v12" />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 6h14M12 6v12" />
+    </ToolButton>
 
     <label
       aria-label="Add image"
@@ -724,195 +488,98 @@
     <div aria-hidden="true" class={dividerClass}></div>
 
     <!-- Mark up -->
-    <button
-      type="button"
-      aria-label="Comment"
-      aria-pressed={$commentToolMode}
-      use:tooltip={'Comment: click on the document to leave a sticky note'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$commentToolMode}
-      class:text-neutral-600={!$commentToolMode}
-      class:hover:bg-neutral-100={!$commentToolMode}
-      class:dark:border-neutral-800={!$commentToolMode}
-      class:dark:text-neutral-300={!$commentToolMode}
-      class:dark:hover:bg-neutral-800={!$commentToolMode}
-      class:border-amber-500={$commentToolMode}
-      class:bg-amber-500={$commentToolMode}
-      class:text-white={$commentToolMode}
-      onclick={toggleCommentToolMode}
+    <ToolButton
+      label="Comment"
+      tip={'Comment: click on the document to leave a sticky note'}
+      active={$activeTool === 'comment'}
+      activeClass="border-amber-500 bg-amber-500 text-white"
+      onclick={() => toggleTool('comment')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v11H8l-4 4V5Z" />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v11H8l-4 4V5Z" />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Shapes"
-      aria-pressed={$shapeToolMode}
-      use:tooltip={'Shapes: drag on the page to draw a shape, line, or arrow'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$shapeToolMode}
-      class:text-neutral-600={!$shapeToolMode}
-      class:hover:bg-neutral-100={!$shapeToolMode}
-      class:dark:border-neutral-800={!$shapeToolMode}
-      class:dark:text-neutral-300={!$shapeToolMode}
-      class:dark:hover:bg-neutral-800={!$shapeToolMode}
-      class:border-fuchsia-600={$shapeToolMode}
-      class:bg-fuchsia-600={$shapeToolMode}
-      class:text-white={$shapeToolMode}
-      onclick={toggleShapeToolMode}
+    <ToolButton
+      label="Shapes"
+      tip={'Shapes: drag on the page to draw a shape, line, or arrow'}
+      active={$activeTool === 'shapes'}
+      activeClass="border-fuchsia-600 bg-fuchsia-600 text-white"
+      onclick={() => toggleTool('shapes')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="3" y="11" width="10" height="10" rx="1" />
-        <circle cx="16" cy="8" r="5" />
-      </svg>
-    </button>
+      <rect x="3" y="11" width="10" height="10" rx="1" />
+      <circle cx="16" cy="8" r="5" />
+    </ToolButton>
 
     <div aria-hidden="true" class={dividerClass}></div>
 
     <!-- Protect -->
-    <button
-      type="button"
-      aria-label="Redact"
-      aria-pressed={$redactMode}
-      use:tooltip={'Redact: draw a box to permanently remove content from the exported PDF'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$redactMode}
-      class:text-neutral-600={!$redactMode}
-      class:hover:bg-neutral-100={!$redactMode}
-      class:dark:border-neutral-800={!$redactMode}
-      class:dark:text-neutral-300={!$redactMode}
-      class:dark:hover:bg-neutral-800={!$redactMode}
-      class:border-red-600={$redactMode}
-      class:bg-red-600={$redactMode}
-      class:text-white={$redactMode}
-      onclick={toggleRedactMode}
+    <ToolButton
+      label="Redact"
+      tip={'Redact: draw a box to permanently remove content from the exported PDF'}
+      active={$activeTool === 'redact'}
+      activeClass="border-red-600 bg-red-600 text-white"
+      onclick={() => toggleTool('redact')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <path stroke-linecap="round" d="M8 12h8" />
-      </svg>
-    </button>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path stroke-linecap="round" d="M8 12h8" />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Watermark"
-      aria-pressed={$pageWatermarkToolMode}
-      use:tooltip={'Watermark: stamp a word or a picture across every page'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$pageWatermarkToolMode}
-      class:text-neutral-600={!$pageWatermarkToolMode}
-      class:hover:bg-neutral-100={!$pageWatermarkToolMode}
-      class:dark:border-neutral-800={!$pageWatermarkToolMode}
-      class:dark:text-neutral-300={!$pageWatermarkToolMode}
-      class:dark:hover:bg-neutral-800={!$pageWatermarkToolMode}
-      class:border-amber-600={$pageWatermarkToolMode}
-      class:bg-amber-600={$pageWatermarkToolMode}
-      class:text-white={$pageWatermarkToolMode}
-      onclick={togglePageWatermarkToolMode}
+    <ToolButton
+      label="Watermark"
+      tip={'Watermark: stamp a word or a picture across every page'}
+      active={$activeTool === 'watermark'}
+      activeClass="border-amber-600 bg-amber-600 text-white"
+      onclick={() => toggleTool('watermark')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="5" y="3" width="14" height="18" rx="1.5" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 15.5l7-7M8.5 11.5l3-3M12.5 15.5l3-3" />
-      </svg>
-    </button>
+      <rect x="5" y="3" width="14" height="18" rx="1.5" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 15.5l7-7M8.5 11.5l3-3M12.5 15.5l3-3" />
+    </ToolButton>
 
     <div aria-hidden="true" class={dividerClass}></div>
 
     <!-- Pages -->
-    <button
-      type="button"
-      aria-label="Page numbers, header & footer"
-      aria-pressed={$pageNumbersToolMode}
-      use:tooltip={'Page numbers, header & footer: number the pages, or add text along their top and bottom'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$pageNumbersToolMode}
-      class:text-neutral-600={!$pageNumbersToolMode}
-      class:hover:bg-neutral-100={!$pageNumbersToolMode}
-      class:dark:border-neutral-800={!$pageNumbersToolMode}
-      class:dark:text-neutral-300={!$pageNumbersToolMode}
-      class:dark:hover:bg-neutral-800={!$pageNumbersToolMode}
-      class:border-teal-600={$pageNumbersToolMode}
-      class:bg-teal-600={$pageNumbersToolMode}
-      class:text-white={$pageNumbersToolMode}
-      onclick={togglePageNumbersToolMode}
+    <ToolButton
+      label="Page numbers, header & footer"
+      tip={'Page numbers, header & footer: number the pages, or add text along their top and bottom'}
+      active={$activeTool === 'pageNumbers'}
+      activeClass="border-teal-600 bg-teal-600 text-white"
+      onclick={() => toggleTool('pageNumbers')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <rect x="5" y="3" width="14" height="18" rx="1.5" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
-      </svg>
-    </button>
+      <rect x="5" y="3" width="14" height="18" rx="1.5" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M11 14.5l1.5-1V18M10.5 18h3.5" />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Crop"
-      aria-pressed={$cropToolMode}
-      use:tooltip={'Crop: drag on a page to frame the part to keep'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$cropToolMode}
-      class:text-neutral-600={!$cropToolMode}
-      class:hover:bg-neutral-100={!$cropToolMode}
-      class:dark:border-neutral-800={!$cropToolMode}
-      class:dark:text-neutral-300={!$cropToolMode}
-      class:dark:hover:bg-neutral-800={!$cropToolMode}
-      class:border-orange-600={$cropToolMode}
-      class:bg-orange-600={$cropToolMode}
-      class:text-white={$cropToolMode}
-      onclick={toggleCropToolMode}
+    <ToolButton
+      label="Crop"
+      tip={'Crop: drag on a page to frame the part to keep'}
+      active={$activeTool === 'crop'}
+      activeClass="border-orange-600 bg-orange-600 text-white"
+      onclick={() => toggleTool('crop')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Screenshot"
-      aria-pressed={$screenshotToolMode}
-      use:tooltip={'Screenshot: click a page to capture all of it, or drag to capture an area'}
-      class={toolButtonClass}
-      class:border-neutral-200={!$screenshotToolMode}
-      class:text-neutral-600={!$screenshotToolMode}
-      class:hover:bg-neutral-100={!$screenshotToolMode}
-      class:dark:border-neutral-800={!$screenshotToolMode}
-      class:dark:text-neutral-300={!$screenshotToolMode}
-      class:dark:hover:bg-neutral-800={!$screenshotToolMode}
-      class:border-sky-600={$screenshotToolMode}
-      class:bg-sky-600={$screenshotToolMode}
-      class:text-white={$screenshotToolMode}
-      onclick={toggleScreenshotToolMode}
+    <ToolButton
+      label="Screenshot"
+      tip={'Screenshot: click a page to capture all of it, or drag to capture an area'}
+      active={$activeTool === 'screenshot'}
+      activeClass="border-sky-600 bg-sky-600 text-white"
+      onclick={() => toggleTool('screenshot')}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
+      <circle cx="12" cy="12" r="3" />
+    </ToolButton>
 
-    <button
-      type="button"
-      aria-label="Recognize text"
-      aria-haspopup="menu"
-      aria-expanded={ocrMenu !== null}
-      aria-pressed={$ocrAreaMode}
-      use:tooltip={'Recognize text (OCR): make scanned text searchable and copyable, on this page, every page, or an area'}
+    <ToolButton
+      label="Recognize text"
+      tip={'Recognize text (OCR): make scanned text searchable and copyable, on this page, every page, or an area'}
+      active={$ocrAreaMode}
+      activeClass="border-cyan-600 bg-cyan-600 text-white"
       disabled={isOcrRunning($ocrStatus)}
-      class="{toolButtonClass} disabled:cursor-not-allowed disabled:opacity-30"
-      class:border-neutral-200={!$ocrAreaMode}
-      class:text-neutral-600={!$ocrAreaMode}
-      class:hover:bg-neutral-100={!$ocrAreaMode}
-      class:dark:border-neutral-800={!$ocrAreaMode}
-      class:dark:text-neutral-300={!$ocrAreaMode}
-      class:dark:hover:bg-neutral-800={!$ocrAreaMode}
-      class:border-cyan-600={$ocrAreaMode}
-      class:bg-cyan-600={$ocrAreaMode}
-      class:text-white={$ocrAreaMode}
+      menuOpen={ocrMenu !== null}
       onclick={toggleOcrMenu}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.recognize} />
-      </svg>
-    </button>
+      <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.recognize} />
+    </ToolButton>
     {#if ocrMenu}
       <ContextMenu x={ocrMenu.x} y={ocrMenu.y} items={ocrMenuItems} onClose={closeOcrMenu} above />
     {/if}

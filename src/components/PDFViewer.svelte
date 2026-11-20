@@ -114,7 +114,7 @@
     textDecoration,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
-  import { openSignatureTool } from '../stores/signatureTool';
+  import { openSignatureTool } from '../stores/tools';
   import { openTextTool, openShapeTool, openImageProperties, imagePropertiesId } from '../stores/toolPanel';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import {
