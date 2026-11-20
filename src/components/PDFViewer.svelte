@@ -19,11 +19,13 @@
   import PageFormFields, { type FormBox } from './page/PageFormFields.svelte';
   import AreaDragOverlay from './page/AreaDragOverlay.svelte';
   import SelectionMarkupBar from './page/SelectionMarkupBar.svelte';
-  import MarkupOptionsBar from './page/MarkupOptionsBar.svelte';
   import RedactionLayer from './page/RedactionLayer.svelte';
   import CommentLayer from './page/CommentLayer.svelte';
   import TextBoxLayer from './page/TextBoxLayer.svelte';
   import SignatureLayer from './page/SignatureLayer.svelte';
+  import HighlightLayer from './page/HighlightLayer.svelte';
+  import ImageLayer from './page/ImageLayer.svelte';
+  import ShapeLayer from './page/ShapeLayer.svelte';
   import { editSignature, rememberPlacement, rotateSignatureBy } from './page/signatureActions';
   import { TextEditing } from './page/textEditing.svelte';
   import { CommentEditing } from './page/commentEditing.svelte';
@@ -52,7 +54,6 @@
     isOcrRunning,
   } from '../stores/ocr';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
-  import PlacedBox from './PlacedBox.svelte';
   import ItemSelection from './ItemSelection.svelte';
   import {
     itemSelection,
@@ -76,7 +77,6 @@
     shapeArrowHead,
     shapeLineStyle,
     isLineKind,
-    SHAPE_LABELS,
   } from '../stores/shapeTool';
   import { cropToolMode } from '../stores/cropTool';
   import CropOverlay from './CropOverlay.svelte';
@@ -127,7 +127,7 @@
     defaultTextScript,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
-  import { openTextTool, openShapeTool, openImageProperties, imagePropertiesId } from '../stores/toolPanel';
+  import { openTextTool, openShapeTool, openImageProperties } from '../stores/toolPanel';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
   import { currentWatermarkOptions } from '../stores/watermark';
   import { fitWithinBox } from '../lib/signature/layout';
@@ -200,7 +200,6 @@
   // permanently, in the chosen color — one box per line, saved as a PDF
   // markup annotation on export.
   let pendingHighlight: { boxes: Box[]; anchor: { x: number; y: number } } | null = $state(null);
-  let selectedHighlightGroup: string | null = $state(null);
   // The page's on-screen rotation (its own /Rotate plus the user's). At
   // 90°/270° text runs top to bottom, which changes how selected spans join
   // into lines and which edge an underline sits on.
@@ -305,7 +304,7 @@
     const doc = $activeDocument;
     if (!doc) return;
     if (sel.editingCommentId) commentEditing.commit();
-    selectedHighlightGroup = null;
+    sel.highlightGroup = null;
     const existing = doc.comments.find((c) => c.groupId === groupId);
     if (existing) {
             commentEditing.start(existing.id, existing.text);
@@ -340,7 +339,7 @@
 
   function removeHighlight(groupId: string) {
     editorStore.removeHighlight(groupId);
-    if (selectedHighlightGroup === groupId) selectedHighlightGroup = null;
+    if (sel.highlightGroup === groupId) sel.highlightGroup = null;
   }
 
   // The zoom and the view's rotation as values of their own: effects that read
@@ -676,13 +675,13 @@
     if ($selectedShapeId && shapesOnCurrentPage.some((s) => s.id === $selectedShapeId)) {
       return { kind: 'shape', id: $selectedShapeId };
     }
-    if (selectedImageId) return { kind: 'image', id: selectedImageId };
+    if (sel.imageId) return { kind: 'image', id: sel.imageId };
     return null;
   }
 
   function clearSingleSelection() {
     sel.signatureId = null;
-    selectedImageId = null;
+    sel.imageId = null;
     sel.redactionId = null;
     if ($selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)) $selectedTextId = null;
     if ($selectedShapeId && shapesOnCurrentPage.some((s) => s.id === $selectedShapeId)) $selectedShapeId = null;
@@ -693,7 +692,7 @@
     if (ref.kind === 'signature') sel.signatureId = ref.id;
     else if (ref.kind === 'text') $selectedTextId = ref.id;
     else if (ref.kind === 'shape') $selectedShapeId = ref.id;
-    else selectedImageId = ref.id;
+    else sel.imageId = ref.id;
   }
 
   /** Copies one item next to itself and selects the copy. */
@@ -814,7 +813,6 @@
   // dropping an image file onto a page, or from the page's right-click menu.
   // They start at most 40% of the page across, centred on the point given
   // or on the visible part of the page.
-  let selectedImageId: string | null = $state(null);
   let imageInputEl: HTMLInputElement | undefined = $state();
   let imageMenuPoint: ClientPoint | null = null;
   let imageError: string | null = $state(null);
@@ -838,7 +836,7 @@
         if (bottom > top) centerY = (top + bottom) / 2 - rect.top;
       }
     }
-    selectedImageId = editorStore.addImage({
+    sel.imageId = editorStore.addImage({
       imageId: image.id,
       x: clamp(centerX - width / 2, 0, rect.width - width),
       y: clamp(centerY - height / 2, 0, rect.height - height),
@@ -886,8 +884,8 @@
       : null;
     if (!currentRedaction?.contains(e.target as Node)) sel.redactionId = null;
 
-    if ((e.target as Element | null)?.closest?.('[data-highlight-group]')?.getAttribute('data-highlight-group') !== selectedHighlightGroup) {
-      selectedHighlightGroup = null;
+    if ((e.target as Element | null)?.closest?.('[data-highlight-group]')?.getAttribute('data-highlight-group') !== sel.highlightGroup) {
+      sel.highlightGroup = null;
     }
 
     // Deliberately doesn't touch sel.editingTextId/commitTextEdit here: this
@@ -1548,13 +1546,13 @@
 
     const placedImageId = idOf('data-placed-image');
     if (placedImageId) {
-      selectedImageId = placedImageId;
+      sel.imageId = placedImageId;
       return [
         {
           label: 'Properties',
           icon: MENU_ICONS.properties,
           onSelect: () => {
-            selectedImageId = placedImageId;
+            sel.imageId = placedImageId;
             openImageProperties(placedImageId);
           },
         },
@@ -1562,7 +1560,7 @@
         {
           ...deleteItem('Delete image', () => {
             editorStore.removeImage(placedImageId);
-            selectedImageId = null;
+            sel.imageId = null;
           }),
           separatorBefore: true,
         },
@@ -1695,7 +1693,7 @@
     const groupId = idOf('data-highlight-group') ?? highlightAt(point)?.groupId;
     const markup = groupId ? doc.highlights.find((h) => h.groupId === groupId) : undefined;
     if (groupId && markup) {
-      selectedHighlightGroup = groupId;
+      sel.highlightGroup = groupId;
       const note = {
         label: doc.comments.some((c) => c.groupId === groupId) ? 'Edit comment' : 'Add comment',
         icon: MENU_ICONS.comment,
@@ -1859,61 +1857,16 @@
     {/each}
   {/each}
 
-  <!-- Markups sit above the text layer so they can be clicked (then
-       recolored or removed) in Move mode; in every other mode they let clicks
-       through, so the Select tool can still select marked-up text. The
-       clickable box is the whole marked text; only the paint inside differs
-       by kind — the full box for a highlight, a thin line for the others. -->
-  {#each highlightsOnCurrentPage as h, i (h.id)}
-    {@const isSelected = selectedHighlightGroup === h.groupId || selectedCommentGroup === h.groupId}
-    {@const isFirstOfGroup = highlightsOnCurrentPage.findIndex((x) => x.groupId === h.groupId) === i}
-    {@const paint = markupPaint(h, pageRotation)}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      data-highlight-group={h.groupId}
-      role="group"
-      tabindex={isFirstOfGroup ? 0 : -1}
-      aria-label="{MARKUP_LABELS[h.kind]}. Press Delete to remove."
-      class="absolute cursor-pointer {isSelected ? 'outline outline-2 outline-blue-400' : ''}"
-      class:pointer-events-none={!formFieldsInteractive}
-      style:left="{h.x}px"
-      style:top="{h.y}px"
-      style:width="{h.width}px"
-      style:height="{h.height}px"
-      onpointerdown={(e) => {
-        e.stopPropagation();
-        selectedHighlightGroup = h.groupId;
-      }}
-      onfocus={() => (selectedHighlightGroup = h.groupId)}
-      onkeydown={(e) => {
-        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-        e.preventDefault();
-        removeHighlight(h.groupId);
-      }}
-    >
-      <div
-        class="pointer-events-none absolute"
-        class:mix-blend-multiply={paint.multiply}
-        style:left="{paint.x - h.x}px"
-        style:top="{paint.y - h.y}px"
-        style:width="{paint.width}px"
-        style:height="{paint.height}px"
-        style:background-color={paint.color}
-      ></div>
-    </div>
-  {/each}
-
-  <!-- The selected markup's own toolbar: recolor, comment, or remove. -->
-  {#each highlightsOnCurrentPage.filter((h) => h.groupId === selectedHighlightGroup).slice(0, 1) as h (h.id)}
-    <MarkupOptionsBar
-      markup={h}
-      hasNote={commentsOnCurrentPage.some((c) => c.groupId === h.groupId)}
-      onRecolor={(color) => editorStore.recolorHighlight(h.groupId, color)}
-      onComment={() => commentOnMarkup(h.groupId)}
-      onRemove={() => removeHighlight(h.groupId)}
-    />
-  {/each}
+  <!-- Markups, clickable in Move mode, with the selected one's options bar. -->
+  <HighlightLayer
+    highlights={highlightsOnCurrentPage}
+    comments={commentsOnCurrentPage}
+    {pageRotation}
+    interactive={formFieldsInteractive}
+    commentGroup={selectedCommentGroup}
+    onRemove={removeHighlight}
+    onComment={commentOnMarkup}
+  />
 
   <!-- The PDF's own links, clickable whenever form fields are (Move mode). -->
   <PageLinks {pdfDoc} {pageNumber} rotation={viewRotation} scale={renderScale} active={formFieldsInteractive} />
@@ -1922,80 +1875,8 @@
   <PageFormFields boxes={formBoxes} values={formValues} interactive={formFieldsInteractive} {docId} />
 
   <!-- Images, then shapes: under signatures and text, as export draws them. -->
-  {#each imagesOnCurrentPage as img (img.id)}
-    {@const stored = imageFor(img.imageId)}
-    {#if stored}
-      <PlacedBox
-        attr="placed-image"
-        id={img.id}
-        box={img}
-        selected={selectedImageId === img.id}
-        label="Image"
-        keepAspect
-        minSize={16}
-        bounds={canvasBounds}
-        onSelect={() => {
-          selectedImageId = img.id;
-          // The properties panel follows the selection to another image.
-          if ($imagePropertiesId) $imagePropertiesId = img.id;
-        }}
-        onDeselect={() => {
-          if (selectedImageId === img.id) selectedImageId = null;
-          // Closed when the click went anywhere but another image, which
-          // takes the panel over in the same click.
-          setTimeout(() => {
-            if ($imagePropertiesId === img.id && selectedImageId !== img.id) $imagePropertiesId = null;
-          });
-        }}
-        onChange={(geometry) => editorStore.updateImage(img.id, geometry)}
-        onRemove={() => {
-          editorStore.removeImage(img.id);
-          selectedImageId = null;
-        }}
-        onDoubleClick={() => openImageProperties(img.id)}
-      >
-        <img
-          src={stored.url}
-          alt=""
-          draggable="false"
-          class="h-full w-full select-none"
-          style:opacity={img.opacity}
-        />
-      </PlacedBox>
-    {/if}
-  {/each}
-
-  {#each shapesOnCurrentPage as s (s.id)}
-    <PlacedBox
-      attr="placed-shape"
-      id={s.id}
-      box={s}
-      selected={$selectedShapeId === s.id}
-      label={SHAPE_LABELS[s.kind]}
-      minSize={8}
-      pad={isLineKind(s.kind) ? 6 : 0}
-      bounds={canvasBounds}
-      onSelect={() => ($selectedShapeId = s.id)}
-      onDeselect={() => {
-        if ($selectedShapeId === s.id) $selectedShapeId = null;
-      }}
-      onChange={(geometry) => editorStore.updateShape(s.id, geometry)}
-      onRemove={() => {
-        editorStore.removeShape(s.id);
-        $selectedShapeId = null;
-      }}
-      onDoubleClick={() => {
-        $selectedShapeId = s.id;
-        openShapeTool();
-      }}
-      angle={s.angle}
-      onRotate={isLineKind(s.kind) ? undefined : (angle) => editorStore.updateShape(s.id, { angle })}
-      line={isLineKind(s.kind) ? { flipX: s.flipX, flipY: s.flipY } : undefined}
-      onLineChange={(geometry) => editorStore.updateShape(s.id, geometry)}
-    >
-      <ShapeGraphic shape={s} />
-    </PlacedBox>
-  {/each}
+  <ImageLayer images={imagesOnCurrentPage} />
+  <ShapeLayer shapes={shapesOnCurrentPage} />
 
   {#if drawingShape}
     {@const kind = $shapeKind}
