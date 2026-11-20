@@ -18,6 +18,8 @@
   import PageLinks from './page/PageLinks.svelte';
   import PageFormFields, { type FormBox } from './page/PageFormFields.svelte';
   import AreaDragOverlay from './page/AreaDragOverlay.svelte';
+  import SelectionMarkupBar from './page/SelectionMarkupBar.svelte';
+  import MarkupOptionsBar from './page/MarkupOptionsBar.svelte';
   import { getTotalRotation } from '../lib/pdf/loader';
   import type { PDFPageProxy } from 'pdfjs-dist';
   import { downloadImage, imageAt, imagePng, pageImages, type PaintedImage } from '../lib/pdf/embeddedImages';
@@ -2536,62 +2538,15 @@
     </div>
   {/each}
 
-  <!-- The selected markup's own toolbar: recolor or remove. Kept outside the
-       markup boxes, whose multiplied paint would tint anything inside them. -->
+  <!-- The selected markup's own toolbar: recolor, comment, or remove. -->
   {#each highlightsOnCurrentPage.filter((h) => h.groupId === selectedHighlightGroup).slice(0, 1) as h (h.id)}
-    {@const hasNote = commentsOnCurrentPage.some((c) => c.groupId === h.groupId)}
-    <div
-      data-highlight-group={h.groupId}
-      role="toolbar"
-      aria-label="{MARKUP_LABELS[h.kind]} options"
-      tabindex="-1"
-      class="absolute z-40 flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-1.5 py-1
-        shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-      style:left="{h.x}px"
-      style:top={h.y < 40 ? `${h.y + h.height + 6}px` : `${h.y - 34}px`}
-      onpointerdown={(e) => e.stopPropagation()}
-    >
-      {#if h.kind === 'highlight'}
-        {#each MARKUP_COLORS as c}
-          <button
-            type="button"
-            aria-label="{c.label}"
-            aria-pressed={h.color === c.value}
-            use:tooltip={c.label}
-            class="h-4 w-4 rounded-full border transition-transform hover:scale-110 {h.color === c.value
-              ? 'border-neutral-700 ring-2 ring-blue-400/50 dark:border-white'
-              : 'border-black/10 dark:border-white/20'}"
-            style:background-color={c.value}
-            onclick={() => editorStore.recolorHighlight(h.groupId, c.value)}
-          ></button>
-        {/each}
-        <span class="mx-0.5 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
-      {/if}
-      <button
-        type="button"
-        aria-label={hasNote ? 'Edit comment' : 'Add comment'}
-        use:tooltip={hasNote ? 'Edit comment' : 'Add a comment to this text'}
-        class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-500 transition-colors
-          hover:bg-amber-50 hover:text-amber-700 dark:text-neutral-400 dark:hover:bg-amber-950 dark:hover:text-amber-300"
-        onclick={() => commentOnMarkup(h.groupId)}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.comment} />
-        </svg>
-      </button>
-      <button
-        type="button"
-        aria-label="Remove {MARKUP_LABELS[h.kind].toLowerCase()}"
-        use:tooltip={`Remove ${MARKUP_LABELS[h.kind].toLowerCase()} (Delete)`}
-        class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-500 transition-colors
-          hover:bg-red-50 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-950"
-        onclick={() => removeHighlight(h.groupId)}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.delete} />
-        </svg>
-      </button>
-    </div>
+    <MarkupOptionsBar
+      markup={h}
+      hasNote={commentsOnCurrentPage.some((c) => c.groupId === h.groupId)}
+      onRecolor={(color) => editorStore.recolorHighlight(h.groupId, color)}
+      onComment={() => commentOnMarkup(h.groupId)}
+      onRemove={() => removeHighlight(h.groupId)}
+    />
   {/each}
 
   <!-- The PDF's own links, clickable whenever form fields are (Move mode). -->
@@ -3091,85 +3046,15 @@
     </div>
   {/each}
 
+  <!-- The toolbar over selected text: mark it up, or comment on it. -->
   {#if pendingHighlight}
-    <!-- Selection toolbar: highlight / underline / strikethrough in the chosen color. -->
-    <div
-      role="toolbar"
-      aria-label="Mark up selected text"
-      tabindex="-1"
-      class="absolute z-50 flex -translate-x-1/2 items-center gap-0.5 whitespace-nowrap rounded-full border
-        border-neutral-200 bg-white px-1.5 py-1 text-xs font-medium text-neutral-700 shadow-lg
-        dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-      style:left="{pendingHighlight.anchor.x}px"
-      style:top="{pendingHighlight.anchor.y}px"
-      onpointerdown={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
-      {#if selectionFont}
-        <span
-          class="max-w-[13rem] truncate px-1.5 text-neutral-500 dark:text-neutral-400"
-          use:tooltip={selectionFont.detail}
-        >
-          {selectionFont.label}
-        </span>
-        <span class="mx-1 h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700"></span>
-      {/if}
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors hover:bg-neutral-100
-          dark:hover:bg-neutral-800"
-        onpointerdown={(e) => applyPendingMarkup(e, 'highlight')}
-        onclick={(e) => applyPendingMarkup(e, 'highlight')}
-      >
-        <span class="h-3 w-3 rounded-sm border border-black/10" style:background-color={$markupColor}></span>
-        Highlight
-      </button>
-      {#each ['underline', 'strikeout'] as const as kind}
-        <button
-          type="button"
-          aria-label={MARKUP_LABELS[kind]}
-          use:tooltip={MARKUP_LABELS[kind]}
-          class="flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-neutral-100
-            dark:hover:bg-neutral-800"
-          onpointerdown={(e) => applyPendingMarkup(e, kind)}
-          onclick={(e) => applyPendingMarkup(e, kind)}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS[kind]} />
-          </svg>
-        </button>
-      {/each}
-      <button
-        type="button"
-        aria-label="Comment"
-        use:tooltip={'Comment: highlight this text and add a note to it'}
-        class="flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-neutral-100
-          dark:hover:bg-neutral-800"
-        onpointerdown={applyPendingComment}
-        onclick={applyPendingComment}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d={MENU_ICONS.comment} />
-        </svg>
-      </button>
-      <span class="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-700"></span>
-      {#each MARKUP_COLORS as c}
-        <button
-          type="button"
-          aria-label="{c.label}"
-          aria-pressed={$markupColor === c.value}
-          use:tooltip={c.label}
-          class="mx-0.5 h-4 w-4 rounded-full border transition-transform hover:scale-110 {$markupColor === c.value
-            ? 'border-neutral-700 ring-2 ring-blue-400/50 dark:border-white'
-            : 'border-black/10 dark:border-white/20'}"
-          style:background-color={c.value}
-          onpointerdown={(e) => pickMarkupColor(e, c.value)}
-          onclick={(e) => pickMarkupColor(e, c.value)}
-        ></button>
-      {/each}
-    </div>
+    <SelectionMarkupBar
+      anchor={pendingHighlight.anchor}
+      font={selectionFont}
+      onMarkup={applyPendingMarkup}
+      onComment={applyPendingComment}
+      onPickColor={pickMarkupColor}
+    />
   {/if}
 
   {#if drawingBox}

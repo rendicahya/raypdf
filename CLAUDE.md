@@ -251,6 +251,7 @@ components/
 - UploadCard, FeatureGrid (front-page feature showcase, one row per feature, drawings in FeatureIllustration; they play once while their row is hovered, using the `fi-*` classes in `app.css`, and must end on their resting frame), Faq, WatermarkIllustration, SignatureCreator, SearchBar
 - EditorView (the whole editor and its shortcuts; App loads it, and VerifyResults, with a dynamic `import()` so the front page stays small. Keep the front page's imports free of pdf-lib: modules that need it load on first use, like `pageOps` and `editableItems` in the editor store)
 - PDFPages (the scrolling page column), PDFViewer (one page), PageSidebar, PageThumbnail
+- page/ (parts of PDFViewer that don't share its selection state: WatermarkPreview, PageLabelsPreview, PageLinks, PageFormFields, AreaDragOverlay for Screenshot and Recognize text in an area, SelectionMarkupBar, MarkupOptionsBar)
 - DocumentTabs, DocumentThumbnail, Toolbar
 - FloatingControls (the bottom toolbar)
 - ToolPanel, SignaturePanel, toolOptions/ (PanelHeader, RedactOptions, TextOptions, CommentOptions, SelectOptions, ScreenshotOptions, PageTextOptions, PageNumberOptions, HeaderFooterOptions, PageWatermarkOptions, ShapeOptions, CropOptions, ImageOptions)
