@@ -201,9 +201,11 @@
         </svg>
       </button>
     {/if}
-    <!-- Positioned by toolbarLeft (see the script): it doesn't move when the tool panel opens. -->
+    <!-- Positioned by toolbarLeft (see the script): it doesn't move when the tool panel opens.
+         z-[65]: above the page overlays of Screenshot, Crop, and Recognize text in an area
+         (z-[60]), so the other tools stay clickable while one of them is on. -->
     <div
-      class="pointer-events-none absolute bottom-4 z-20 w-max"
+      class="pointer-events-none absolute bottom-4 z-[65] w-max"
       style:left="{toolbarLeft}px"
       style:max-width="{toolbarMaxWidth}px"
       bind:offsetWidth={toolbarWidth}
