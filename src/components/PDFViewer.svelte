@@ -23,6 +23,8 @@
   import RedactionLayer from './page/RedactionLayer.svelte';
   import CommentLayer from './page/CommentLayer.svelte';
   import TextBoxLayer from './page/TextBoxLayer.svelte';
+  import SignatureLayer from './page/SignatureLayer.svelte';
+  import { editSignature, rememberPlacement, rotateSignatureBy } from './page/signatureActions';
   import { TextEditing } from './page/textEditing.svelte';
   import { CommentEditing } from './page/commentEditing.svelte';
   import { PageSelection, setPageContext } from './page/pageContext.svelte';
@@ -49,7 +51,6 @@
     startAreaSelection,
     isOcrRunning,
   } from '../stores/ocr';
-  import { tooltip } from '../lib/utils/tooltip';
   import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
   import PlacedBox from './PlacedBox.svelte';
   import ItemSelection from './ItemSelection.svelte';
@@ -126,22 +127,10 @@
     defaultTextScript,
   } from '../stores/textTool';
   import { signatureStore, resolveSignature } from '../stores/signature';
-  import { openSignatureTool } from '../stores/tools';
   import { openTextTool, openShapeTool, openImageProperties, imagePropertiesId } from '../stores/toolPanel';
   import { SIGNATURE_DRAG_TYPE } from '../lib/signature/layout';
-  import {
-    watermarkText,
-    includeTimestamp,
-    watermarkPosition,
-    watermarkFontScale,
-    watermarkColor,
-    watermarkOpacity,
-    currentWatermarkOptions,
-    type WatermarkPosition,
-  } from '../stores/watermark';
-  import { lastPlacement } from '../stores/placement';
+  import { currentWatermarkOptions } from '../stores/watermark';
   import { fitWithinBox } from '../lib/signature/layout';
-  import { buildWatermarkLines } from '../lib/watermark/visible';
 
   // One page of the document. PDFPages stacks one of these per page (only
   // for pages near the viewport) and owns loading the file.
@@ -155,21 +144,6 @@
   let cursorPos = $state({ x: 0, y: 0 });
   // Click-to-place previews the signature under the cursor, on this page only.
   let pointerInside = $state(false);
-
-  // Live preview of the watermark text, kept in sync with the export logic in lib/watermark/visible.ts.
-  const previewLines = $derived(
-    buildWatermarkLines({ customText: $watermarkText, includeTimestamp: $includeTimestamp }),
-  );
-
-  function positionToFlex(position: WatermarkPosition) {
-    const [v, h] = position.split('-') as [string, string | undefined];
-    const justifyContent = v === 'top' ? 'flex-start' : v === 'bottom' ? 'flex-end' : 'center';
-    const alignItems = h === 'left' ? 'flex-start' : h === 'right' ? 'flex-end' : 'center';
-    const textAlign = h === 'left' ? 'left' : h === 'right' ? 'right' : 'center';
-    return { justifyContent, alignItems, textAlign };
-  }
-
-  const previewAlign = $derived(positionToFlex($watermarkPosition));
 
   const docId = $derived($activeDocument?.id ?? null);
 
@@ -593,11 +567,9 @@
     const otherInteractionInProgress =
       isPanning ||
       drawingBox ||
-      movingSignatureId ||
-      resizingSignatureId ||
       drawingShape ||
       // A layer's own drag (RedactionLayer): the pointer is captured by the item.
-      (e.buttons !== 0 && !!(e.target as Element | null)?.closest?.('[data-redaction], [data-placed-comment], [data-placed-text]')) ||
+      (e.buttons !== 0 && !!(e.target as Element | null)?.closest?.('[data-redaction], [data-placed-comment], [data-placed-text], [data-placed-signature]')) ||
       !!(e.target as Element | null)?.closest?.('[data-placed-box]') ||
       // Resting on a link keeps it clickable rather than turning into text
       // selection (a drag already selecting text carries on across it).
@@ -697,7 +669,7 @@
   // The one item this page has selected on its own (not a group, see
   // ItemSelection), for starting a group, duplicating, and the like.
   function currentItem(): ItemRef | null {
-    if (selectedSignatureId) return { kind: 'signature', id: selectedSignatureId };
+    if (sel.signatureId) return { kind: 'signature', id: sel.signatureId };
     if ($selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)) {
       return { kind: 'text', id: $selectedTextId };
     }
@@ -709,7 +681,7 @@
   }
 
   function clearSingleSelection() {
-    selectedSignatureId = null;
+    sel.signatureId = null;
     selectedImageId = null;
     sel.redactionId = null;
     if ($selectedTextId && textsOnCurrentPage.some((t) => t.id === $selectedTextId)) $selectedTextId = null;
@@ -718,7 +690,7 @@
 
   function selectSingle(ref: ItemRef) {
     clearSingleSelection();
-    if (ref.kind === 'signature') selectedSignatureId = ref.id;
+    if (ref.kind === 'signature') sel.signatureId = ref.id;
     else if (ref.kind === 'text') $selectedTextId = ref.id;
     else if (ref.kind === 'shape') $selectedShapeId = ref.id;
     else selectedImageId = ref.id;
@@ -901,14 +873,13 @@
   // "selected" — right after it's placed, or after the user clicks it again
   // — and hide once the user clicks anywhere else, so signatures don't
   // permanently sit under a distracting border and handles.
-  let selectedSignatureId: string | null = $state(null);
 
   function onWindowPointerDown(e: PointerEvent) {
     menuToken++;
-    const current = selectedSignatureId
-      ? wrapperEl?.querySelector(`[data-placed-signature="${selectedSignatureId}"]`)
+    const current = sel.signatureId
+      ? wrapperEl?.querySelector(`[data-placed-signature="${sel.signatureId}"]`)
       : null;
-    if (!current?.contains(e.target as Node)) selectedSignatureId = null;
+    if (!current?.contains(e.target as Node)) sel.signatureId = null;
 
     const currentRedaction = sel.redactionId
       ? wrapperEl?.querySelector(`[data-redaction="${sel.redactionId}"]`)
@@ -970,19 +941,6 @@
 
   function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
-  }
-
-  // Remember where the signature was placed (as a ratio of the page size) so
-  // it can be reused on the next document.
-  function rememberPlacement(placement: PlacedSignature) {
-    const rect = canvasEl.getBoundingClientRect();
-    lastPlacement.set({
-      xRatio: placement.x / rect.width,
-      yRatio: placement.y / rect.height,
-      widthRatio: placement.width / rect.width,
-      heightRatio: placement.height / rect.height,
-      ...(placement.angle && { angle: placement.angle }),
-    });
   }
 
   // Thumbnails being reordered in the page sidebar aren't signatures.
@@ -1089,258 +1047,14 @@
 
     const placement = { x, y, width, height, page: pageNumber, signatureId: sig.id };
     const id = editorStore.addSignature(placement);
-    rememberPlacement({ ...placement, id });
-    selectedSignatureId = id;
+    rememberPlacement({ ...placement, id }, canvasEl.getBoundingClientRect());
+    sel.signatureId = id;
   }
 
-  // Let placed signatures be moved after they're dropped.
-  let movingSignatureId: string | null = null;
-  let moveOffset = { x: 0, y: 0 };
-
-  function onSignaturePointerDown(e: PointerEvent, id: string) {
-    e.stopPropagation();
-    selectedSignatureId = id;
-    movingSignatureId = id;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    // From the box's own corner, not the element's on-screen bounds, which grow when it's turned.
+  /** Turns a placed signature from the menu (see signatureActions.ts). */
+  function turnSignature(id: string, delta: number) {
     const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    const canvasRect = canvasEl.getBoundingClientRect();
-    moveOffset = sig
-      ? { x: e.clientX - canvasRect.left - sig.x, y: e.clientY - canvasRect.top - sig.y }
-      : { x: 0, y: 0 };
-  }
-
-  function onSignaturePointerMove(e: PointerEvent, id: string) {
-    if (movingSignatureId !== id) return;
-    const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    if (!sig) return;
-    const rect = canvasEl.getBoundingClientRect();
-    const x = clamp(e.clientX - rect.left - moveOffset.x, 0, rect.width - sig.width);
-    const y = clamp(e.clientY - rect.top - moveOffset.y, 0, rect.height - sig.height);
-    editorStore.updateSignature(id, { x, y });
-  }
-
-  function onSignaturePointerUp() {
-    if (movingSignatureId) {
-      const sig = $activeDocument?.placedSignatures.find((s) => s.id === movingSignatureId);
-      if (sig) rememberPlacement(sig);
-    }
-    movingSignatureId = null;
-  }
-
-  // Nudge a signature with the arrow keys while its control box (the resize
-  // handle / remove button) is showing — lets keyboard users reposition it
-  // without needing to drag.
-  const KEYBOARD_MOVE_STEP = 10;
-
-  function onSignatureKeydown(e: KeyboardEvent, id: string) {
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      editorStore.removeSignature(id);
-      if (selectedSignatureId === id) selectedSignatureId = null;
-      return;
-    }
-
-    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
-    e.preventDefault();
-
-    const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    if (!sig) return;
-
-    const rect = canvasEl.getBoundingClientRect();
-    const dx = e.key === 'ArrowLeft' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowRight' ? KEYBOARD_MOVE_STEP : 0;
-    const dy = e.key === 'ArrowUp' ? -KEYBOARD_MOVE_STEP : e.key === 'ArrowDown' ? KEYBOARD_MOVE_STEP : 0;
-
-    const x = clamp(sig.x + dx, 0, rect.width - sig.width);
-    const y = clamp(sig.y + dy, 0, rect.height - sig.height);
-    editorStore.updateSignature(id, { x, y });
-    rememberPlacement({ ...sig, x, y });
-  }
-
-  // Resize via the corner handle, always preserving the signature's aspect ratio.
-  const MIN_SIZE = 24;
-  const KEYBOARD_RESIZE_STEP = 10;
-  let resizingSignatureId: string | null = null;
-  let resizeStart: (PlacedSignature & { pointerX: number; pointerY: number }) | null = null;
-
-  function onSignatureResizeKeydown(e: KeyboardEvent, id: string) {
-    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    if (!sig) return;
-
-    const grow = e.key === 'ArrowUp' || e.key === 'ArrowRight';
-    const resized = resizedFromCorner(sig, sig.width + (grow ? KEYBOARD_RESIZE_STEP : -KEYBOARD_RESIZE_STEP));
-    editorStore.updateSignature(id, resized);
-    rememberPlacement({ ...sig, ...resized });
-  }
-
-  // The new box for a resize toward `targetWidth`, with the corner across
-  // from the handle (the top-left one, turned with the signature) kept in place.
-  // With `fromCentre` (Shift while dragging) the centre stays put instead.
-  function resizedFromCorner(origin: PlacedSignature, targetWidth: number, fromCentre = false) {
-    const { width, height } = clampedResize(targetWidth, origin, fromCentre);
-    if (fromCentre) {
-      const cx = origin.x + origin.width / 2;
-      const cy = origin.y + origin.height / 2;
-      return { width, height, x: cx - width / 2, y: cy - height / 2 };
-    }
-    if (!origin.angle) return { width, height };
-    const a = (origin.angle * Math.PI) / 180;
-    const turn = (dx: number, dy: number) => [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
-    // The fixed corner, from the old centre, then the new centre from it.
-    const [ox, oy] = turn(-origin.width / 2, -origin.height / 2);
-    const [nx, ny] = turn(width / 2, height / 2);
-    const cx = origin.x + origin.width / 2 + ox + nx;
-    const cy = origin.y + origin.height / 2 + oy + ny;
-    return { width, height, x: cx - width / 2, y: cy - height / 2 };
-  }
-
-  // Shared by the pointer-drag and keyboard paths: grows/shrinks toward
-  // `targetWidth` from `origin`'s position, preserving aspect ratio and
-  // clamping so the signature never overflows the page or drops below MIN_SIZE.
-  function clampedResize(
-    targetWidth: number,
-    origin: PlacedSignature,
-    fromCentre = false,
-  ): { width: number; height: number } {
-    const rect = canvasEl.getBoundingClientRect();
-    const aspect = origin.width / origin.height;
-    // A turned signature grows from its turned corner, so the page edges
-    // only limit it to the page's own size. Growing from the centre, the
-    // nearer edge does.
-    const turned = !!origin.angle;
-    const cx = origin.x + origin.width / 2;
-    const cy = origin.y + origin.height / 2;
-    const maxWidth = turned
-      ? rect.width
-      : fromCentre
-        ? 2 * Math.min(cx, rect.width - cx)
-        : rect.width - origin.x;
-    const maxHeight = turned
-      ? rect.height
-      : fromCentre
-        ? 2 * Math.min(cy, rect.height - cy)
-        : rect.height - origin.y;
-
-    let width = clamp(targetWidth, MIN_SIZE, maxWidth);
-    let height = width / aspect;
-
-    if (height > maxHeight) {
-      height = maxHeight;
-      width = height * aspect;
-    }
-    if (height < MIN_SIZE) {
-      height = MIN_SIZE;
-      width = height * aspect;
-    }
-
-    return { width, height };
-  }
-
-  function onSignatureResizePointerDown(e: PointerEvent, id: string) {
-    e.stopPropagation();
-    const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    if (!sig) return;
-    resizingSignatureId = id;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    resizeStart = { pointerX: e.clientX, pointerY: e.clientY, ...sig };
-  }
-
-  function onSignatureResizePointerMove(e: PointerEvent, id: string) {
-    if (resizingSignatureId !== id || !resizeStart) return;
-    // How far the pointer moved along the signature's own width, turned with it.
-    const a = ((resizeStart.angle ?? 0) * Math.PI) / 180;
-    const along = (e.clientX - resizeStart.pointerX) * Math.cos(a) + (e.clientY - resizeStart.pointerY) * Math.sin(a);
-    const grow = e.shiftKey ? 2 : 1;
-    editorStore.updateSignature(id, resizedFromCorner(resizeStart, resizeStart.width + grow * along, e.shiftKey));
-  }
-
-  // Turn via the handle above the signature: it points from the centre to
-  // the pointer, snapping to upright and the quarter turns when close, and
-  // to steps of 15° with Shift.
-  const ROTATE_SNAP = 5;
-  const KEYBOARD_ROTATE_STEP = 15;
-  let rotatingSignatureId: string | null = null;
-  let rotateCentre = { x: 0, y: 0 };
-
-  function normalizedAngle(angle: number): number | undefined {
-    const a = ((Math.round(angle) % 360) + 360) % 360;
-    return a === 0 ? undefined : a;
-  }
-
-  function onSignatureRotatePointerDown(e: PointerEvent, id: string) {
-    e.stopPropagation();
-    const box = (e.currentTarget as HTMLElement).closest('[data-placed-signature]')?.getBoundingClientRect();
-    if (!box) return;
-    rotatingSignatureId = id;
-    rotateCentre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }
-
-  function onSignatureRotatePointerMove(e: PointerEvent, id: string) {
-    if (rotatingSignatureId !== id) return;
-    // 0° is the handle straight above the centre.
-    let angle = (Math.atan2(e.clientY - rotateCentre.y, e.clientX - rotateCentre.x) * 180) / Math.PI + 90;
-    if (e.shiftKey) angle = Math.round(angle / 15) * 15;
-    else {
-      const quarter = Math.round(angle / 90) * 90;
-      if (Math.abs(angle - quarter) < ROTATE_SNAP) angle = quarter;
-    }
-    editorStore.updateSignature(id, { angle: normalizedAngle(angle) });
-  }
-
-  function onSignatureRotatePointerUp(e: PointerEvent) {
-    if (rotatingSignatureId) {
-      const sig = $activeDocument?.placedSignatures.find((s) => s.id === rotatingSignatureId);
-      if (sig) rememberPlacement(sig);
-    }
-    rotatingSignatureId = null;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  }
-
-  // Opens the signature panel with this placement's signature as the active one.
-  function editSignature(id: string) {
-    const placed = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    if (placed && $signatureStore.signatures.some((s) => s.id === placed.signatureId)) {
-      signatureStore.setActive(placed.signatureId);
-    }
-    selectedSignatureId = id;
-    openSignatureTool();
-  }
-
-  function rotateSignatureBy(id: string, delta: number) {
-    const sig = $activeDocument?.placedSignatures.find((s) => s.id === id);
-    if (!sig) return;
-    const angle = normalizedAngle((sig.angle ?? 0) + delta);
-    editorStore.updateSignature(id, { angle });
-    rememberPlacement({ ...sig, angle });
-  }
-
-  function onSignatureRotateKeydown(e: KeyboardEvent, id: string) {
-    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(e.key)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const step = e.shiftKey ? 1 : KEYBOARD_ROTATE_STEP;
-    rotateSignatureBy(id, e.key === 'ArrowRight' || e.key === 'ArrowDown' ? step : -step);
-  }
-
-  function onSignatureResizePointerUp(e: PointerEvent) {
-    if (resizingSignatureId) {
-      const sig = $activeDocument?.placedSignatures.find((s) => s.id === resizingSignatureId);
-      if (sig) rememberPlacement(sig);
-    }
-    resizingSignatureId = null;
-    resizeStart = null;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  }
-
-  function removeSignature(e: MouseEvent, id: string) {
-    e.stopPropagation();
-    editorStore.removeSignature(id);
-    if (selectedSignatureId === id) selectedSignatureId = null;
+    if (sig) rotateSignatureBy(sig, delta, canvasEl.getBoundingClientRect());
   }
 
   // Redaction: draw-a-box mode. While active, a plain pointer drag directly on
@@ -1857,28 +1571,28 @@
 
     const signatureId = idOf('data-placed-signature');
     if (signatureId) {
-      selectedSignatureId = signatureId;
+      sel.signatureId = signatureId;
       const angle = doc.placedSignatures.find((s) => s.id === signatureId)?.angle ?? 0;
       return [
-        { label: 'Edit signature', icon: MENU_ICONS.edit, onSelect: () => editSignature(signatureId) },
+        { label: 'Edit signature', icon: MENU_ICONS.edit, onSelect: () => editSignature(doc.placedSignatures.find((s) => s.id === signatureId), signatureId, sel) },
         duplicate({ kind: 'signature', id: signatureId }),
         {
           label: 'Rotate left',
           icon: MENU_ICONS.rotateLeft,
           separatorBefore: true,
-          onSelect: () => rotateSignatureBy(signatureId, -90),
+          onSelect: () => turnSignature(signatureId, -90),
         },
-        { label: 'Rotate right', icon: MENU_ICONS.rotateRight, onSelect: () => rotateSignatureBy(signatureId, 90) },
+        { label: 'Rotate right', icon: MENU_ICONS.rotateRight, onSelect: () => turnSignature(signatureId, 90) },
         {
           label: 'Straighten',
           icon: MENU_ICONS.signature,
           disabled: angle === 0,
-          onSelect: () => rotateSignatureBy(signatureId, -angle),
+          onSelect: () => turnSignature(signatureId, -angle),
         },
         {
           ...deleteItem('Delete signature', () => {
             editorStore.removeSignature(signatureId);
-            selectedSignatureId = null;
+            sel.signatureId = null;
           }),
           separatorBefore: true,
         },
@@ -2356,111 +2070,7 @@
     <div class="p-4 text-sm text-red-600">{error}</div>
   {/if}
 
-  {#each signaturesOnCurrentPage as sig (sig.id)}
-    {@const isSelected = selectedSignatureId === sig.id}
-    {@const image = resolveSignature($signatureStore, sig.signatureId)}
-    {#if image}
-      <!-- role="group" is the closest ARIA fit for a movable/resizable object
-           (it groups the resize handle and remove button), but that role is
-           classified as non-interactive by Svelte's a11y check even though
-           this element is deliberately focusable and arrow-key operable. -->
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <div
-        data-placed-signature={sig.id}
-        role="group"
-        tabindex="0"
-        aria-label="Placed signature. Use arrow keys to move, drag the corner handle to resize and the top handle to rotate."
-        class="absolute cursor-move touch-none {isSelected ? 'ring-2 ring-blue-400/70 bg-blue-100/10' : ''}"
-        style:left="{sig.x}px"
-        style:top="{sig.y}px"
-        style:width="{sig.width}px"
-        style:height="{sig.height}px"
-        style:transform={sig.angle ? `rotate(${sig.angle}deg)` : undefined}
-        onpointerdown={(e) => onSignaturePointerDown(e, sig.id)}
-        onpointermove={(e) => onSignaturePointerMove(e, sig.id)}
-        onpointerup={onSignaturePointerUp}
-        onfocus={() => (selectedSignatureId = sig.id)}
-        onkeydown={(e) => onSignatureKeydown(e, sig.id)}
-        ondblclick={(e) => {
-          if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'IMG') editSignature(sig.id);
-        }}
-      >
-        <img
-          src={image.previewUrl}
-          alt="Placed signature"
-          draggable="false"
-          class="h-full w-full select-none object-contain"
-        />
-
-        {#if previewLines.length > 0}
-          <div
-            class="pointer-events-none absolute inset-0 flex select-none flex-col overflow-hidden leading-tight"
-            style:font-size="{sig.height * $watermarkFontScale}px"
-            style:color={$watermarkColor}
-            style:opacity={$watermarkOpacity}
-            style:padding="{sig.height * 0.06}px"
-            style:justify-content={previewAlign.justifyContent}
-            style:align-items={previewAlign.alignItems}
-            style:text-align={previewAlign.textAlign}
-          >
-            {#each previewLines as line}
-              <div>{line}</div>
-            {/each}
-          </div>
-        {/if}
-
-        {#if isSelected}
-          <div
-            role="button"
-            tabindex="0"
-            aria-label="Resize signature"
-            data-resize-handle
-            title="Resize signature (drag, or use arrow keys)"
-            class="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize touch-none rounded-full
-              border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
-            onpointerdown={(e) => onSignatureResizePointerDown(e, sig.id)}
-            onpointermove={(e) => onSignatureResizePointerMove(e, sig.id)}
-            onpointerup={onSignatureResizePointerUp}
-            onkeydown={(e) => onSignatureResizeKeydown(e, sig.id)}
-          ></div>
-
-          <div class="pointer-events-none absolute -top-5 left-1/2 h-5 w-px -translate-x-1/2 bg-blue-500"></div>
-          <div
-            role="slider"
-            tabindex="0"
-            aria-label="Rotate signature"
-            aria-valuemin={0}
-            aria-valuemax={359}
-            aria-valuenow={sig.angle ?? 0}
-            aria-valuetext="{sig.angle ?? 0} degrees"
-            use:tooltip={'Rotate (drag; Shift snaps to 15°). Double-click to straighten'}
-            class="absolute -top-7 left-1/2 h-3.5 w-3.5 -translate-x-1/2 cursor-grab touch-none rounded-full
-              border border-white bg-blue-500 shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
-            onpointerdown={(e) => onSignatureRotatePointerDown(e, sig.id)}
-            onpointermove={(e) => onSignatureRotatePointerMove(e, sig.id)}
-            onpointerup={onSignatureRotatePointerUp}
-            ondblclick={() => rotateSignatureBy(sig.id, -(sig.angle ?? 0))}
-            onkeydown={(e) => onSignatureRotateKeydown(e, sig.id)}
-          ></div>
-
-          <button
-            type="button"
-            aria-label="Remove placed signature"
-            title="Remove placed signature"
-            class="absolute -right-1.5 -top-1.5 flex h-5 w-5 touch-none items-center justify-center rounded-full
-              border border-white bg-red-500 text-white shadow transition-colors hover:bg-red-600"
-            onpointerdown={(e) => e.stopPropagation()}
-            onclick={(e) => removeSignature(e, sig.id)}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="h-3 w-3">
-              <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-        {/if}
-      </div>
-    {/if}
-  {/each}
+  <SignatureLayer signatures={signaturesOnCurrentPage} />
 
   <RedactionLayer boxes={redactionsOnCurrentPage} />
 
