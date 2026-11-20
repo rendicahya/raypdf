@@ -1,6 +1,5 @@
 <script lang="ts">
   import { editorStore } from '../stores/editor';
-  import { unlockPdf } from '../lib/pdf/password';
   import { isWrongPasswordError } from '../lib/pdf/loader';
 
   // Shown in place of a PDF that needs a password to open. Unlocking swaps
@@ -27,6 +26,8 @@
     unlocking = true;
     error = null;
     try {
+      // Loaded here, so pdf-lib stays off the front page's download.
+      const { unlockPdf } = await import('../lib/pdf/password');
       editorStore.unlockDocument(id, await unlockPdf(file, password));
     } catch (err) {
       error = isWrongPasswordError(err)

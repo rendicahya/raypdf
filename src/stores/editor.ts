@@ -1,20 +1,13 @@
 import { writable, derived } from 'svelte/store';
 import { getCachedPdf } from '../lib/pdf/docCache';
-import { hasEditableItemsMarker, restoreEditableItems, scaleItem } from '../lib/pdf/editableItems';
 import { addStoredImage } from './images';
 import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
-import {
-  movePdfPage,
-  deletePdfPages,
-  duplicatePdfPage,
-  insertBlankPdfPage,
-  rotatePdfPages,
-  cropPdfPages,
-  uncropPdfPages,
-  addInvisibleText,
-  mergePdfFiles,
-} from '../lib/pdf/pageOps';
 import type { OcrPage } from '../lib/pdf/ocr';
+
+// pdf-lib is only needed once a file is rewritten, so these load on first use
+// (keeping it off the front page's download).
+const pageOps = () => import('../lib/pdf/pageOps');
+const editableItems = () => import('../lib/pdf/editableItems');
 import type { FormValues } from '../lib/pdf/forms';
 import type { PageNumberSettings } from '../lib/pdf/pageNumbers';
 import type { HeaderFooterSettings } from '../lib/pdf/headerFooter';
@@ -630,6 +623,7 @@ function createEditorStore() {
     try {
       const pdfjsDoc = await getCachedPdf(id, file);
       const { info } = await pdfjsDoc.getMetadata();
+      const { hasEditableItemsMarker, restoreEditableItems, scaleItem } = await editableItems();
       if (!hasEditableItemsMarker(info)) return;
       const restored = await restoreEditableItems(file);
       if (!restored) return;
@@ -737,7 +731,7 @@ function createEditorStore() {
     if (before.length < 2) return null;
 
     const base = before[0].file.name.replace(/\.pdf$/i, '');
-    const { file, pageCounts } = await mergePdfFiles(
+    const { file, pageCounts } = await (await pageOps()).mergePdfFiles(
       before.map((d) => ({ file: d.file, rotation: d.rotation })),
       `${base}_merged.pdf`,
     );
@@ -1512,7 +1506,7 @@ function createEditorStore() {
     const newPageOf = new Map(order.map((original, i) => [original, i + 1]));
     const mapPage = (page: number) => newPageOf.get(page) ?? page;
 
-    return editPages({ rewrite: (file) => movePdfPage(file, from, to), mapPage, mapCurrent: mapPage });
+    return editPages({ rewrite: async (file) => (await pageOps()).movePdfPage(file, from, to), mapPage, mapCurrent: mapPage });
   }
 
   /** Deletes pages (1-indexed) along with everything placed on them, as one undo step. */
@@ -1520,7 +1514,7 @@ function createEditorStore() {
     const removed = new Set(pages);
     const removedBefore = (p: number) => pages.filter((d) => d < p).length;
     return editPages({
-      rewrite: (file) => deletePdfPages(file, pages),
+      rewrite: async (file) => (await pageOps()).deletePdfPages(file, pages),
       mapPage: (p) => (removed.has(p) ? null : p - removedBefore(p)),
       // A deleted current page gives way to the nearest page before it (or the first one left).
       mapCurrent: (p) => p - removedBefore(p) - (removed.has(p) ? 1 : 0),
@@ -1534,7 +1528,7 @@ function createEditorStore() {
   /** Inserts a copy of a page (1-indexed), with everything placed on it, right after it — and shows the copy. */
   function duplicatePage(page: number) {
     return editPages({
-      rewrite: (file) => duplicatePdfPage(file, page),
+      rewrite: async (file) => (await pageOps()).duplicatePdfPage(file, page),
       mapPage: (p) => (p > page ? p + 1 : p),
       mapCurrent: () => page + 1,
       copiesPage: page,
@@ -1544,7 +1538,7 @@ function createEditorStore() {
   /** Inserts a blank page after page `after` (1-indexed) and shows it. */
   function insertBlankPage(after: number) {
     return editPages({
-      rewrite: (file) => insertBlankPdfPage(file, after),
+      rewrite: async (file) => (await pageOps()).insertBlankPdfPage(file, after),
       mapPage: (p) => (p > after ? p + 1 : p),
       mapCurrent: () => after + 1,
     });
@@ -1556,7 +1550,7 @@ function createEditorStore() {
    */
   function rotatePages(pages: number[], delta: number) {
     return editPages({
-      rewrite: (file) => rotatePdfPages(file, pages, delta),
+      rewrite: async (file) => (await pageOps()).rotatePdfPages(file, pages, delta),
       mapPage: (p) => p,
       mapCurrent: (p) => p,
       reshapesPages: pages,
@@ -1593,7 +1587,7 @@ function createEditorStore() {
       }),
     );
     return editPages({
-      rewrite: (file) => cropPdfPages(file, crops),
+      rewrite: async (file) => (await pageOps()).cropPdfPages(file, crops),
       mapPage: (p) => p,
       mapCurrent: (p) => p,
       reshapesPages: pages,
@@ -1603,7 +1597,7 @@ function createEditorStore() {
   /** Shows the whole of pages (1-indexed) again, undoing any crop (the file's own included). */
   function uncropPages(pages: number[]) {
     return editPages({
-      rewrite: (file) => uncropPdfPages(file, pages),
+      rewrite: async (file) => (await pageOps()).uncropPdfPages(file, pages),
       mapPage: (p) => p,
       mapCurrent: (p) => p,
       reshapesPages: pages,
@@ -1619,7 +1613,7 @@ function createEditorStore() {
     const doc = currentState().documents.find((d) => d.id === docId);
     if (!doc || doc.file !== basedOn) return false;
     await editPages(
-      { rewrite: (file) => addInvisibleText(file, pages), mapPage: (p) => p, mapCurrent: (p) => p },
+      { rewrite: async (file) => (await pageOps()).addInvisibleText(file, pages), mapPage: (p) => p, mapCurrent: (p) => p },
       docId,
     );
     const latest = currentState().documents.find((d) => d.id === docId);
