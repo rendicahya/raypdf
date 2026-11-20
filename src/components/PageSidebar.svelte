@@ -7,13 +7,12 @@
     PAGE_SIDEBAR_MAX_WIDTH,
     PAGE_SIDEBAR_DEFAULT_WIDTH,
   } from '../stores/layout';
-  import { signatureStore } from '../stores/signature';
-  import { currentWatermarkOptions } from '../stores/watermark';
-  import { stripEmbeddedScripts, currentSaveProtection } from '../stores/exportOptions';
+  import { currentSaveProtection } from '../stores/exportOptions';
+  import { exportDocument } from '../stores/exportDocument';
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { getTotalRotation, type PdfDocument } from '../lib/pdf/loader';
   import { PAGE_DRAG_TYPE } from '../lib/pdf/pageOps';
-  import { exportSignedPdf, downloadSelectedPagesPdf } from '../lib/pdf/export';
+  import { downloadSelectedPagesPdf } from '../lib/pdf/export';
   import { downloadPagesAsImages, type PageImageFormat } from '../lib/pdf/pageImages';
   import { tooltip } from '../lib/utils/tooltip';
   import PageThumbnail from './PageThumbnail.svelte';
@@ -187,31 +186,12 @@
   async function exportPages(pages: number[], format: 'pdf' | PageImageFormat = 'pdf') {
     const doc = $activeDocument;
     if (!doc || pages.length === 0 || busy) return;
-    const signatureFor = signatureStore.lookup();
-    const placements = signatureFor ? doc.placedSignatures : [];
     busy = true;
     pageError = null;
     try {
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor: placements.length > 0 ? (signatureFor ?? undefined) : undefined,
-        placements: placements.length > 0 ? placements : undefined,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermarkOptions(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
+      const bytes = await exportDocument(doc, {
         // Comments are notes, not page content, so images leave them out (like screenshots).
         comments: format === 'pdf' ? doc.comments : [],
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
         onlyPages: pages,
         protection: format === 'pdf' ? currentSaveProtection() : {},
       });

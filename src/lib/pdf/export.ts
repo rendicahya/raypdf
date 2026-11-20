@@ -73,6 +73,54 @@ export interface ExportParams {
   keepEditable?: boolean;
 }
 
+/** The user's settings an export uses besides the document itself (`currentExportSettings` in stores/exportDocument.ts reads them). */
+export interface ExportSettings {
+  /** Null when there's no saved signature: then no signature is drawn. */
+  signatureFor: SignatureLookup | null;
+  renderScale: number;
+  watermark?: WatermarkOptions;
+  stripScripts?: boolean;
+}
+
+/**
+ * The export parameters for a document as it stands in the editor: everything
+ * placed on it, signatures only where the user placed them. `overrides` adjust
+ * one save (a page range, leaving comments out, a password).
+ */
+export function documentExportParams(
+  doc: PdfDocumentState,
+  settings: ExportSettings,
+  overrides: Partial<ExportParams> = {},
+): ExportParams {
+  const signed = settings.signatureFor !== null && doc.placedSignatures.length > 0;
+  return {
+    pdfFile: doc.file,
+    documentId: doc.id,
+    signatureFor: signed ? settings.signatureFor! : undefined,
+    placements: signed ? doc.placedSignatures : undefined,
+    renderScale: settings.renderScale,
+    rotation: doc.rotation,
+    watermark: settings.watermark,
+    stripScripts: settings.stripScripts,
+    redactions: doc.redactions,
+    texts: doc.texts,
+    comments: doc.comments,
+    highlights: doc.highlights,
+    shapes: doc.shapes,
+    images: doc.images,
+    formValues: doc.formValues,
+    pageNumbers: doc.pageNumbers,
+    headerFooter: doc.headerFooter,
+    pageWatermark: doc.pageWatermark,
+    ...overrides,
+  };
+}
+
+/** Whether a document has anything to save: a placed signature (when there's one to draw) or any other edit. */
+export function hasSomethingToExport(doc: PdfDocumentState, settings: ExportSettings): boolean {
+  return (settings.signatureFor !== null && doc.placedSignatures.length > 0) || hasDocumentEdits(doc);
+}
+
 function blobToBytes(blob: Blob): Promise<Uint8Array> {
   return blob.arrayBuffer().then((buf) => new Uint8Array(buf));
 }
@@ -482,47 +530,19 @@ export function hasDocumentEdits(doc: PdfDocumentState): boolean {
 
 
 /**
- * Splits one document into one PDF per page — each with the same
- * signature/redaction/text already applied — and bundles them into a single
- * ZIP. Complements `exportSignedPdf`'s `onlyPages`, which does the same for
- * just one page; `signatureFor`/`placements` are pre-resolved by the caller
- * exactly as for a normal single-document export.
+ * Splits one document into one PDF per page, each with everything placed on
+ * it, and bundles them into a single ZIP. Complements `exportSignedPdf`'s
+ * `onlyPages`, which does the same for just one page.
  */
 export async function exportPagesAsZip(
   doc: PdfDocumentState,
-  signatureFor: SignatureLookup | undefined,
-  placements: PlacedSignature[] | undefined,
-  renderScale: number,
-  rotation: number,
-  watermark?: WatermarkOptions,
-  stripScripts?: boolean,
+  settings: ExportSettings,
   protection?: SaveProtection,
 ): Promise<Blob> {
   const zip = new JSZip();
 
   for (let page = 1; page <= doc.pageCount; page++) {
-    const bytes = await exportSignedPdf({
-      pdfFile: doc.file,
-      documentId: doc.id,
-      signatureFor,
-      placements,
-      renderScale,
-      rotation,
-      watermark,
-      stripScripts,
-      redactions: doc.redactions,
-      texts: doc.texts,
-      comments: doc.comments,
-      highlights: doc.highlights,
-      shapes: doc.shapes,
-      images: doc.images,
-      formValues: doc.formValues,
-      pageNumbers: doc.pageNumbers,
-      headerFooter: doc.headerFooter,
-      pageWatermark: doc.pageWatermark,
-      onlyPages: [page],
-      protection,
-    });
+    const bytes = await exportSignedPdf(documentExportParams(doc, settings, { onlyPages: [page], protection }));
     zip.file(pageOnlyFileName(doc.file.name, page), bytes);
   }
 
@@ -543,10 +563,7 @@ export interface BulkExportResult {
  */
 export async function exportAllAsZip(
   documents: PdfDocumentState[],
-  signatureFor: SignatureLookup | null,
-  renderScale: number,
-  watermark?: WatermarkOptions,
-  stripScripts?: boolean,
+  settings: ExportSettings,
   protection?: SaveProtection,
 ): Promise<BulkExportResult> {
   const zip = new JSZip();
@@ -554,33 +571,12 @@ export async function exportAllAsZip(
   const usedNames = new Set<string>();
 
   for (const doc of documents) {
-    const placements = signatureFor ? doc.placedSignatures : [];
-    if (placements.length === 0 && !hasDocumentEdits(doc)) {
+    if (!hasSomethingToExport(doc, settings)) {
       skipped.push(doc.file.name);
       continue;
     }
 
-    const bytes = await exportSignedPdf({
-      pdfFile: doc.file,
-      documentId: doc.id,
-      signatureFor: placements.length > 0 ? (signatureFor ?? undefined) : undefined,
-      placements: placements.length > 0 ? placements : undefined,
-      renderScale,
-      rotation: doc.rotation,
-      watermark,
-      stripScripts,
-      redactions: doc.redactions,
-      texts: doc.texts,
-      comments: doc.comments,
-      highlights: doc.highlights,
-      shapes: doc.shapes,
-      images: doc.images,
-      formValues: doc.formValues,
-      pageNumbers: doc.pageNumbers,
-      headerFooter: doc.headerFooter,
-      pageWatermark: doc.pageWatermark,
-      protection,
-    });
+    const bytes = await exportSignedPdf(documentExportParams(doc, settings, { protection }));
 
     let name = signedFileName(doc.file.name);
     if (usedNames.has(name)) {
@@ -599,19 +595,15 @@ export async function exportAllAsZip(
 }
 
 /**
- * Merges every given document — each with its own signature/redaction/text
- * already applied — into a single PDF, in the given order. Unlike "Save All
- * (ZIP)", a document with nothing signed/redacted/annotated is still
- * included: merging is about combining pages into one file, not skipping
- * untouched ones.
+ * Merges every given document, each with everything placed on it, into a
+ * single PDF, in the given order. Unlike "Save all (ZIP)", a document with
+ * nothing added is still included: merging is about combining pages into one
+ * file, not skipping untouched ones.
  */
 export async function exportMergedPdf(
   documents: PdfDocumentState[],
   orderedIds: string[],
-  signatureFor: SignatureLookup | null,
-  renderScale: number,
-  watermark?: WatermarkOptions,
-  stripScripts?: boolean,
+  settings: ExportSettings,
   protection: SaveProtection = {},
 ): Promise<Uint8Array> {
   const byId = new Map(documents.map((d) => [d.id, d]));
@@ -621,35 +613,14 @@ export async function exportMergedPdf(
     const doc = byId.get(id);
     if (!doc) continue;
 
-    const placements = signatureFor ? doc.placedSignatures : [];
-    const bytes = await exportSignedPdf({
-      pdfFile: doc.file,
-      documentId: doc.id,
-      signatureFor: placements.length > 0 ? (signatureFor ?? undefined) : undefined,
-      placements: placements.length > 0 ? placements : undefined,
-      renderScale,
-      rotation: doc.rotation,
-      watermark,
-      stripScripts,
-      redactions: doc.redactions,
-      texts: doc.texts,
-      comments: doc.comments,
-      highlights: doc.highlights,
-      shapes: doc.shapes,
-      images: doc.images,
-      formValues: doc.formValues,
-      pageNumbers: doc.pageNumbers,
-      headerFooter: doc.headerFooter,
-      pageWatermark: doc.pageWatermark,
-    });
-
+    const bytes = await exportSignedPdf(documentExportParams(doc, settings));
     const sourceDoc = await PDFDocument.load(bytes);
     const copiedPages = await merged.copyPages(sourceDoc, sourceDoc.getPageIndices());
     copiedPages.forEach((page) => merged.addPage(page));
   }
 
   markEditableItems(merged);
-  // Applied to the merged document itself, not the per-source exports above —
+  // Applied to the merged document itself, not the per-source exports above:
   // those still need to be readable (unencrypted) for `copyPages` to read them.
   applyProtection(merged, protection);
   return merged.save();

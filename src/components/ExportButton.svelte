@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { editorStore, activeDocument, type PdfDocumentState } from '../stores/editor';
-  import { signatureStore } from '../stores/signature';
-  import { currentWatermarkOptions } from '../stores/watermark';
+  import { editorStore, activeDocument } from '../stores/editor';
   import {
     stripEmbeddedScripts,
     keepItemsEditable,
@@ -11,8 +9,8 @@
     currentSaveProtection,
     compressionLevel,
   } from '../stores/exportOptions';
+  import { assertSomethingToExport, currentExportSettings, exportDocument } from '../stores/exportDocument';
   import {
-    exportSignedPdf,
     downloadSignedPdf,
     downloadPageOnlyPdf,
     exportPagesAsZip,
@@ -21,7 +19,6 @@
     downloadZip,
     exportMergedPdf,
     downloadMergedPdf,
-    hasDocumentEdits,
     printPdfBytes,
     downloadCompressedPdf,
   } from '../lib/pdf/export';
@@ -29,128 +26,61 @@
   import { getCachedPdf } from '../lib/pdf/docCache';
   import { downloadAllImages, type Rect } from '../lib/pdf/embeddedImages';
   import { downloadPagesAsImages, type PageImageFormat } from '../lib/pdf/pageImages';
-import { applyProtection, hasProtection } from '../lib/pdf/password';
+  import { applyProtection, hasProtection } from '../lib/pdf/password';
   import { formatFileSize } from '../lib/utils/fileValidation';
   import MergeOrderDialog from './MergeOrderDialog.svelte';
   import { openMarkdownExport } from '../stores/markdownExport';
   import { tooltip } from '../lib/utils/tooltip';
 
-  let exportingOne = $state(false);
-  let compressing = $state(false);
+  type Action = 'save' | 'compress' | 'docx' | 'images' | 'pageImages' | 'pageOnly' | 'pagesZip' | 'all' | 'print' | 'merge';
+
+  /** The save actions running now, each disabling its own menu item. */
+  let busy: Partial<Record<Action, boolean>> = $state({});
   let compressNote: string | null = $state(null);
   let compressNoteTimeout: ReturnType<typeof setTimeout> | undefined;
-  let convertingDocx = $state(false);
-  let savingImages = $state(false);
-  let savingPageImages: PageImageFormat | null = $state(null);
-  let exportingPageOnly = $state(false);
-  let exportingPagesZip = $state(false);
-  let exportingAll = $state(false);
-  let printing = $state(false);
   let showMergeDialog = $state(false);
   let showSaveMenu = $state(false);
-  let merging = $state(false);
   let showPassword = $state(false);
   let error: string | null = $state(null);
 
-  const currentWatermark = currentWatermarkOptions;
-
-  // Signing and redacting are independent — resolves whichever of the two
-  // this document actually has, and (unless allowUnedited, as for printing)
-  // only errors if it has neither.
-  async function resolveExportInputs(doc: PdfDocumentState, allowUnedited = false) {
-    const sig = $signatureStore;
-    // Only signatures the user actually placed — never an implied position.
-    const placements = sig.signature ? doc.placedSignatures : [];
-
-    if (!allowUnedited && placements.length === 0 && !hasDocumentEdits(doc)) {
-      throw new Error(
-        'Nothing to export yet. Place a signature, fill in a form, edit the pages, or add a redaction, text, or comment first.',
-      );
-    }
-
-    return {
-      placements: placements.length > 0 ? placements : undefined,
-      signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
-    };
-  }
-
-  async function onExportOne() {
-    const doc = $activeDocument;
-    if (!doc) return;
-
-    exportingOne = true;
+  /** Runs one save action, marking it busy and showing its error (or `fallback`) if it fails. */
+  async function run(action: Action, fallback: string, task: () => Promise<void>) {
+    if (busy[action]) return;
+    busy[action] = true;
     error = null;
     try {
-      const { placements, signatureFor } = await resolveExportInputs(doc);
-
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor,
-        placements,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermark(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: doc.comments,
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
-        protection: currentSaveProtection(),
-      });
-      downloadSignedPdf(bytes, doc.file.name);
-      editorStore.markDocumentExported(doc.id);
+      await task();
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Export failed';
+      error = e instanceof Error ? e.message : fallback;
     } finally {
-      exportingOne = false;
+      busy[action] = false;
     }
+  }
+
+  function onExportOne() {
+    const doc = $activeDocument;
+    if (!doc) return;
+    run('save', 'Export failed', async () => {
+      assertSomethingToExport(doc);
+      downloadSignedPdf(await exportDocument(doc, { protection: currentSaveProtection() }), doc.file.name);
+      editorStore.markDocumentExported(doc.id);
+    });
   }
 
   // Saves everything added, like Save, then shrinks the result. Unlike Save it
   // also works on an untouched PDF, since making a file smaller is reason
   // enough to save it.
-  async function onExportCompressed(level: CompressionLevel) {
+  function onExportCompressed(level: CompressionLevel) {
     const doc = $activeDocument;
     if (!doc) return;
     $compressionLevel = level;
-
-    compressing = true;
-    error = null;
     compressNote = null;
     clearTimeout(compressNoteTimeout);
-    try {
+    run('compress', 'Compression failed', async () => {
       const protection = currentSaveProtection();
-      const placements = $signatureStore.signature ? doc.placedSignatures : [];
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
-        placements: placements.length > 0 ? placements : undefined,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermark(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: doc.comments,
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
-      });
       // Protected after compressing: an encrypted file can't be rewritten.
       const result = await compressPdf(
-        bytes,
+        await exportDocument(doc),
         hasProtection(protection) ? (d) => applyProtection(d, protection) : undefined,
         level,
       );
@@ -164,62 +94,28 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           ? `${formatFileSize(before)} → ${formatFileSize(result.compressedSize)} (${Math.round(saved * 100)}% smaller)`
           : `Already compact: ${formatFileSize(result.compressedSize)}`;
       compressNoteTimeout = setTimeout(() => (compressNote = null), 6000);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Compression failed';
-    } finally {
-      compressing = false;
-    }
+    });
   }
 
   // Saves everything added, like Save, then rebuilds it as a Word document.
   // Works on an untouched PDF too; no password, since Word can't open one.
-  async function onExportDocx() {
+  function onExportDocx() {
     const doc = $activeDocument;
     if (!doc) return;
-
-    convertingDocx = true;
-    error = null;
-    try {
-      const placements = $signatureStore.signature ? doc.placedSignatures : [];
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
-        placements: placements.length > 0 ? placements : undefined,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermark(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: doc.comments,
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
-      });
+    run('docx', 'Conversion failed', async () => {
+      const bytes = await exportDocument(doc);
       // Loaded on first use, so the Word writer isn't in the main bundle.
       const { downloadPdfAsDocx } = await import('../lib/pdf/docx');
       await downloadPdfAsDocx(bytes, doc.file.name);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Conversion failed';
-    } finally {
-      convertingDocx = false;
-    }
+    });
   }
 
   // The pictures in the file as opened, at their stored resolution; anything
   // under a redaction box is left out, as it would be from the saved PDF.
-  async function onSaveImages() {
+  function onSaveImages() {
     const doc = $activeDocument;
     if (!doc) return;
-
-    savingImages = true;
-    error = null;
-    try {
+    run('images', 'Failed to save the images', async () => {
       const scale = $editorStore.renderScale;
       const redacted = (page: number, image: Rect) =>
         doc.redactions.some(
@@ -233,207 +129,79 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       const pdfDoc = await getCachedPdf(doc.id, doc.file);
       const count = await downloadAllImages(pdfDoc, doc.file, doc.rotation, redacted);
       if (count === 0) error = 'No pictures found in this document.';
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to save the images';
-    } finally {
-      savingImages = false;
-    }
+    });
   }
 
   // Every page with everything added, rendered as an image like the
   // thumbnail menu's "Save page as". No comments: a sticky note would only
   // show as an icon. No password either, since an image can't carry one.
-  async function onSavePagesAsImages(format: PageImageFormat) {
+  function onSavePagesAsImages(format: PageImageFormat) {
     const doc = $activeDocument;
     if (!doc) return;
-
-    savingPageImages = format;
-    error = null;
-    try {
-      const placements = $signatureStore.signature ? doc.placedSignatures : [];
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
-        placements: placements.length > 0 ? placements : undefined,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermark(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: [],
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
-      });
+    run('pageImages', 'Failed to save the pages as images', async () => {
+      const bytes = await exportDocument(doc, { comments: [] });
       const pages = Array.from({ length: doc.pageCount }, (_, i) => i + 1);
       await downloadPagesAsImages(bytes, doc.file.name, pages, format);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to save the pages as images';
-    } finally {
-      savingPageImages = null;
-    }
+    });
   }
 
-  async function onExportPageOnly() {
+  function onExportPageOnly() {
     const doc = $activeDocument;
     if (!doc) return;
-
-    exportingPageOnly = true;
-    error = null;
-    try {
-      const { placements, signatureFor } = await resolveExportInputs(doc);
-
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor,
-        placements,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermark(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: doc.comments,
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
-        onlyPages: [doc.pageNumber],
-        protection: currentSaveProtection(),
-      });
+    run('pageOnly', 'Export failed', async () => {
+      assertSomethingToExport(doc);
+      const bytes = await exportDocument(doc, { onlyPages: [doc.pageNumber], protection: currentSaveProtection() });
       downloadPageOnlyPdf(bytes, doc.file.name, doc.pageNumber);
       editorStore.markDocumentExported(doc.id);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Export failed';
-    } finally {
-      exportingPageOnly = false;
-    }
+    });
   }
 
-  async function onExportPagesZip() {
+  function onExportPagesZip() {
     const doc = $activeDocument;
     if (!doc) return;
-
-    exportingPagesZip = true;
-    error = null;
-    try {
-      const { placements, signatureFor } = await resolveExportInputs(doc);
-
-      const blob = await exportPagesAsZip(
-        doc,
-        signatureFor,
-        placements,
-        $editorStore.renderScale,
-        doc.rotation,
-        currentWatermark(),
-        $stripEmbeddedScripts,
-        currentSaveProtection(),
-      );
-      downloadPagesZip(blob, doc.file.name);
+    run('pagesZip', 'Export failed', async () => {
+      assertSomethingToExport(doc);
+      downloadPagesZip(await exportPagesAsZip(doc, currentExportSettings(), currentSaveProtection()), doc.file.name);
       editorStore.markDocumentExported(doc.id);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Export failed';
-    } finally {
-      exportingPagesZip = false;
-    }
+    });
   }
 
-  async function onPrint() {
+  // Printing an untouched PDF is a reason in itself, so nothing needs adding first.
+  function onPrint() {
     const doc = $activeDocument;
     if (!doc) return;
-
-    printing = true;
-    error = null;
-    try {
-      // Printing an untouched PDF is a reason in itself.
-      const { placements, signatureFor } = await resolveExportInputs(doc, true);
-
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor,
-        placements,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermark(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: doc.comments,
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: doc.pageNumbers,
-        headerFooter: doc.headerFooter,
-        pageWatermark: doc.pageWatermark,
-        // A password would make the print dialog ask for it, so printing only keeps the copy lock.
-        protection: { lockCopying: $securePdf },
-      });
-      printPdfBytes(bytes);
+    run('print', 'Print failed', async () => {
+      // A password would make the print dialog ask for it, so printing only keeps the copy lock.
+      printPdfBytes(await exportDocument(doc, { protection: { lockCopying: $securePdf } }));
       editorStore.markDocumentExported(doc.id);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Print failed';
-    } finally {
-      printing = false;
-    }
+    });
   }
 
   // Ctrl/Cmd+P prints the PDF with everything added, not the editor page.
   function onKeydown(e: KeyboardEvent) {
     if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'p') return;
     e.preventDefault();
-    if (!printing) onPrint();
+    onPrint();
   }
 
-  async function onExportAll() {
+  function onExportAll() {
     const documents = $editorStore.documents;
-
     if (documents.length === 0) {
       error = 'Add a PDF first.';
       return;
     }
-
-    exportingAll = true;
-    error = null;
-    try {
-      const result = await exportAllAsZip(
-        documents,
-        signatureStore.lookup(),
-        $editorStore.renderScale,
-        currentWatermark(),
-        $stripEmbeddedScripts,
-        currentSaveProtection(),
-      );
-
+    run('all', 'Export failed', async () => {
+      const result = await exportAllAsZip(documents, currentExportSettings(), currentSaveProtection());
       if (result.exportedCount === 0) {
         error = 'Place a signature or draw a redaction on at least one document first.';
         return;
       }
-
       downloadZip(result.zipBlob);
       documents
         .filter((doc) => !result.skipped.includes(doc.file.name))
         .forEach((doc) => editorStore.markDocumentExported(doc.id));
-      error =
-        result.skipped.length > 0
-          ? `Skipped (nothing to export): ${result.skipped.join(', ')}`
-          : null;
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Export failed';
-    } finally {
-      exportingAll = false;
-    }
+      error = result.skipped.length > 0 ? `Skipped (nothing to export): ${result.skipped.join(', ')}` : null;
+    });
   }
 
   function onOpenMergeDialog() {
@@ -446,29 +214,13 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
     showMergeDialog = false;
   }
 
-  async function onConfirmMerge(orderedIds: string[]) {
+  function onConfirmMerge(orderedIds: string[]) {
     const documents = $editorStore.documents;
-
-    merging = true;
-    error = null;
-    try {
-      const bytes = await exportMergedPdf(
-        documents,
-        orderedIds,
-        signatureStore.lookup(),
-        $editorStore.renderScale,
-        currentWatermark(),
-        $stripEmbeddedScripts,
-        currentSaveProtection(),
-      );
-      downloadMergedPdf(bytes);
+    run('merge', 'Merge failed', async () => {
+      downloadMergedPdf(await exportMergedPdf(documents, orderedIds, currentExportSettings(), currentSaveProtection()));
       documents.forEach((doc) => editorStore.markDocumentExported(doc.id));
       showMergeDialog = false;
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Merge failed';
-    } finally {
-      merging = false;
-    }
+    });
   }
 </script>
 
@@ -493,7 +245,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
       type="button"
       class="flex items-center gap-1.5 bg-blue-600 px-3 py-1 text-sm font-medium text-white transition-colors
         hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={exportingOne}
+      disabled={busy.save}
       use:tooltip={$passwordProtect
         ? 'Save this PDF with everything you added, protected with your password'
         : 'Save this PDF with everything you added'}
@@ -509,7 +261,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />
         </svg>
       {/if}
-      {exportingOne ? 'Saving…' : 'Save'}
+      {busy.save ? 'Saving…' : 'Save'}
     </button>
     <button
       type="button"
@@ -534,10 +286,10 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
     class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors
       hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-50
       dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-    disabled={printing}
+    disabled={busy.print}
     onclick={onPrint}
   >
-    {#if printing}
+    {#if busy.print}
       <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 animate-spin text-neutral-400">
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" opacity="0.25" />
         <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12a9 9 0 0 0-9-9" />
@@ -569,7 +321,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
     >
       {@render heading('PDF', false)}
       <div class="px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200">
-        <span class="block">{compressing ? 'Compressing…' : 'Save compressed'}</span>
+        <span class="block">{busy.compress ? 'Compressing…' : 'Save compressed'}</span>
         <span class="block text-xs text-neutral-400">Smaller file: images are scaled down and re-encoded</span>
         <div class="mt-1.5 flex gap-1.5">
           {#each Object.entries(COMPRESSION_LEVELS) as [level, settings] (level)}
@@ -583,7 +335,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
                 {$compressionLevel === level
                 ? 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50'
                 : 'border-neutral-200 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800'}"
-              disabled={compressing}
+              disabled={busy.compress}
               onclick={() => {
                 showSaveMenu = false;
                 onExportCompressed(level as CompressionLevel);
@@ -602,13 +354,13 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
             hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
             dark:text-neutral-200 dark:hover:bg-neutral-800"
-          disabled={exportingPageOnly}
+          disabled={busy.pageOnly}
           onclick={() => {
             showSaveMenu = false;
             onExportPageOnly();
           }}
         >
-          {exportingPageOnly ? 'Saving…' : `Save this page only (${$activeDocument?.pageNumber ?? 1})`}
+          {busy.pageOnly ? 'Saving…' : `Save this page only (${$activeDocument?.pageNumber ?? 1})`}
         </button>
 
         <button
@@ -617,13 +369,13 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
             hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
             dark:text-neutral-200 dark:hover:bg-neutral-800"
-          disabled={exportingPagesZip}
+          disabled={busy.pagesZip}
           onclick={() => {
             showSaveMenu = false;
             onExportPagesZip();
           }}
         >
-          {exportingPagesZip ? 'Zipping…' : 'Save each page as a separate PDF (ZIP)'}
+          {busy.pagesZip ? 'Zipping…' : 'Save each page as a separate PDF (ZIP)'}
         </button>
       {/if}
 
@@ -634,13 +386,13 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
             hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
             dark:text-neutral-200 dark:hover:bg-neutral-800"
-          disabled={exportingAll}
+          disabled={busy.all}
           onclick={() => {
             showSaveMenu = false;
             onExportAll();
           }}
         >
-          {exportingAll ? 'Zipping…' : 'Save all (ZIP)'}
+          {busy.all ? 'Zipping…' : 'Save all (ZIP)'}
         </button>
 
         <button
@@ -649,7 +401,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
           class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
             hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
             dark:text-neutral-200 dark:hover:bg-neutral-800"
-          disabled={merging}
+          disabled={busy.merge}
           onclick={onOpenMergeDialog}
         >
           Save all as one PDF
@@ -663,19 +415,19 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
           hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
           dark:text-neutral-200 dark:hover:bg-neutral-800"
-        disabled={savingImages}
+        disabled={busy.images}
         onclick={() => {
           showSaveMenu = false;
           onSaveImages();
         }}
       >
-        <span class="block">{savingImages ? 'Saving images…' : 'Save all images'}</span>
+        <span class="block">{busy.images ? 'Saving images…' : 'Save all images'}</span>
         <span class="block text-xs text-neutral-400">Every picture in the PDF at full resolution (ZIP)</span>
       </button>
 
       <div class="flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200">
         <span class="min-w-0 flex-1">
-          <span class="block">{savingPageImages ? 'Rendering pages…' : 'Save pages as images'}</span>
+          <span class="block">{busy.pageImages ? 'Rendering pages…' : 'Save pages as images'}</span>
           <span class="block text-xs text-neutral-400">
             {($activeDocument?.pageCount ?? 1) > 1 ? 'One image per page (ZIP)' : 'The page as one image'}
           </span>
@@ -688,7 +440,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
             class="shrink-0 rounded-md border border-neutral-200 px-2 py-1 text-xs font-medium transition-colors
               hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
               dark:border-neutral-700 dark:hover:bg-neutral-800"
-            disabled={savingPageImages !== null}
+            disabled={busy.pageImages}
             onclick={() => {
               showSaveMenu = false;
               onSavePagesAsImages(format);
@@ -706,13 +458,13 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
         class="block w-full px-3 py-2 text-left text-sm text-neutral-700 transition-colors
           hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
           dark:text-neutral-200 dark:hover:bg-neutral-800"
-        disabled={convertingDocx}
+        disabled={busy.docx}
         onclick={() => {
           showSaveMenu = false;
           onExportDocx();
         }}
       >
-        <span class="block">{convertingDocx ? 'Converting…' : 'Save as Word (.docx)'}</span>
+        <span class="block">{busy.docx ? 'Converting…' : 'Save as Word (.docx)'}</span>
         <span class="block text-xs text-neutral-400">Editable text and pictures; tables and columns may shift</span>
       </button>
 
@@ -846,7 +598,7 @@ import { applyProtection, hasProtection } from '../lib/pdf/password';
 {#if showMergeDialog}
   <MergeOrderDialog
     documents={$editorStore.documents.map((doc) => ({ id: doc.id, name: doc.file.name }))}
-    {merging}
+    merging={!!busy.merge}
     onConfirm={onConfirmMerge}
     onCancel={onCancelMerge}
   />

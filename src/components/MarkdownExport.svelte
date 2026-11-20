@@ -1,11 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { editorStore, activeDocument } from '../stores/editor';
-  import { signatureStore } from '../stores/signature';
-  import { currentWatermarkOptions } from '../stores/watermark';
-  import { stripEmbeddedScripts } from '../stores/exportOptions';
+  import { activeDocument } from '../stores/editor';
   import { closeMarkdownExport, markdownFormatting } from '../stores/markdownExport';
-  import { exportSignedPdf } from '../lib/pdf/export';
+  import { exportDocument } from '../stores/exportDocument';
   import {
     readMarkdownSource,
     chooseBlocks,
@@ -55,27 +52,7 @@
   async function load() {
     if (!doc) return;
     try {
-      const placements = $signatureStore.signature ? doc.placedSignatures : [];
-      const bytes = await exportSignedPdf({
-        pdfFile: doc.file,
-        documentId: doc.id,
-        signatureFor: placements.length > 0 ? (signatureStore.lookup() ?? undefined) : undefined,
-        placements: placements.length > 0 ? placements : undefined,
-        renderScale: $editorStore.renderScale,
-        rotation: doc.rotation,
-        watermark: currentWatermarkOptions(),
-        stripScripts: $stripEmbeddedScripts,
-        redactions: doc.redactions,
-        texts: doc.texts,
-        comments: [],
-        highlights: doc.highlights,
-        shapes: doc.shapes,
-        images: doc.images,
-        formValues: doc.formValues,
-        pageNumbers: null,
-        headerFooter: null,
-        pageWatermark: null,
-      });
+      const bytes = await exportDocument(doc, { comments: [], pageNumbers: null, headerFooter: null, pageWatermark: null });
       source = await readMarkdownSource(bytes, (page, pages) => {
         progress = pages > 1 ? `Reading page ${page} of ${pages}…` : 'Reading the page…';
       });
