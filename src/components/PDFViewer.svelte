@@ -1650,7 +1650,7 @@
           label: 'Edit comment',
           icon: MENU_ICONS.edit,
           onSelect: () => {
-                        commentEditing.start(comment.id, comment.text);
+            commentEditing.start(comment.id, comment.text);
           },
         },
         deleteItem('Delete comment', () => {

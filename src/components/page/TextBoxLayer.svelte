@@ -91,6 +91,9 @@
   }
 
   function onKeydown(e: KeyboardEvent, id: string) {
+    // Only keys pressed on the box itself: the text being typed inside it
+    // needs Backspace, Delete, and the arrows for its own text.
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       remove(id);

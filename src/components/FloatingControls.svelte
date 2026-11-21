@@ -96,8 +96,21 @@
       ocrMenu = null;
       return;
     }
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    ocrMenu = { x: rect.left, y: rect.top - 4 };
+    openMenuAbove(e.currentTarget as HTMLElement, (at) => (ocrMenu = at));
+  }
+
+  // With a panel open the toolbar can overflow and scroll sideways. A button
+  // cut off at its edge is scrolled into view first, and the menu opens once
+  // that scroll has been delivered: a menu closes on any scroll, and would
+  // otherwise close as soon as it opened, or open where the button was.
+  function openMenuAbove(button: HTMLElement, open: (at: { x: number; y: number }) => void) {
+    button.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const rect = button.getBoundingClientRect();
+        open({ x: rect.left, y: rect.top - 4 });
+      }),
+    );
   }
 
   // Add image: the picked image is placed on the current page (PDFViewer
@@ -201,8 +214,7 @@
       zoomMenu = null;
       return;
     }
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    zoomMenu = { x: rect.left, y: rect.top - 4 };
+    openMenuAbove(e.currentTarget as HTMLElement, (at) => (zoomMenu = at));
   }
 
   // A few seconds after the pointer leaves, the toolbar fades so it hides

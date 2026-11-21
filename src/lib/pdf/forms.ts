@@ -54,6 +54,8 @@ interface WidgetData {
   fieldValue?: unknown;
   rect: number[];
   hidden?: boolean;
+  /** Drawn into the page render by pdf.js, not left for the form layer. */
+  hasOwnCanvas?: boolean;
   readOnly?: boolean;
   multiLine?: boolean;
   maxLen?: number;
@@ -73,6 +75,9 @@ function firstString(value: unknown): string {
 
 function toWidget(a: WidgetData): FormWidget | null {
   if (a.annotationType !== WIDGET_ANNOTATION || a.hidden || !a.fieldName) return null;
+  // pdf.js paints these itself, read-only text fields among them, so an
+  // input over one would show its text twice.
+  if (a.hasOwnCanvas) return null;
 
   let kind: FormWidgetKind;
   let initial: string | boolean;

@@ -395,6 +395,10 @@ function createEditorStore() {
   }
 
   function updateItem<K extends ListName>(key: K, id: string, partial: Partial<ItemOf<K>>) {
+    // An item already gone (removed while its editor was still closing) gets
+    // no change, and no empty undo step.
+    const items = getActiveDocument(currentState())?.[key] as PageItem[] | undefined;
+    if (!items?.some((item) => item.id === id)) return;
     editActiveList(key, `update-${key}-${id}`, (items) =>
       (items as PageItem[]).map((item) => (item.id === id ? { ...item, ...partial } : item)),
     );
